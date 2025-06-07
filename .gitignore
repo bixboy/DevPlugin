@@ -1,0 +1,98 @@
+# =========================
+# ❌ FICHIERS À IGNORER
+# =========================
+
+# 🛠️ Fichiers de compilation et binaires temporaires
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# ⚠️ Cache et fichiers spécifiques à l'éditeur Unreal
+Config/DefaultEditorPerProjectUserSettings.ini
+Config/DefaultEditorUserSettings.ini
+*.uproject.sln
+*.uprojectdirs
+
+# ⚡ Fichiers spécifiques à Visual Studio / Xcode
+.vs/
+*.sln
+*.suo
+*.VC.db
+*.VC.opendb
+*.xcodeproj
+*.xcworkspace
+.vscode/
+
+# 🏗️ Fichiers générés par la compilation
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.exe
+*.app
+*.ipa
+*.out
+*.a
+*.lib
+*.lai
+*.la
+*.slo
+*.lo
+*.mod
+*.gch
+*.pch
+
+# 📝 Logs, backups et fichiers temporaires
+*.log
+*.dump
+*.dmp
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# 🛑 Données utilisateur / spécifiques au développeur
+*.userprefs
+*.user
+
+# 🚫 Données de packaging Unreal
+Build/*/PakBlacklist*.txt
+
+# =========================
+# ✅ FICHIERS À CONSERVER
+# =========================
+
+# 📁 Garde le dossier `Source/` pour le code C++
+!Source/
+!Source/**/*
+
+# 🎮 Garde le fichier de projet Unreal Engine
+!*.uproject
+
+# ⚙️ Garde les fichiers de configuration du projet
+!Config/
+!Config/**/*
+
+# 🎨 Garde les assets du projet
+!Content/
+!Content/**/*.uasset
+!Content/**/*.umap
+
+# 🔌 Garde les fichiers de plugins (hors binaires/intermédiaires)
+!Plugins/
+!Plugins/**/*.uplugin
+
+# 🔄 Garde les fichiers essentiels pour exécuter le projet sans compiler
+!Binaries/Win64/
+!Binaries/Win64/*
+!Binaries/Win64/UnrealEditor.modules
+!Binaries/Win64/UnrealEditor-GummyBrawlProject.dll
+!Binaries/Win64/UnrealEditor-LocalMultiplayer.dll
+
+# 🔹 Garde les fichiers `.Target.cs` pour éviter les erreurs de compilation
+!Source/*.Target.cs
