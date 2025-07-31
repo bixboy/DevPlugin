@@ -1,0 +1,23 @@
+﻿{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Smart Log Plugin",
+	"Description": "Simplified logging macros and on‑screen logs for UE5",
+	"Category": "Utilities",
+	"CreatedBy": "Bixboy",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "SmartLog",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}
