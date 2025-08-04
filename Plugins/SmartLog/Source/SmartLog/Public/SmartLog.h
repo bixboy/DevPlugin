@@ -1,7 +1,7 @@
-﻿#pragma once
+﻿	#pragma once
 #include "CoreMinimal.h"
 
-DECLARE_LOG_CATEGORY_EXTERN(LogSmart, Log, All);
+SMARTLOG_API DECLARE_LOG_CATEGORY_EXTERN(LogSmart, Log, All);
 
 class FSmartLogModule : public IModuleInterface
 {
@@ -33,11 +33,32 @@ namespace SmartLogDetail
 		return StaticEnum<EnumType>()->GetNameStringByValue((int64)Enum);
 	}
 
-	// Pointeurs
+	// ==== Surcouches pour smart pointers Unreal ====
+	template<typename U>
+	inline FString ToStringInternal(const TObjectPtr<U>& Ptr)
+	{
+		U* Raw = Ptr.Get();  // accéder au pointeur brut
+		return Raw
+			? FString::Printf(TEXT("Object(%s)"), *Raw->GetName())
+			: TEXT("null");
+	}
+
+	template<typename U>
+	inline FString ToStringInternal(const TWeakObjectPtr<U>& Ptr)
+	{
+		U* Raw = Ptr.Get();
+		return Raw
+			? FString::Printf(TEXT("Object(%s)"), *Raw->GetName())
+			: TEXT("null");
+	}
+
+	// Pointeurs bruts
 	template <typename T>
 	inline FString ToStringInternal(const T* Ptr)
 	{
-		return Ptr ? FString::Printf(TEXT("Object(%s)"), *Ptr->GetName()) : TEXT("null");
+		return Ptr
+			? FString::Printf(TEXT("Object(%s)"), *Ptr->GetName())
+			: TEXT("null");
 	}
 
 	// FVector, FRotator, FColor, etc.
@@ -140,17 +161,41 @@ namespace SmartLogDetail
 
 // ====== Macros ======
 
+
+#define SMARTLOG_PREFIX() \
+([]() -> const TCHAR* { \
+	if (!GWorld) return TEXT(""); \
+	switch (GWorld->GetNetMode()) \
+	{ \
+	case NM_Client: return TEXT("[Client] "); \
+	case NM_DedicatedServer: \
+	case NM_ListenServer: return TEXT("[Server] "); \
+	default: return TEXT(""); } \
+})()
+
 #define LOGINFO(Pattern, ...) \
-	UE_LOG(LogSmart, Log, TEXT("[INFO]  %s:%d: %s"), *FString(__FUNCTION__), __LINE__, *SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__))
+{ \
+	const FString Formatted = SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__); \
+	UE_LOG(LogSmart, Log, TEXT("%s[INFO] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+}
 
 #define LOGWARNING(Pattern, ...) \
-	UE_LOG(LogSmart, Warning, TEXT("[WARN]  %s:%d: %s"), *FString(__FUNCTION__), __LINE__, *SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__))
+{ \
+	const FString Formatted = SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__); \
+	UE_LOG(LogSmart, Warning, TEXT("%s[WARN] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+}
 
 #define LOGERROR(Pattern, ...) \
-	UE_LOG(LogSmart, Error, TEXT("[ERROR] %s:%d: %s"), *FString(__FUNCTION__), __LINE__, *SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__))
+{ \
+	const FString Formatted = SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__); \
+	UE_LOG(LogSmart, Error, TEXT("%s[ERROR] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+}
 
 #define LOGVARS(...) \
-	UE_LOG(LogSmart, Log, TEXT("[VARS] %s:%d: %s"), TEXT(__FUNCTION__), __LINE__, *SmartLogDetail::FormatArgs(TEXT(#__VA_ARGS__), __VA_ARGS__))
+{ \
+	const FString Formatted = SmartLogDetail::FormatArgs(TEXT(#__VA_ARGS__), __VA_ARGS__); \
+	UE_LOG(LogSmart, Log, TEXT("%s[VARS] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+}
 
 
 

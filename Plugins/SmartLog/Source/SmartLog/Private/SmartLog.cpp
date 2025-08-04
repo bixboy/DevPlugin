@@ -1,4 +1,5 @@
 ﻿#include "SmartLog.h"
+
 DEFINE_LOG_CATEGORY(LogSmart);
 
 #define LOCTEXT_NAMESPACE "FSmartLogModule"

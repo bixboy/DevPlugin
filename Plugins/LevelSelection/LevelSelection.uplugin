@@ -1,0 +1,30 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"EngineVersion":"5.3.0",
+	"VersionName": "1.0",
+	"FriendlyName": "Level Selection",
+	"Description": "A plugin to organize and manage your levels more efficiently in the Unreal Editor.",
+	"Category": "Editor",
+	"CreatedBy": "Bixboy",
+	"CreatedByURL": "https://pierrelamare.myportfolio.com",
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"DocsURL": "https://www.dropbox.com/scl/fi/9winwhun35t8kv2ja4jsc/README.txt?rlkey=kzzhbbmv3rvgiex01zgkvoy0e&st=k5valc0r&dl=1",
+	"FabURL": "com.epicgames.launcher://ue/Fab/7aea0e98-d107-4839-bafe-1c9e24a3286e/",
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "LevelSelection",
+			"Type": "Editor",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"Linux"
+			]
+		}
+	],
+	"EnabledByDefault": true
+}
