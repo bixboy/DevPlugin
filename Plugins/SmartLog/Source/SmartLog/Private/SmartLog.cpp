@@ -1,4 +1,5 @@
 ﻿#include "SmartLog.h"
+#include "Modules/ModuleManager.h"
 
 DEFINE_LOG_CATEGORY(LogSmart);
 
@@ -16,4 +17,4 @@ void FSmartLogModule::ShutdownModule()
 
 #undef LOCTEXT_NAMESPACE
 
-IMPLEMENT_MODULE(FSmartLogModule, SmartLog)
+IMPLEMENT_MODULE(FSmartLogModule, SmartLog);

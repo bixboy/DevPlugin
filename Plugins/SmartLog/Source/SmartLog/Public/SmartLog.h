@@ -1,9 +1,11 @@
-﻿	#pragma once
+﻿#pragma once
 #include "CoreMinimal.h"
+#include "Engine/Engine.h"
+#include "Modules/ModuleInterface.h"
 
-SMARTLOG_API DECLARE_LOG_CATEGORY_EXTERN(LogSmart, Log, All);
+DECLARE_LOG_CATEGORY_EXTERN(LogSmart, Log, All);
 
-class FSmartLogModule : public IModuleInterface
+class SMARTLOG_API FSmartLogModule : public IModuleInterface
 {
 public:
 	virtual void StartupModule() override;
@@ -37,7 +39,7 @@ namespace SmartLogDetail
 	template<typename U>
 	inline FString ToStringInternal(const TObjectPtr<U>& Ptr)
 	{
-		U* Raw = Ptr.Get();  // accéder au pointeur brut
+		U* Raw = Ptr.Get();
 		return Raw
 			? FString::Printf(TEXT("Object(%s)"), *Raw->GetName())
 			: TEXT("null");
@@ -67,7 +69,9 @@ namespace SmartLogDetail
 	inline FString ToStringInternal(const FQuat& Q)         { return FString::Printf(TEXT("Quat(%.2f, %.2f, %.2f, %.2f)"), Q.X, Q.Y, Q.Z, Q.W); }
 	inline FString ToStringInternal(const FColor& C)        { return FString::Printf(TEXT("Color(%d, %d, %d, %d)"), C.R, C.G, C.B, C.A); }
 	inline FString ToStringInternal(const FLinearColor& LC) { return FString::Printf(TEXT("LinCol(%.2f, %.2f, %.2f, %.2f)"), LC.R, LC.G, LC.B, LC.A); }
-	inline FString ToStringInternal(const FTransform& T)    { return FString::Printf(TEXT("Transform(Pos = %s, Rot = %s, Scale = %s)"), *ToStringInternal(T.GetLocation()), *ToStringInternal(T.GetRotation()), *ToStringInternal(T.GetScale3D())); }
+	inline FString ToStringInternal(const FTransform& T)    { return FString::Printf(TEXT("Transform(Pos = %s, Rot = %s, Scale = %s)"),
+																*ToStringInternal(T.GetLocation()), *ToStringInternal(T.GetRotation()),
+																*ToStringInternal(T.GetScale3D())); }
 
 	// TOptional
 	template<typename T>
@@ -176,25 +180,25 @@ namespace SmartLogDetail
 #define LOGINFO(Pattern, ...) \
 { \
 	const FString Formatted = SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__); \
-	UE_LOG(LogSmart, Log, TEXT("%s[INFO] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+	UE_LOG(LogSmart, Log, TEXT("%s %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
 }
 
 #define LOGWARNING(Pattern, ...) \
 { \
 	const FString Formatted = SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__); \
-	UE_LOG(LogSmart, Warning, TEXT("%s[WARN] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+	UE_LOG(LogSmart, Warning, TEXT("%s %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
 }
 
 #define LOGERROR(Pattern, ...) \
 { \
 	const FString Formatted = SmartLogDetail::FormatArgs(Pattern, ##__VA_ARGS__); \
-	UE_LOG(LogSmart, Error, TEXT("%s[ERROR] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+	UE_LOG(LogSmart, Error, TEXT("%s %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
 }
 
 #define LOGVARS(...) \
 { \
 	const FString Formatted = SmartLogDetail::FormatArgs(TEXT(#__VA_ARGS__), __VA_ARGS__); \
-	UE_LOG(LogSmart, Log, TEXT("%s[VARS] %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
+	UE_LOG(LogSmart, Log, TEXT("%s %s:%d: %s"), SMARTLOG_PREFIX(), TEXT(__FUNCTION__), __LINE__, *Formatted ); \
 }
 
 
