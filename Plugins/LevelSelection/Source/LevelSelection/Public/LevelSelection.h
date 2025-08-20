@@ -31,11 +31,11 @@ private:
 	void OnCreateNewCategory(FString LevelPath);
 	void OnMoveLevelToCategory(FString LevelPath, FString TargetCategory);
 	void OnDeleteCategory(FString CategoryName);
-	void OnAssetRemoved(const FAssetData& AssetData);
 
 	
 	// ========== HELPERS =========
 	TArray<FString> GetAllMapPaths() const;
+	void OnAssetRemoved(const FAssetData& AssetData);
 	TArray<FString> GetUncategorizedMapPaths() const;
 	void ShowNotification(const FText& Message);
 

@@ -57,6 +57,13 @@ void FLevelSelectionModule::StartupModule()
 
 void FLevelSelectionModule::ShutdownModule()
 {
+    if (FModuleManager::Get().IsModuleLoaded("AssetRegistry"))
+    {
+        FAssetRegistryModule& Arm = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+        Arm.Get().OnAssetAdded().RemoveAll(this);
+        Arm.Get().OnAssetRemoved().RemoveAll(this);
+    }
+
     UToolMenus::UnregisterOwner(this);
 }
 
@@ -317,49 +324,50 @@ void FLevelSelectionModule::OnDeleteCategory(FString CategoryName)
 // ==========                        Helper Functions                       ==========
 // ===================================================================================
 
-void FLevelSelectionModule::OnAssetRemoved(const FAssetData& AssetData)
-{
-    if (!AssetData.AssetClassPath.ToString().Contains("World"))
-        return;
-    
-
-    const FString RemovedMapPath = AssetData.GetObjectPathString();
-
-    bool bModified = false;
-
-    for (auto It = LevelCategories.CreateIterator(); It; ++It)
-    {
-        TArray<FString>& Levels = It.Value();
-        int32 Before = Levels.Num();
-
-        Levels.RemoveAll([&](const FString& LevelPath)
-        {
-            return LevelPath == RemovedMapPath;
-        });
-
-        if (Before != Levels.Num())
-        {
-            bModified = true;
-        }
-
-        if (Levels.Num() == 0)
-        {
-            CategoryOrder.Remove(It.Key());
-            It.RemoveCurrent();
-        }
-    }
-
-    if (bModified)
-    {
-        SaveCategoriesToConfig();
-    }
-}
-
 void FLevelSelectionModule::ShowNotification(const FText& Message)
 {
     FNotificationInfo Info(Message);
     Info.ExpireDuration = 2.5f;
     FSlateNotificationManager::Get().AddNotification(Info)->SetCompletionState(SNotificationItem::CS_Success);
+}
+
+void FLevelSelectionModule::OnAssetRemoved(const FAssetData& AssetData)
+{
+    if (!AssetData.AssetClassPath.ToString().Contains("World"))
+        return;
+
+    const FString RemovedMapPath = AssetData.GetObjectPathString();
+
+    AsyncTask(ENamedThreads::GameThread, [this, RemovedMapPath]()
+    {
+        bool bModified = false;
+        for (auto It = LevelCategories.CreateIterator(); It; ++It)
+        {
+            TArray<FString>& Levels = It.Value();
+            int32 Before = Levels.Num();
+
+            Levels.RemoveAll([&](const FString& LevelPath)
+            {
+                return LevelPath == RemovedMapPath;
+            });
+
+            if (Before != Levels.Num())
+            {
+                bModified = true;
+            }
+
+            if (Levels.Num() == 0)
+            {
+                CategoryOrder.Remove(It.Key());
+                It.RemoveCurrent();
+            }
+        }
+        
+        if (bModified)
+        {
+            SaveCategoriesToConfig();
+        }
+    });
 }
 
 
@@ -461,25 +469,69 @@ void FLevelSelectionModule::LoadCategoryOrderFromConfig(const FString& ConfigPat
 // ==========                          UTILS                                ==========
 // ===================================================================================
 
+static FString NormalizePackagePath(const FString& InPath)
+{
+    if (InPath.IsEmpty())
+        return FString();
+
+    FString Path = InPath;
+
+    int32 ColonIdx = INDEX_NONE;
+    if (Path.FindChar(TEXT(':'), ColonIdx))
+    {
+        Path = Path.Left(ColonIdx);
+    }
+
+    int32 DotIdx = INDEX_NONE;
+    if (Path.FindChar(TEXT('.'), DotIdx))
+    {
+        Path = Path.Left(DotIdx);
+    }
+
+    Path = Path.TrimStartAndEnd();
+
+    if (Path.IsEmpty() || Path.Contains(TEXT("PersistentLevel")) || Path.Contains(TEXT("persistentlevel")))
+        return FString();
+
+    return Path;
+}
+
 TArray<FString> FLevelSelectionModule::GetAllMapPaths() const
 {
-    TSet<FString> UniquePaths;
+   TSet<FString> UniquePaths;
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+    IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
 
-    auto AddPathsFromMountPoint = [&UniquePaths](const FString& MountPoint)
+    auto AddFromPackagePath = [&UniquePaths, &AssetRegistry](const FString& PackagePathStr)
     {
-        UObjectLibrary* Lib = UObjectLibrary::CreateLibrary(UWorld::StaticClass(), false, true);
-        Lib->LoadAssetDataFromPath(*MountPoint);
+        if (PackagePathStr.IsEmpty())
+            return;
+
+        FARFilter Filter;
+        Filter.ClassPaths.Add(UWorld::StaticClass()->GetClassPathName());
+        Filter.PackagePaths.Add(FName(*PackagePathStr));
+        Filter.bRecursivePaths = true;
 
         TArray<FAssetData> Assets;
-        Lib->GetAssetDataList(Assets);
+        AssetRegistry.GetAssets(Filter, Assets);
 
         for (const FAssetData& A : Assets)
         {
-            UniquePaths.Add(A.GetSoftObjectPath().ToString());
+            const FString PackageName = A.PackageName.ToString();
+            const FString SoftPath = A.GetSoftObjectPath().ToString();
+            const FString ObjPath = A.GetObjectPathString();
+
+            FString Final = NormalizePackagePath(PackageName);
+            if (Final.IsEmpty())
+            {
+                Final = NormalizePackagePath(SoftPath);
+            }
+
+            UniquePaths.Add(Final);
         }
     };
 
-    AddPathsFromMountPoint(TEXT("/Game"));
+    AddFromPackagePath(TEXT("/Game"));
 
     const TArray<TSharedRef<IPlugin>> Plugins = IPluginManager::Get().GetDiscoveredPlugins();
     for (const TSharedRef<IPlugin>& Plugin : Plugins)
@@ -487,14 +539,16 @@ TArray<FString> FLevelSelectionModule::GetAllMapPaths() const
         if (!Plugin->IsEnabled())
             continue;
 
-        const FString PluginName = Plugin->GetName();
-        const FString MountPoint = FString::Printf(TEXT("/%s/"), *PluginName);
-
-        AddPathsFromMountPoint(MountPoint);
+        const FString MountedPath = Plugin->GetMountedAssetPath();
+        if (!MountedPath.IsEmpty())
+        {
+            AddFromPackagePath(MountedPath);
+        }
     }
 
     TArray<FString> Result = UniquePaths.Array();
     Result.Sort();
+    
     return Result;
 }
 

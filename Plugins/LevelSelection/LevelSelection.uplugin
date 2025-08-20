@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"EngineVersion":"5.3.0",
+	"EngineVersion":"5.6.0",
 	"VersionName": "1.0",
 	"FriendlyName": "Level Selection",
 	"Description": "A plugin to organize and manage your levels more efficiently in the Unreal Editor.",
