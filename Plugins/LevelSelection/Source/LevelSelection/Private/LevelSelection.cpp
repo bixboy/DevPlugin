@@ -8,7 +8,6 @@
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
-#include "Engine/ObjectLibrary.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
@@ -22,8 +21,6 @@
 
 
 #define LOCTEXT_NAMESPACE "FLevelSelectionModule"
-
-DEFINE_LOG_CATEGORY_STATIC(LogLevelSelection, Log, All);
 
 static const FName LevelSelectionMenuName("LevelSelection");
 
@@ -419,7 +416,8 @@ void FLevelSelectionModule::LoadCategoriesFromConfig()
     }
 
     // Charger chaque catégorie
-    for (const auto& SectionPair : ConfigFile)
+    const FConfigFile& ConstConfigFile = AsConst(ConfigFile);
+    for (const auto& SectionPair : ConstConfigFile)
     {
         const FString& Section = SectionPair.Key;
 
