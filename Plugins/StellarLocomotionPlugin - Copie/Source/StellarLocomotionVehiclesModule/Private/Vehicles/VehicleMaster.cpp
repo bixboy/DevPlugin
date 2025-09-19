@@ -209,30 +209,38 @@ void AVehicleMaster::InitializeTurrets()
             FRotator RelativeRot = FRotator::ZeroRotator;
             if (ParentMeshComp)
             {
-                RelativeRot = ParentMeshComp->GetRelativeRotation();   
+                RelativeRot = ParentMeshComp->GetRelativeRotation();
             }
             else if (SkeletalBaseVehicle)
             {
-                FRotator Rot = SkeletalBaseVehicle->GetSocketTransform(SocketName, ERelativeTransformSpace::RTS_Actor).GetRotation().Rotator();
-                RelativeRot = Rot;
+                if (SocketName != NAME_None && SkeletalBaseVehicle->DoesSocketExist(SocketName))
+                {
+                    const FTransform SocketTransform = SkeletalBaseVehicle->GetSocketTransform(SocketName, ERelativeTransformSpace::RTS_Component);
+                    RelativeRot = SocketTransform.GetRotation().Rotator();
+                }
+                else
+                {
+                    RelativeRot = TV->GetActorRotation();
+                }
             }
-            
+
             FTurrets NewEntry;
             NewEntry.Camera     = TV;
             NewEntry.SeatOwner  = ParentSeat;
             NewEntry.TurretMesh = ParentMeshComp;
             NewEntry.BasePitch  = RelativeRot.Pitch;
             NewEntry.BaseYaw    = RelativeRot.Yaw;
-            
-            SeatTurrets.Add(NewEntry);
-        }
+            NewEntry.LastTurretBaseRot = RelativeRot;
 
-        if (AnimInstance)
-        {
-            const FName Socket = TV->GetAttachParentSocketName();
-            if (Socket != NAME_None)
+            SeatTurrets.Add(NewEntry);
+
+            if (AnimInstance)
             {
-                AnimInstance->TurretAngle.FindOrAdd(Socket) = FRotator::ZeroRotator;
+                const FName Socket = TV->GetAttachParentSocketName();
+                if (Socket != NAME_None)
+                {
+                    AnimInstance->TurretAngle.FindOrAdd(Socket) = RelativeRot;
+                }
             }
         }
     }
