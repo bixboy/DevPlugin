@@ -14,19 +14,27 @@
 
 ASoldierRts::ASoldierRts(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
-	PrimaryActorTick.bCanEverTick = true;
-	bReplicates = true;
+        PrimaryActorTick.bCanEverTick = true;
+        bReplicates = true;
 
-	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
-	AIControllerClass = AiControllerRtsClass;
+        AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+        AIControllerClass = AiControllerRtsClass;
 
-	CommandComp = CreateDefaultSubobject<UCommandComponent>(TEXT("CommandComponent"));
-	
-	AreaAttack = CreateDefaultSubobject<USphereComponent>(TEXT("AreaAttack"));
-	AreaAttack->SetupAttachment(RootComponent);
+        CommandComp = CreateDefaultSubobject<UCommandComponent>(TEXT("CommandComponent"));
 
-	AreaAttack->OnComponentBeginOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackBeginOverlap);
-	AreaAttack->OnComponentEndOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackEndOverlap);
+        AreaAttack = CreateDefaultSubobject<USphereComponent>(TEXT("AreaAttack"));
+        AreaAttack->SetupAttachment(RootComponent);
+
+        AllyDetectionArea = CreateDefaultSubobject<USphereComponent>(TEXT("AllyDetectionArea"));
+        AllyDetectionArea->SetupAttachment(RootComponent);
+
+        AreaAttack->OnComponentBeginOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackBeginOverlap);
+        AreaAttack->OnComponentEndOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackEndOverlap);
+
+        AllyDetectionArea->OnComponentBeginOverlap.AddDynamic(this, &ASoldierRts::OnAllyDetectionBeginOverlap);
+        AllyDetectionArea->OnComponentEndOverlap.AddDynamic(this, &ASoldierRts::OnAllyDetectionEndOverlap);
+
+        AllyDetectionRange = AttackRange;
 }
 
 void ASoldierRts::OnConstruction(const FTransform& Transform)
@@ -230,17 +238,21 @@ FCommandData ASoldierRts::GetCurrentCommand_Implementation()
 
 void ASoldierRts::OnStartAttack(AActor* Target)
 {
-	if (!bCanAttack) return;
-	
-	if (GetCurrentWeapon())
-	{
-		GetCurrentWeapon()->AIShoot(Target);
-	}
-	else
-	{
-		IDamageable::Execute_TakeDamage(Target, this);
-		NetMulticast_Unreliable_CallOnStartAttack();
-	}
+        if (!bCanAttack || !Target || Target == this)
+        {
+                return;
+        }
+
+        if (GetCurrentWeapon())
+        {
+                GetCurrentWeapon()->AIShoot(Target);
+        }
+
+        if (Target->Implements<UDamageable>())
+        {
+                IDamageable::Execute_TakeDamage(Target, this);
+                NetMulticast_Unreliable_CallOnStartAttack();
+        }
 }
 
 void ASoldierRts::TakeDamage_Implementation(AActor* DamageOwner)
@@ -280,9 +292,8 @@ void ASoldierRts::OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedCompon
 
         UpdateActorsInArea();
 
-        if (IsFriendlyActor(OtherActor))
+        if (!IsEnemyActor(OtherActor))
         {
-                AllyInRange.AddUnique(OtherActor);
                 return;
         }
 
@@ -307,15 +318,68 @@ void ASoldierRts::OnAreaAttackEndOverlap(UPrimitiveComponent* OverlappedComponen
 
         UpdateActorsInArea();
 
-        if (IsFriendlyActor(OtherActor))
+        if (!IsEnemyActor(OtherActor))
         {
-                AllyInRange.Remove(OtherActor);
                 return;
         }
 
         if (ActorsInRange.Remove(OtherActor) > 0)
         {
                 HandleTargetRemoval(OtherActor);
+        }
+}
+
+void ASoldierRts::OnAllyDetectionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+                                           UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+        if (!ShouldUseComponentDetection())
+        {
+                return;
+        }
+
+        if (OtherActor == this)
+        {
+                return;
+        }
+
+        if (!IsValidSelectableActor(OtherActor))
+        {
+                return;
+        }
+
+        UpdateActorsInArea();
+
+        if (!IsFriendlyActor(OtherActor))
+        {
+                return;
+        }
+
+        AllyInRange.AddUnique(OtherActor);
+}
+
+void ASoldierRts::OnAllyDetectionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+                                         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+        if (!ShouldUseComponentDetection())
+        {
+                return;
+        }
+
+        if (OtherActor == this)
+        {
+                return;
+        }
+
+        if (!IsValidSelectableActor(OtherActor))
+        {
+                return;
+        }
+
+        UpdateActorsInArea();
+
+        if (IsFriendlyActor(OtherActor))
+        {
+                AllyInRange.Remove(OtherActor);
         }
 }
 
@@ -470,7 +534,8 @@ void ASoldierRts::EvaluateCalculatedDetection()
     }
 
     const FVector SelfLocation = GetActorLocation();
-    const float RangeSq = FMath::Square(AttackRange);
+    const float EnemyRangeSq = FMath::Square(AttackRange);
+    const float AllyRangeSq = FMath::Square(AllyDetectionRange);
 
     TArray<FDetectionCandidate> Candidates;
 
@@ -488,16 +553,14 @@ void ASoldierRts::EvaluateCalculatedDetection()
         }
 
         const float DistanceSq = FVector::DistSquared(SelfLocation, CandidateActor->GetActorLocation());
-        if (DistanceSq > RangeSq)
-        {
-            continue;
-        }
+        const bool bIsEnemy = IsEnemyActor(CandidateActor);
+        const bool bIsFriendly = !bIsEnemy && IsFriendlyActor(CandidateActor);
 
-        if (IsEnemyActor(CandidateActor))
+        if (bIsEnemy && DistanceSq <= EnemyRangeSq)
         {
             Candidates.Emplace(CandidateActor, DistanceSq, true);
         }
-        else if (IsFriendlyActor(CandidateActor))
+        else if (bIsFriendly && DistanceSq <= AllyRangeSq)
         {
             Candidates.Emplace(CandidateActor, DistanceSq, false);
         }
@@ -600,6 +663,13 @@ void ASoldierRts::DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const 
     const FColor DebugColor = DetectionSettings.DebugColor.ToFColor(true);
     DrawDebugSphere(GetWorld(), GetActorLocation(), AttackRange, 16, DebugColor, false, DetectionSettings.DebugDuration);
 
+    const bool bShouldDrawAllySphere = AllyDetectionRange > KINDA_SMALL_NUMBER;
+    if (bShouldDrawAllySphere)
+    {
+        const FColor AllyColor = FColor::Green;
+        DrawDebugSphere(GetWorld(), GetActorLocation(), AllyDetectionRange, 16, AllyColor, false, DetectionSettings.DebugDuration);
+    }
+
     if (!DetectionSettings.bDrawTargetLines)
     {
         return;
@@ -641,16 +711,30 @@ void ASoldierRts::ConfigureDetectionComponent()
     }
 
     AreaAttack->SetSphereRadius(AttackRange);
+    if (AllyDetectionArea)
+    {
+        AllyDetectionArea->SetSphereRadius(AllyDetectionRange);
+    }
 
     if (ShouldUseComponentDetection())
     {
         AreaAttack->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
         AreaAttack->SetGenerateOverlapEvents(true);
+        if (AllyDetectionArea)
+        {
+            AllyDetectionArea->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            AllyDetectionArea->SetGenerateOverlapEvents(true);
+        }
     }
     else
     {
         AreaAttack->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         AreaAttack->SetGenerateOverlapEvents(false);
+        if (AllyDetectionArea)
+        {
+            AllyDetectionArea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            AllyDetectionArea->SetGenerateOverlapEvents(false);
+        }
 
         ActorsInRange.Reset();
         AllyInRange.Reset();
