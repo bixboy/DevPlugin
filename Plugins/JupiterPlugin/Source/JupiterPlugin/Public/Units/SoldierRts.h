@@ -169,16 +169,27 @@ protected:
 	UFUNCTION()
 	virtual void OnStartAttack(AActor* Target);
 
-	UFUNCTION()
-	void UpdateActorsInArea();
+        UFUNCTION()
+        void UpdateActorsInArea();
 
-	UFUNCTION()
-	void OnRep_CombatBehavior();
+        UFUNCTION()
+        void OnRep_CombatBehavior();
 
-	
-	/*- Variables -*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-	TObjectPtr<USphereComponent> AreaAttack;
+private:
+        bool IsValidSelectableActor(const AActor* Actor) const;
+        bool IsFriendlyActor(const AActor* Actor) const;
+        bool IsEnemyActor(const AActor* Actor) const;
+        bool ShouldAutoEngage() const;
+        FCommandData MakeAttackCommand(AActor* Target) const;
+        void IssueAttackOrder(const FCommandData& CommandData);
+        void HandleAutoEngage(AActor* Target);
+        void HandleTargetRemoval(AActor* OtherActor);
+        void NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData);
+
+
+        /*- Variables -*/
+        UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
+        TObjectPtr<USphereComponent> AreaAttack;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
 	bool bCanAttack = true;
