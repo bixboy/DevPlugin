@@ -44,17 +44,26 @@ protected:
 // Commands
 #pragma region Command Functions
 private:
-	UFUNCTION()
-	void CommandPatrol(const FCommandData CommandData);
-	UFUNCTION()
-	void CommandMove(const FCommandData CommandData);
-	UFUNCTION()
-	void DestinationReached(const FCommandData CommandData);
+        UFUNCTION()
+        void CommandPatrol(const FCommandData CommandData);
+        UFUNCTION()
+        void CommandMove(const FCommandData CommandData);
+        UFUNCTION()
+        void DestinationReached(const FCommandData CommandData);
 
-	UFUNCTION()
-	void SetWalk() const;
-	UFUNCTION()
-	void SetRun() const;
+        UFUNCTION()
+        bool ShouldFollowCommandTarget(const FCommandData& CommandData) const;
+        UFUNCTION()
+        bool HasValidAttackTarget(const FCommandData& CommandData) const;
+        UFUNCTION()
+        FVector ResolveDestinationFromCommand(const FCommandData& CommandData) const;
+        UFUNCTION()
+        void ApplyMovementSettings(const FCommandData& CommandData);
+
+        UFUNCTION()
+        void SetWalk() const;
+        UFUNCTION()
+        void SetRun() const;
 	UFUNCTION()
 	void SetSprint() const;
 

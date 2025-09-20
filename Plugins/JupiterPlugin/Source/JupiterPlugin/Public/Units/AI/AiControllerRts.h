@@ -81,25 +81,29 @@ protected:
 	float AttackCooldown = 1.f;
 
 private:
-	// Variables
-	UPROPERTY() ASoldierRts*       Soldier = nullptr;
-	UPROPERTY() FCommandData       CurrentCommand;
-	
-	UPROPERTY() bool               bMoveComplete = true;
-	UPROPERTY() bool               bPatrolling = false;
-	
-	UPROPERTY() bool               bAttackTarget = false;
-	UPROPERTY() bool               bCanAttack = true;
-	UPROPERTY() FTimerHandle       AttackTimer;
-	UPROPERTY() ECombatBehavior    CombatBehavior;
-	
-	// Functions
-	UFUNCTION() float GetAcceptanceRadius() const;
-	UFUNCTION() bool  ShouldApproach() const;
+        // Variables
+        UPROPERTY() ASoldierRts*       Soldier = nullptr;
+        UPROPERTY() FCommandData       CurrentCommand;
 
-	UFUNCTION() float GetDistanceToTarget() const;
-	UFUNCTION() bool  ShouldAttack() const;
-	UFUNCTION() void  PerformAttack();
-	
-	UFUNCTION() void  StartPatrol();
+        UPROPERTY() bool               bMoveComplete = true;
+        UPROPERTY() bool               bPatrolling = false;
+
+        UPROPERTY() bool               bAttackTarget = false;
+        UPROPERTY() bool               bCanAttack = true;
+        UPROPERTY() FTimerHandle       AttackTimer;
+        UPROPERTY() ECombatBehavior    CombatBehavior;
+
+        // Functions
+        UFUNCTION() float GetAcceptanceRadius() const;
+        UFUNCTION() bool  ShouldApproach() const;
+
+        UFUNCTION() float GetDistanceToTarget() const;
+        UFUNCTION() bool  ShouldAttack() const;
+        UFUNCTION() void  PerformAttack();
+
+        bool             HasValidAttackCommand() const;
+        bool             ValidateAttackCommand(const FCommandData& Cmd) const;
+        void             HandleInvalidAttackTarget();
+
+        UFUNCTION() void  StartPatrol();
 };

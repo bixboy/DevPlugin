@@ -166,25 +166,36 @@ protected:
 	UFUNCTION()
 	virtual ECombatBehavior GetBehavior_Implementation() override;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Attack", ReplicatedUsing = OnRep_CombatBehavior)
+	ECombatBehavior CombatBehavior = ECombatBehavior::Passive;
+
 	UFUNCTION()
 	virtual void OnStartAttack(AActor* Target);
 
-	UFUNCTION()
-	void UpdateActorsInArea();
+        UFUNCTION()
+        void UpdateActorsInArea();
 
-	UFUNCTION()
-	void OnRep_CombatBehavior();
+        UFUNCTION()
+        void OnRep_CombatBehavior();
 
-	
-	/*- Variables -*/
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-	TObjectPtr<USphereComponent> AreaAttack;
+private:
+        bool IsValidSelectableActor(const AActor* Actor) const;
+        bool IsFriendlyActor(AActor* Actor) const;
+        bool IsEnemyActor(AActor* Actor) const;
+        bool ShouldAutoEngage() const;
+        FCommandData MakeAttackCommand(AActor* Target) const;
+        void IssueAttackOrder(const FCommandData& CommandData);
+        void HandleAutoEngage(AActor* Target);
+        void HandleTargetRemoval(AActor* OtherActor);
+        void NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData);
+
+
+        /*- Variables -*/
+        UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
+        TObjectPtr<USphereComponent> AreaAttack;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
 	bool bCanAttack = true;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Attack", ReplicatedUsing = OnRep_CombatBehavior)
-	ECombatBehavior CombatBehavior = ECombatBehavior::Passive;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
 	float AttackCooldown = 1.5f;
