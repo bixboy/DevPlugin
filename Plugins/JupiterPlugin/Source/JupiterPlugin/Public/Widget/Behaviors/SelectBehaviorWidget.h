@@ -5,7 +5,8 @@
 
 class UCustomButtonWidget;
 class UBehaviorButtonWidget;
-class USelectionComponent;
+class UUnitSelectionComponent;
+class UUnitOrderComponent;
 
 UCLASS()
 class JUPITERPLUGIN_API USelectBehaviorWidget : public UUserWidget
@@ -34,6 +35,9 @@ protected:
 	UFUNCTION()
 	void OnNewUnitSelected();
 
-	UPROPERTY()
-	USelectionComponent* SelectionComponent;
+        UPROPERTY()
+        UUnitSelectionComponent* SelectionComponent;
+
+        UPROPERTY()
+        UUnitOrderComponent* OrderComponent;
 };

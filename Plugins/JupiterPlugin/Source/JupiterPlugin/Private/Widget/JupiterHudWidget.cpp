@@ -2,7 +2,7 @@
 
 #include "Player/PlayerControllerRts.h"
 #include "Components/Button.h"
-#include "Components/SlectionComponent.h"
+#include "Components/UnitSelectionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Widget/Formations/FormationSelectorWidget.h"
 #include "Widget/Behaviors/SelectBehaviorWidget.h"
@@ -48,7 +48,7 @@ void UJupiterHudWidget::InitializedJupiterHud(APawn* PawnLinked)
 {
 	if(!PawnLinked) return;
 	
-	SelectionComponent = PawnLinked->GetComponentByClass<USelectionComponent>();
+        SelectionComponent = PawnLinked->FindComponentByClass<UUnitSelectionComponent>();
 	if(!SelectionComponent) return;
 
 	SetFormationSelectionWidget(false);

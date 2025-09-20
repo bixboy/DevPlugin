@@ -4,7 +4,7 @@
 #include "GameFramework/PlayerController.h"
 #include "PlayerControllerRts.generated.h"
 
-class USelectionComponent;
+class UUnitSelectionComponent;
 class UInputMappingContext;
 
 
@@ -16,8 +16,8 @@ class JUPITERPLUGIN_API APlayerControllerRts : public APlayerController
 public:
 	APlayerControllerRts(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	USelectionComponent* SelectionComponent;
+        UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+        UUnitSelectionComponent* SelectionComponent;
 
 protected:
 	virtual void BeginPlay() override;

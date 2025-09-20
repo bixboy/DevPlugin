@@ -7,7 +7,7 @@
 class UCustomButtonWidget;
 class USlider;
 class UFormationButtonWidget;
-class USelectionComponent;
+class UUnitFormationComponent;
 
 UCLASS()
 class JUPITERPLUGIN_API UFormationSelectorWidget : public UUserWidget
@@ -42,6 +42,6 @@ protected:
 	UFUNCTION()
 	void OnSpacingSliderValueChanged(const float Value);
 
-	UPROPERTY()
-	USelectionComponent* SelectionComponent;
+        UPROPERTY()
+        UUnitFormationComponent* FormationComponent;
 };
