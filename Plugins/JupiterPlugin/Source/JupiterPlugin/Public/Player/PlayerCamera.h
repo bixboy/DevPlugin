@@ -314,7 +314,7 @@ protected:
 #pragma endregion
 
 #pragma region Spawn Units
-	
+
 protected:
 
 	UFUNCTION()
@@ -338,10 +338,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Settings|Spawn Units")
 	TSubclassOf<APreviewPoseMesh> PreviewUnitsClass;
 
-	UPROPERTY()
-	APreviewPoseMesh* PreviewUnits;
-	
-#pragma endregion	
+        UPROPERTY()
+        APreviewPoseMesh* PreviewUnits;
+
+#pragma endregion
+
+private:
+        /** Lazily resolves the selection component, logging a warning if missing. */
+        UUnitSelectionComponent* GetSelectionComponentChecked() const;
 };
 
 template <typename T>
