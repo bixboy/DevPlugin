@@ -71,10 +71,26 @@ void UUnitFormationComponent::BuildFormationCommands(const FCommandData& BaseCom
     if (bCacheLastFormationCommand)
         CacheFormationCommand(BaseCommand, Units);
 
+    if (Units.IsEmpty())
+        return;
+
+    TArray<FVector> Offsets;
+    Offsets.Reserve(Units.Num());
+
+    for (int32 Index = 0; Index < Units.Num(); ++Index)
+    {
+        Offsets.Add(CalculateOffset(Index, Units.Num()));
+    }
+
+    if (bMaintainFormationCenter)
+    {
+        CenterFormationOffsets(Offsets);
+    }
+
     for (int32 Index = 0; Index < Units.Num(); ++Index)
     {
         FCommandData Command = BaseCommand;
-        FVector Offset = CalculateOffset(Index, Units.Num());
+        const FVector Offset = Offsets[Index];
 
         if (bRespectCommandRotation)
         {
@@ -121,6 +137,15 @@ FVector UUnitFormationComponent::CalculateOffset(int32 Index, int32 TotalUnits) 
     FVector Offset = FVector::ZeroVector;
     if (const UFormationDataAsset* FormationData = GetFormationData())
     {
+        if (FormationData->SlotOffsets.IsValidIndex(Index))
+        {
+            const FVector2D& PatternOffset = FormationData->SlotOffsets[Index];
+            Offset = FVector(FormationData->Offset.X + PatternOffset.X * FormationSpacing,
+                             FormationData->Offset.Y + PatternOffset.Y * FormationSpacing,
+                             FormationData->Offset.Z);
+            return Offset;
+        }
+
         Offset = FormationData->Offset;
 
         switch (CurrentFormation)
@@ -167,6 +192,27 @@ FVector UUnitFormationComponent::CalculateOffset(int32 Index, int32 TotalUnits) 
         Offset = FVector(0.f, Index * FormationSpacing, 0.f);
 
     return Offset;
+}
+
+void UUnitFormationComponent::CenterFormationOffsets(TArray<FVector>& Offsets) const
+{
+    if (Offsets.Num() <= 1)
+    {
+        return;
+    }
+
+    FVector AverageOffset = FVector::ZeroVector;
+    for (const FVector& Offset : Offsets)
+    {
+        AverageOffset += Offset;
+    }
+
+    AverageOffset /= static_cast<float>(Offsets.Num());
+
+    for (FVector& Offset : Offsets)
+    {
+        Offset -= AverageOffset;
+    }
 }
 
 void UUnitFormationComponent::CacheFormationCommand(const FCommandData& CommandData, const TArray<AActor*>& Units)
