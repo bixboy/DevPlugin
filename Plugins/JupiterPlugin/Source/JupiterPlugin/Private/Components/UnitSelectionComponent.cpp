@@ -51,10 +51,9 @@ UUnitSelectionComponent::UUnitSelectionComponent()
     SetIsReplicatedByDefault(true);
 
     static ConstructorHelpers::FClassFinder<UJupiterHudWidget> DefaultHudClass(TEXT("/JupiterPlugin/BP/Widgets/WB_Hud"));
+    
     if (DefaultHudClass.Succeeded())
-    {
         HudClass = DefaultHudClass.Class;
-    }
 }
 
 void UUnitSelectionComponent::BeginPlay()
@@ -64,27 +63,21 @@ void UUnitSelectionComponent::BeginPlay()
     AssetManager = UAssetManager::GetIfInitialized();
 
     if (APawn* OwnerPawn = Cast<APawn>(GetOwner()))
-    {
         OwnerController = Cast<APlayerController>(OwnerPawn->GetController());
-    }
 
     if (!OwnerController.IsValid())
-    {
         OwnerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-    }
 }
 
 void UUnitSelectionComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
     DOREPLIFETIME_CONDITION(UUnitSelectionComponent, SelectedActors, COND_OwnerOnly);
 }
 
 void UUnitSelectionComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 {
     Super::OnComponentDestroyed(bDestroyingHierarchy);
-
     DestroyHud();
 }
 
@@ -96,16 +89,12 @@ FHitResult UUnitSelectionComponent::GetMousePositionOnTerrain() const
         FVector WorldDirection = FVector::ZeroVector;
 
         if (!Controller->DeprojectMousePositionToWorld(WorldLocation, WorldDirection))
-        {
             return FHitResult();
-        }
 
         FHitResult OutHit;
         const FVector TraceEnd = WorldLocation + (WorldDirection * TerrainTraceLength);
-        if (GetWorld() && GetWorld()->LineTraceSingleByChannel(OutHit, WorldLocation, TraceEnd, TerrainTraceChannel))
-        {
+        if (GetWorld()->LineTraceSingleByChannel(OutHit, WorldLocation, TraceEnd, TerrainTraceChannel))
             return OutHit;
-        }
     }
 
     return FHitResult();
@@ -131,30 +120,20 @@ void UUnitSelectionComponent::Handle_Selection(AActor* ActorToSelect)
 void UUnitSelectionComponent::Handle_Selection(const TArray<AActor*>& ActorsToSelect)
 {
     if (!GetOwner())
-    {
         return;
-    }
 
     if (HasAuthorityOnSelection())
-    {
         Server_SelectGroup_Implementation(ActorsToSelect, false);
-    }
     else
-    {
         Server_SelectGroup(ActorsToSelect, false);
-    }
 }
 
 void UUnitSelectionComponent::ClearSelection()
 {
     if (HasAuthorityOnSelection())
-    {
         Server_ClearSelection_Implementation();
-    }
     else
-    {
         Server_ClearSelection();
-    }
 }
 
 bool UUnitSelectionComponent::HasGroupSelection() const
@@ -170,9 +149,7 @@ bool UUnitSelectionComponent::ActorSelected(AActor* ActorToCheck) const
 void UUnitSelectionComponent::RemoveInvalidSelections()
 {
     if (!HasAuthorityOnSelection())
-    {
         return;
-    }
 
     TArray<AActor*> PreviousSelection = SelectedActors;
     SanitizeSelectionList(SelectedActors);
@@ -182,18 +159,12 @@ void UUnitSelectionComponent::RemoveInvalidSelections()
 void UUnitSelectionComponent::CreateHud()
 {
     if (HudInstance || !HudClass)
-    {
         return;
-    }
 
     if (APlayerController* PC = ResolveOwnerController())
-    {
         HudInstance = CreateWidget<UJupiterHudWidget>(PC, HudClass);
-    }
     else if (UWorld* World = GetWorld())
-    {
         HudInstance = CreateWidget<UJupiterHudWidget>(World, HudClass);
-    }
 
     if (HudInstance)
     {
@@ -203,44 +174,32 @@ void UUnitSelectionComponent::CreateHud()
         if (!OwnerPawn)
         {
             if (APlayerController* PC = ResolveOwnerController())
-            {
                 OwnerPawn = PC->GetPawn();
-            }
         }
 
         if (OwnerPawn)
-        {
             HudInstance->InitializedJupiterHud(OwnerPawn);
-        }
     }
 }
 
 APlayerController* UUnitSelectionComponent::ResolveOwnerController() const
 {
     if (OwnerController.IsValid())
-    {
         return OwnerController.Get();
-    }
 
     APlayerController* Controller = nullptr;
 
     if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
-    {
         Controller = Cast<APlayerController>(OwnerPawn->GetController());
-    }
 
     if (!Controller)
     {
         if (UWorld* World = GetWorld())
-        {
             Controller = World->GetFirstPlayerController();
-        }
     }
 
     if (Controller)
-    {
         OwnerController = Controller;
-    }
 
     return Controller;
 }
@@ -261,27 +220,19 @@ void UUnitSelectionComponent::Server_SelectSingle_Implementation(AActor* ActorTo
     if (!ActorToSelect)
     {
         if (bClearSelectionOnEmptyClick)
-        {
             SelectedActors.Empty();
-        }
     }
     else if (ActorToSelect->Implements<USelectable>())
     {
         const bool bAlreadySelected = SelectedActors.Contains(ActorToSelect);
 
         if (!bAllowAppendOnSingleSelection)
-        {
             SelectedActors.Empty();
-        }
 
         if (bAlreadySelected && bToggleIfSelected)
-        {
             SelectedActors.Remove(ActorToSelect);
-        }
         else if (!SelectedActors.Contains(ActorToSelect))
-        {
             SelectedActors.Add(ActorToSelect);
-        }
     }
     else if (bClearSelectionOnEmptyClick)
     {
@@ -297,16 +248,12 @@ void UUnitSelectionComponent::Server_SelectGroup_Implementation(const TArray<AAc
     TArray<AActor*> PreviousSelection = SelectedActors;
 
     if (!bAppendToSelection)
-    {
         SelectedActors.Empty();
-    }
 
     for (AActor* Actor : ActorsToSelect)
     {
         if (Actor && Actor->Implements<USelectable>() && !SelectedActors.Contains(Actor))
-        {
             SelectedActors.Add(Actor);
-        }
     }
 
     SanitizeSelectionList(SelectedActors);
@@ -316,9 +263,7 @@ void UUnitSelectionComponent::Server_SelectGroup_Implementation(const TArray<AAc
 void UUnitSelectionComponent::Server_ClearSelection_Implementation()
 {
     if (SelectedActors.IsEmpty())
-    {
         return;
-    }
 
     TArray<AActor*> PreviousSelection = SelectedActors;
     SelectedActors.Empty();
@@ -357,9 +302,7 @@ void UUnitSelectionComponent::SanitizeSelectionList(TArray<AActor*>& InOutSelect
     {
         AActor* Actor = InOutSelection[Index];
         if (!IsValid(Actor) || !Actor->Implements<USelectable>())
-        {
             InOutSelection.RemoveAt(Index);
-        }
     }
 }
 
@@ -368,17 +311,13 @@ void UUnitSelectionComponent::ApplySelectionVisuals(const TArray<AActor*>& Added
     for (AActor* Actor : RemovedActors)
     {
         if (ISelectable* Selectable = Cast<ISelectable>(Actor))
-        {
             Selectable->Deselect();
-        }
     }
 
     for (AActor* Actor : AddedActors)
     {
         if (ISelectable* Selectable = Cast<ISelectable>(Actor))
-        {
             Selectable->Select();
-        }
     }
 }
 
@@ -390,9 +329,7 @@ TArray<AActor*> UUnitSelectionComponent::GetCachedSelection() const
     for (const TWeakObjectPtr<AActor>& WeakActor : CachedSelectedActors)
     {
         if (AActor* Actor = WeakActor.Get())
-        {
             CachedSelection.Add(Actor);
-        }
     }
 
     return CachedSelection;
@@ -401,9 +338,8 @@ TArray<AActor*> UUnitSelectionComponent::GetCachedSelection() const
 void UUnitSelectionComponent::RefreshCachedSelection()
 {
     CachedSelectedActors.Empty(SelectedActors.Num());
+    
     for (AActor* Actor : SelectedActors)
-    {
         CachedSelectedActors.Add(Actor);
-    }
 }
 

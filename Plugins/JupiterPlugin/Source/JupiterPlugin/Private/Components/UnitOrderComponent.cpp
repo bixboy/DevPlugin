@@ -19,26 +19,18 @@ void UUnitOrderComponent::BeginPlay()
     FormationComponent = GetOwner() ? GetOwner()->FindComponentByClass<UUnitFormationComponent>() : nullptr;
 
     if (FormationComponent && bAutoReapplyCachedFormation)
-    {
         FormationComponent->OnFormationStateChanged.AddDynamic(this, &UUnitOrderComponent::ReapplyCachedFormation);
-    }
 }
 
 void UUnitOrderComponent::IssueOrder(const FCommandData& CommandData)
 {
     if (!SelectionComponent)
-    {
         return;
-    }
 
     if (GetOwner() && GetOwner()->HasAuthority())
-    {
         DispatchOrder(CommandData);
-    }
     else
-    {
         ServerIssueOrder(CommandData);
-    }
 }
 
 void UUnitOrderComponent::IssueSimpleOrder(ECommandType Type, FVector Location, FRotator Rotation, AActor* Target, float Radius)
@@ -58,33 +50,23 @@ void UUnitOrderComponent::IssueSimpleOrder(ECommandType Type, FVector Location, 
 void UUnitOrderComponent::UpdateBehavior(ECombatBehavior NewBehavior)
 {
     if (!SelectionComponent)
-    {
         return;
-    }
 
     if (GetOwner() && GetOwner()->HasAuthority())
-    {
         ApplyBehaviorToSelection(NewBehavior);
-    }
     else
-    {
         ServerUpdateBehavior(NewBehavior);
-    }
 }
 
 void UUnitOrderComponent::ReapplyCachedFormation()
 {
     if (!FormationComponent)
-    {
         return;
-    }
 
     if (GetOwner() && GetOwner()->HasAuthority())
     {
         if (const FCommandData* CachedCommand = FormationComponent->GetCachedFormationCommand())
-        {
             DispatchOrder(*CachedCommand);
-        }
     }
     else
     {
@@ -102,9 +84,7 @@ void UUnitOrderComponent::ServerReapplyCachedFormation_Implementation()
     if (FormationComponent)
     {
         if (const FCommandData* CachedCommand = FormationComponent->GetCachedFormationCommand())
-        {
             DispatchOrder(*CachedCommand);
-        }
     }
 }
 
@@ -116,17 +96,13 @@ void UUnitOrderComponent::ServerUpdateBehavior_Implementation(ECombatBehavior Ne
 void UUnitOrderComponent::DispatchOrder(const FCommandData& CommandData)
 {
     if (!SelectionComponent)
-    {
         return;
-    }
 
     SelectionComponent->RemoveInvalidSelections();
 
     TArray<AActor*> SelectedUnits = SelectionComponent->GetSelectedActors();
     if (SelectedUnits.IsEmpty())
-    {
         return;
-    }
 
     TArray<FCommandData> Commands;
     ApplyFormationToCommands(CommandData, SelectedUnits, Commands);
@@ -136,15 +112,11 @@ void UUnitOrderComponent::DispatchOrder(const FCommandData& CommandData)
     {
         AActor* Unit = SelectedUnits[Index];
         if (!Unit || !Unit->Implements<USelectable>())
-        {
             continue;
-        }
 
         const FCommandData& UnitCommand = Commands.IsValidIndex(Index) ? Commands[Index] : CommandData;
         if (ShouldIgnoreTarget(Unit, UnitCommand))
-        {
             continue;
-        }
 
         ISelectable::Execute_CommandMove(Unit, UnitCommand);
     }
@@ -165,41 +137,32 @@ void UUnitOrderComponent::ApplyFormationToCommands(const FCommandData& BaseComma
     else
     {
         OutCommands.Reserve(SelectedUnits.Num());
+        
         for (int32 Index = 0; Index < SelectedUnits.Num(); ++Index)
-        {
             OutCommands.Add(BaseCommand);
-        }
     }
 }
 
 void UUnitOrderComponent::ApplyBehaviorToSelection(ECombatBehavior NewBehavior)
 {
     if (!SelectionComponent)
-    {
         return;
-    }
 
     const TArray<AActor*> SelectedUnits = SelectionComponent->GetSelectedActors();
     for (AActor* Unit : SelectedUnits)
     {
         if (Unit && Unit->Implements<USelectable>())
-        {
             ISelectable::Execute_SetBehavior(Unit, NewBehavior);
-        }
     }
 }
 
 bool UUnitOrderComponent::ShouldIgnoreTarget(AActor* Unit, const FCommandData& CommandData) const
 {
     if (!bIgnoreFriendlyTargets || !CommandData.Target || !CommandData.Target->Implements<USelectable>())
-    {
         return false;
-    }
 
     if (!Unit || !Unit->Implements<USelectable>())
-    {
         return false;
-    }
 
     return ISelectable::Execute_GetCurrentTeam(Unit) == ISelectable::Execute_GetCurrentTeam(CommandData.Target);
 }

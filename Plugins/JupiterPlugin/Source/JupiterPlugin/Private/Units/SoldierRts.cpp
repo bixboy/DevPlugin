@@ -14,46 +14,44 @@
 
 ASoldierRts::ASoldierRts(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
-        PrimaryActorTick.bCanEverTick = true;
-        bReplicates = true;
+    PrimaryActorTick.bCanEverTick = true;
+    bReplicates = true;
 
-        AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
-        AIControllerClass = AiControllerRtsClass;
+    AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+    AIControllerClass = AiControllerRtsClass;
 
-        CommandComp = CreateDefaultSubobject<UCommandComponent>(TEXT("CommandComponent"));
+    CommandComp = CreateDefaultSubobject<UCommandComponent>(TEXT("CommandComponent"));
 
-        AreaAttack = CreateDefaultSubobject<USphereComponent>(TEXT("AreaAttack"));
-        AreaAttack->SetupAttachment(RootComponent);
+    AreaAttack = CreateDefaultSubobject<USphereComponent>(TEXT("AreaAttack"));
+    AreaAttack->SetupAttachment(RootComponent);
 
-        AllyDetectionArea = CreateDefaultSubobject<USphereComponent>(TEXT("AllyDetectionArea"));
-        AllyDetectionArea->SetupAttachment(RootComponent);
+    AllyDetectionArea = CreateDefaultSubobject<USphereComponent>(TEXT("AllyDetectionArea"));
+    AllyDetectionArea->SetupAttachment(RootComponent);
 
-        AreaAttack->OnComponentBeginOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackBeginOverlap);
-        AreaAttack->OnComponentEndOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackEndOverlap);
+    AreaAttack->OnComponentBeginOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackBeginOverlap);
+    AreaAttack->OnComponentEndOverlap.AddDynamic(this, &ASoldierRts::OnAreaAttackEndOverlap);
 
-        AllyDetectionArea->OnComponentBeginOverlap.AddDynamic(this, &ASoldierRts::OnAllyDetectionBeginOverlap);
-        AllyDetectionArea->OnComponentEndOverlap.AddDynamic(this, &ASoldierRts::OnAllyDetectionEndOverlap);
+    AllyDetectionArea->OnComponentBeginOverlap.AddDynamic(this, &ASoldierRts::OnAllyDetectionBeginOverlap);
+    AllyDetectionArea->OnComponentEndOverlap.AddDynamic(this, &ASoldierRts::OnAllyDetectionEndOverlap);
 
-        AllyDetectionRange = AttackRange;
+    AllyDetectionRange = AttackRange;
 }
 
 void ASoldierRts::OnConstruction(const FTransform& Transform)
 {
-        Super::OnConstruction(Transform);
+    Super::OnConstruction(Transform);
 
-        AIControllerClass = AiControllerRtsClass;
-
-        ConfigureDetectionComponent();
+    AIControllerClass = AiControllerRtsClass;
+    ConfigureDetectionComponent();
 }
 
 void ASoldierRts::BeginPlay()
 {
-        Super::BeginPlay();
+    Super::BeginPlay();
 
-        ConfigureDetectionComponent();
-
-        if (WeaponClass && CurrentTeam != ETeams::HiveMind)
-        {
+    ConfigureDetectionComponent();
+    if (WeaponClass && CurrentTeam != ETeams::HiveMind)
+    {
 		CurrentWeapon = Cast<UWeaponMaster>(AddComponentByClass(*WeaponClass, false, FTransform::Identity, true));
 		if (CurrentWeapon)
 		{
@@ -65,27 +63,26 @@ void ASoldierRts::BeginPlay()
 
 void ASoldierRts::Destroyed()
 {
-        Super::Destroyed();
+    Super::Destroyed();
 
-        for (AActor* Soldier : ActorsInRange)
-        {
-                if (ASoldierRts* SoldierRts = Cast<ASoldierRts>(Soldier))
-                        SoldierRts->UpdateActorsInArea();
-        }
+    for (AActor* Soldier : ActorsInRange)
+    {
+        if (ASoldierRts* SoldierRts = Cast<ASoldierRts>(Soldier))
+                SoldierRts->UpdateActorsInArea();
+    }
 }
 
 #if WITH_EDITOR
 void ASoldierRts::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
-        Super::PostEditChangeProperty(PropertyChangedEvent);
-
-        ConfigureDetectionComponent();
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+    ConfigureDetectionComponent();
 }
 #endif
 
 void ASoldierRts::PossessedBy(AController* NewController)
 {
-        Super::PossessedBy(NewController);
+    Super::PossessedBy(NewController);
 
 	if (HasAuthority())
 	{
@@ -103,7 +100,6 @@ void ASoldierRts::PossessedBy(AController* NewController)
 auto ASoldierRts::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const -> void
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
 	DOREPLIFETIME(ASoldierRts, CombatBehavior);
 }
 
@@ -136,18 +132,18 @@ void ASoldierRts::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-        if(GetCharacterMovement()->Velocity.Length() != 0 && !bIsMoving)
-        {
-                bIsMoving = true;
-                StartWalkingEvent_Delegate.Broadcast();
-        }
-        else if(GetCharacterMovement()->Velocity.Length() == 0 && bIsMoving)
-        {
-                bIsMoving = false;
-                EndWalkingEvent_Delegate.Broadcast();
-        }
+    if(GetCharacterMovement()->Velocity.Length() != 0 && !bIsMoving)
+    {
+        bIsMoving = true;
+        StartWalkingEvent_Delegate.Broadcast();
+    }
+    else if(GetCharacterMovement()->Velocity.Length() == 0 && bIsMoving)
+    {
+        bIsMoving = false;
+        EndWalkingEvent_Delegate.Broadcast();
+    }
 
-        UpdateAttackDetection(DeltaSeconds);
+    UpdateAttackDetection(DeltaSeconds);
 }
 
 
@@ -216,16 +212,13 @@ bool ASoldierRts::GetIsSelected_Implementation()
 void ASoldierRts::CommandMove_Implementation(FCommandData CommandData)
 {
 	ISelectable::CommandMove_Implementation(CommandData);
-
 	GetCommandComponent()->CommandMoveToLocation(CommandData);
 }
 
 FCommandData ASoldierRts::GetCurrentCommand_Implementation()
 {
 	if (CommandComp)
-	{
-		return CommandComp->GetCurrentCommand();	
-	}
+		return CommandComp->GetCurrentCommand();
 	
 	return FCommandData();
 }
@@ -238,21 +231,17 @@ FCommandData ASoldierRts::GetCurrentCommand_Implementation()
 
 void ASoldierRts::OnStartAttack(AActor* Target)
 {
-        if (!bCanAttack || !Target || Target == this)
-        {
-                return;
-        }
+    if (!bCanAttack || !Target || Target == this)
+		return;
 
-        if (GetCurrentWeapon())
-        {
-                GetCurrentWeapon()->AIShoot(Target);
-        }
+    if (GetCurrentWeapon())
+		GetCurrentWeapon()->AIShoot(Target);
 
-        if (Target->Implements<UDamageable>())
-        {
-                IDamageable::Execute_TakeDamage(Target, this);
-                NetMulticast_Unreliable_CallOnStartAttack();
-        }
+    if (Target->Implements<UDamageable>())
+    {
+        IDamageable::Execute_TakeDamage(Target, this);
+        NetMulticast_Unreliable_CallOnStartAttack();
+    }
 }
 
 void ASoldierRts::TakeDamage_Implementation(AActor* DamageOwner)
@@ -275,120 +264,87 @@ void ASoldierRts::TakeDamage_Implementation(AActor* DamageOwner)
 		NotifyAlliesOfThreat(DamageOwner, AttackCommand);
 }
 
-void ASoldierRts::OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-                                           UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void ASoldierRts::OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-        if (!ShouldUseComponentDetection())
-        {
-                return;
-        }
+    if (!ShouldUseComponentDetection())
+		return;
 
-        if (OtherActor == this) return;
+    if (OtherActor == this) return;
 
-        if (!IsValidSelectableActor(OtherActor))
-        {
-                return;
-        }
+    if (!IsValidSelectableActor(OtherActor))
+		return;
 
-        UpdateActorsInArea();
+    UpdateActorsInArea();
 
-        if (!IsEnemyActor(OtherActor))
-        {
-                return;
-        }
+    if (!IsEnemyActor(OtherActor))
+		return;
 
-        ActorsInRange.AddUnique(OtherActor);
-        HandleAutoEngage(OtherActor);
+    ActorsInRange.AddUnique(OtherActor);
+    HandleAutoEngage(OtherActor);
 }
 
-void ASoldierRts::OnAreaAttackEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-                                         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+void ASoldierRts::OnAreaAttackEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-        if (!ShouldUseComponentDetection())
-        {
-                return;
-        }
+    if (!ShouldUseComponentDetection())
+		return;
 
-        if (OtherActor == this || !bCanAttack) return;
+    if (OtherActor == this || !bCanAttack)
+        return;
 
-        if (!IsValidSelectableActor(OtherActor))
-        {
-                return;
-        }
+    if (!IsValidSelectableActor(OtherActor))
+		return;
 
-        UpdateActorsInArea();
+    UpdateActorsInArea();
 
-        if (!IsEnemyActor(OtherActor))
-        {
-                return;
-        }
+    if (!IsEnemyActor(OtherActor))
+		return;
 
-        if (ActorsInRange.Remove(OtherActor) > 0)
-        {
-                HandleTargetRemoval(OtherActor);
-        }
+    if (ActorsInRange.Remove(OtherActor) > 0)
+		HandleTargetRemoval(OtherActor);
 }
 
-void ASoldierRts::OnAllyDetectionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-                                           UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void ASoldierRts::OnAllyDetectionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-        if (!ShouldUseComponentDetection())
-        {
-                return;
-        }
+    if (!ShouldUseComponentDetection())
+		return;
 
-        if (OtherActor == this)
-        {
-                return;
-        }
+    if (OtherActor == this)
+		return;
 
-        if (!IsValidSelectableActor(OtherActor))
-        {
-                return;
-        }
+    if (!IsValidSelectableActor(OtherActor))
+		return;
 
-        UpdateActorsInArea();
+    UpdateActorsInArea();
 
-        if (!IsFriendlyActor(OtherActor))
-        {
-                return;
-        }
+    if (!IsFriendlyActor(OtherActor))
+        return;
 
-        AllyInRange.AddUnique(OtherActor);
+    AllyInRange.AddUnique(OtherActor);
 }
 
-void ASoldierRts::OnAllyDetectionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-                                         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+void ASoldierRts::OnAllyDetectionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-        if (!ShouldUseComponentDetection())
-        {
-                return;
-        }
+    if (!ShouldUseComponentDetection())
+		return;
 
-        if (OtherActor == this)
-        {
-                return;
-        }
+    if (OtherActor == this)
+		return;
 
-        if (!IsValidSelectableActor(OtherActor))
-        {
-                return;
-        }
+    if (!IsValidSelectableActor(OtherActor))
+		return;
 
-        UpdateActorsInArea();
+    UpdateActorsInArea();
 
-        if (IsFriendlyActor(OtherActor))
-        {
-                AllyInRange.Remove(OtherActor);
-        }
+    if (IsFriendlyActor(OtherActor))
+		AllyInRange.Remove(OtherActor);
 }
 
 bool ASoldierRts::GetIsInAttack_Implementation()
 {
 	if (bCanAttack)
-	{
 		return GetAiController()->HasAttackTarget();
-	}
 
 	return false;
 }
@@ -483,88 +439,63 @@ bool ASoldierRts::IsEnemyActor(AActor* Actor) const
 void ASoldierRts::UpdateAttackDetection(float DeltaSeconds)
 {
     if (!bCanAttack || ShouldUseComponentDetection())
-    {
-        return;
-    }
+		return;
 
     if (!HasAuthority())
-    {
-        return;
-    }
+		return;
 
     if (!ensure(DetectionSettings.RefreshInterval > KINDA_SMALL_NUMBER))
-    {
-        return;
-    }
+		return;
 
     DetectionElapsedTime += DeltaSeconds;
     if (DetectionElapsedTime < DetectionSettings.RefreshInterval)
-    {
-        return;
-    }
+		return;
 
     DetectionElapsedTime = 0.f;
-
     EvaluateCalculatedDetection();
 }
 
 namespace
 {
-        struct FDetectionCandidate
-        {
-                FDetectionCandidate() = default;
-                FDetectionCandidate(AActor* InActor, float InDistSq, bool bInEnemy)
-                    : Actor(InActor)
-                    , DistanceSq(InDistSq)
-                    , bIsEnemy(bInEnemy)
-                {
-                }
+    struct FDetectionCandidate
+    {
+        FDetectionCandidate() = default;
+        FDetectionCandidate(AActor* InActor, float InDistSq, bool bInEnemy)
+            : Actor(InActor)
+            , DistanceSq(InDistSq)
+            , bIsEnemy(bInEnemy) {}
 
-                AActor* Actor = nullptr;
-                float DistanceSq = 0.f;
-                bool bIsEnemy = false;
-        };
+        AActor* Actor = nullptr;
+        float DistanceSq = 0.f;
+        bool bIsEnemy = false;
+    };
 }
 
 void ASoldierRts::EvaluateCalculatedDetection()
 {
-    UWorld* World = GetWorld();
-    if (!World)
-    {
-        return;
-    }
-
     const FVector SelfLocation = GetActorLocation();
     const float EnemyRangeSq = FMath::Square(AttackRange);
     const float AllyRangeSq = FMath::Square(AllyDetectionRange);
 
     TArray<FDetectionCandidate> Candidates;
 
-    for (TActorIterator<AActor> It(World); It; ++It)
+    for (TActorIterator<AActor> It(GetWorld()); It; ++It)
     {
         AActor* CandidateActor = *It;
         if (CandidateActor == nullptr || CandidateActor == this)
-        {
-            continue;
-        }
+			continue;
 
         if (!IsValidSelectableActor(CandidateActor))
-        {
-            continue;
-        }
+			continue;
 
         const float DistanceSq = FVector::DistSquared(SelfLocation, CandidateActor->GetActorLocation());
         const bool bIsEnemy = IsEnemyActor(CandidateActor);
         const bool bIsFriendly = !bIsEnemy && IsFriendlyActor(CandidateActor);
 
         if (bIsEnemy && DistanceSq <= EnemyRangeSq)
-        {
-            Candidates.Emplace(CandidateActor, DistanceSq, true);
-        }
+			Candidates.Emplace(CandidateActor, DistanceSq, true);
         else if (bIsFriendly && DistanceSq <= AllyRangeSq)
-        {
-            Candidates.Emplace(CandidateActor, DistanceSq, false);
-        }
+			Candidates.Emplace(CandidateActor, DistanceSq, false);
     }
 
     if (DetectionSettings.bPrioritizeClosestTargets)
@@ -586,18 +517,14 @@ void ASoldierRts::EvaluateCalculatedDetection()
         if (Candidate.bIsEnemy)
         {
             if (NewEnemies.Num() >= MaxEnemies)
-            {
-                continue;
-            }
+				continue;
 
             NewEnemies.Add(Candidate.Actor);
         }
         else
         {
             if (NewAllies.Num() >= MaxAllies)
-            {
-                continue;
-            }
+				continue;
 
             NewAllies.Add(Candidate.Actor);
         }
@@ -614,18 +541,14 @@ void ASoldierRts::ProcessDetectionResults(TArray<AActor*>&& NewEnemies, TArray<A
     AllyInRange = MoveTemp(NewAllies);
 
     if (DetectionSettings.bDebugDrawDetection)
-    {
-        DrawAttackDebug(ActorsInRange, AllyInRange);
-    }
+		DrawAttackDebug(ActorsInRange, AllyInRange);
 
     TSet<AActor*> PreviousEnemySet;
     PreviousEnemySet.Reserve(PreviousEnemies.Num());
     for (AActor* PrevEnemy : PreviousEnemies)
     {
         if (PrevEnemy)
-        {
-            PreviousEnemySet.Add(PrevEnemy);
-        }
+			PreviousEnemySet.Add(PrevEnemy);
     }
 
     TSet<AActor*> CurrentEnemySet;
@@ -633,57 +556,44 @@ void ASoldierRts::ProcessDetectionResults(TArray<AActor*>&& NewEnemies, TArray<A
     for (AActor* Enemy : ActorsInRange)
     {
         if (!Enemy)
-        {
-            continue;
-        }
+			continue;
 
         CurrentEnemySet.Add(Enemy);
 
         if (!PreviousEnemySet.Contains(Enemy))
-        {
-            HandleAutoEngage(Enemy);
-        }
+			HandleAutoEngage(Enemy);
     }
 
     for (AActor* PrevEnemy : PreviousEnemies)
     {
         if (PrevEnemy && !CurrentEnemySet.Contains(PrevEnemy))
-        {
-            HandleTargetRemoval(PrevEnemy);
-        }
+			HandleTargetRemoval(PrevEnemy);
     }
 }
 
 void ASoldierRts::DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const TArray<AActor*>& DetectedAllies) const
 {
     if (!GetWorld())
-    {
-        return;
-    }
+		return;
 
     const FColor DebugColor = DetectionSettings.DebugColor.ToFColor(true);
     DrawDebugSphere(GetWorld(), GetActorLocation(), AttackRange, 16, DebugColor, false, DetectionSettings.DebugDuration);
 
-    const bool bShouldDrawAllySphere = AllyDetectionRange > KINDA_SMALL_NUMBER;
-    if (bShouldDrawAllySphere)
+    if (AllyDetectionRange > KINDA_SMALL_NUMBER)
     {
         const FColor AllyColor = FColor::Green;
         DrawDebugSphere(GetWorld(), GetActorLocation(), AllyDetectionRange, 16, AllyColor, false, DetectionSettings.DebugDuration);
     }
 
     if (!DetectionSettings.bDrawTargetLines)
-    {
-        return;
-    }
+		return;
 
     const FVector StartLocation = GetActorLocation();
 
     for (AActor* Enemy : DetectedEnemies)
     {
         if (!Enemy)
-        {
-            continue;
-        }
+			continue;
 
         DrawDebugLine(GetWorld(), StartLocation, Enemy->GetActorLocation(), DebugColor, false, DetectionSettings.DebugDuration, 0, DetectionSettings.DebugLineThickness);
     }
@@ -691,9 +601,7 @@ void ASoldierRts::DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const 
     for (AActor* Ally : DetectedAllies)
     {
         if (!Ally)
-        {
-            continue;
-        }
+        	continue;
 
         DrawDebugLine(GetWorld(), StartLocation, Ally->GetActorLocation(), FColor::Green, false, DetectionSettings.DebugDuration, 0, DetectionSettings.DebugLineThickness);
     }
@@ -707,15 +615,11 @@ bool ASoldierRts::ShouldUseComponentDetection() const
 void ASoldierRts::ConfigureDetectionComponent()
 {
     if (!AreaAttack)
-    {
-        return;
-    }
+		return;
 
     AreaAttack->SetSphereRadius(AttackRange);
     if (AllyDetectionArea)
-    {
-        AllyDetectionArea->SetSphereRadius(AllyDetectionRange);
-    }
+		AllyDetectionArea->SetSphereRadius(AllyDetectionRange);
 
     if (ShouldUseComponentDetection())
     {
@@ -817,13 +721,13 @@ void ASoldierRts::NotifyAlliesOfThreat(AActor* Threat, const FCommandData& Comma
             continue;
         }
 
-        if (!ISelectable::Execute_GetCanAttack(Ally))
+        if (!Execute_GetCanAttack(Ally))
 			continue;
 
-        const ECombatBehavior AllyBehavior = ISelectable::Execute_GetBehavior(Ally);
+        const ECombatBehavior AllyBehavior = Execute_GetBehavior(Ally);
         if ((AllyBehavior == ECombatBehavior::Neutral || AllyBehavior == ECombatBehavior::Aggressive) && !ISelectable::Execute_GetIsInAttack(Ally))
         {
-            ISelectable::Execute_CommandMove(Ally, CommandData);
+            Execute_CommandMove(Ally, CommandData);
         }
     }
 }
@@ -866,12 +770,6 @@ bool ASoldierRts::GetHaveWeapon()
 {
 	return HaveWeapon;
 }
-
-#pragma endregion
-
-
-// ------------------- Team ---------------------
-#pragma region Team
 
 ETeams ASoldierRts::GetCurrentTeam_Implementation()
 {

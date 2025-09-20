@@ -46,27 +46,19 @@ void UUnitSpawnComponent::SetUnitToSpawn(TSubclassOf<ASoldierRts> NewUnitClass)
 void UUnitSpawnComponent::SpawnUnits()
 {
     if (!SelectionComponent)
-    {
         return;
-    }
 
     const FHitResult HitResult = SelectionComponent->GetMousePositionOnTerrain();
 
     if (bRequireGroundHit && !HitResult.bBlockingHit)
-    {
         return;
-    }
 
     const FVector SpawnLocation = HitResult.bBlockingHit ? HitResult.Location : HitResult.TraceEnd;
 
     if (GetOwner() && GetOwner()->HasAuthority())
-    {
         ServerSpawnUnits(SpawnLocation);
-    }
     else
-    {
         ServerSpawnUnits(SpawnLocation);
-    }
 }
 
 void UUnitSpawnComponent::ServerSetUnitClass_Implementation(TSubclassOf<ASoldierRts> NewUnitClass)
@@ -78,9 +70,7 @@ void UUnitSpawnComponent::ServerSetUnitClass_Implementation(TSubclassOf<ASoldier
 void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLocation)
 {
     if (!UnitToSpawn)
-    {
         return;
-    }
 
     FActorSpawnParameters SpawnParams;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
@@ -89,10 +79,9 @@ void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLo
     if (UWorld* World = GetWorld())
     {
         ASoldierRts* SpawnedUnit = World->SpawnActor<ASoldierRts>(UnitToSpawn, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+        
         if (!bNotifyOnServerOnly && SpawnedUnit)
-        {
             OnUnitClassChanged.Broadcast(UnitToSpawn);
-        }
     }
 }
 

@@ -39,10 +39,9 @@ void ACommanderHive::UpdateMinions()
 	for (AActor* Minion : Minions)
 	{
 		if (Minion && IsValid(Minion))
-		{
 			ValidActors.Add(Minion);
-		}
 	}
+	
 	Minions = ValidActors;
 }
 
@@ -59,7 +58,7 @@ void ACommanderHive::TakeDamage_Implementation(AActor* DamageOwner)
 		if (IsValid(Minion) && Minion->Implements<USelectable>())
 		{
 			if(Execute_GetBehavior(Minion) != ECombatBehavior::Passive)
-				ISelectable::Execute_CommandMove(Minion, CommandData);
+				Execute_CommandMove(Minion, CommandData);
 		}
 		else
 		{
@@ -75,7 +74,8 @@ void ACommanderHive::OnAreaCommandBeginOverlap(UPrimitiveComponent* OverlappedCo
 	
 	if (OtherActor->Implements<USelectable>())
 	{
-		if (Execute_GetCurrentTeam(OtherActor) != CurrentTeam) return;
+		if (Execute_GetCurrentTeam(OtherActor) != CurrentTeam)
+			return;
 			
 		UpdateMinions();
 		Minions.AddUnique(OtherActor);

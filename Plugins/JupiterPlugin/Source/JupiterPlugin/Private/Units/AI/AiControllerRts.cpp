@@ -17,19 +17,16 @@ AAiControllerRts::AAiControllerRts()
 void AAiControllerRts::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
+        
     Soldier = Cast<ASoldierRts>(InPawn);
     if (Soldier)
-    {
         Soldier->SetAIController(this);
-    }
 }
 
 void AAiControllerRts::SetupVariables()
 {
     if (Soldier)
-    {
         CombatBehavior = Soldier->GetCombatBehavior();
-    }
 }
 
 #pragma endregion
@@ -39,14 +36,10 @@ void AAiControllerRts::Tick(float DeltaSeconds)
         Super::Tick(DeltaSeconds);
 
         if (!HasAuthority() || !Soldier)
-        {
                 return;
-        }
 
         if (!bAttackTarget)
-        {
                 return;
-        }
 
         if (!HasValidAttackCommand())
         {
@@ -247,9 +240,7 @@ bool AAiControllerRts::HasValidAttackCommand() const
 bool AAiControllerRts::ValidateAttackCommand(const FCommandData& Cmd) const
 {
         if (!Soldier)
-        {
                 return false;
-        }
 
         return Cmd.Target && IsValid(Cmd.Target) && Cmd.Target != Soldier;
 }
@@ -269,14 +260,15 @@ void AAiControllerRts::CommandPatrol(const FCommandData Cmd)
         CurrentCommand = Cmd;
         bPatrolling = true;
         bMoveComplete = false;
+        
         StartPatrol();
 }
 
 void AAiControllerRts::StartPatrol()
 {
     FVector Dest;
-    if (UNavigationSystemV1::K2_GetRandomLocationInNavigableRadius(
-        GetWorld(), CurrentCommand.SourceLocation, Dest, CurrentCommand.Radius))
+    if (UNavigationSystemV1::K2_GetRandomLocationInNavigableRadius(GetWorld(), CurrentCommand.SourceLocation,
+            Dest, CurrentCommand.Radius))
     {
         MoveToLocation(Dest, 20.f);
     }
