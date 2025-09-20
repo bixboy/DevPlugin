@@ -55,9 +55,7 @@ void ASoldierRts::Destroyed()
 	for (AActor* Soldier : ActorsInRange)
 	{
 		if (ASoldierRts* SoldierRts = Cast<ASoldierRts>(Soldier))
-		{
 			SoldierRts->UpdateActorsInArea();
-		}
 	}
 }
 
@@ -94,9 +92,7 @@ auto ASoldierRts::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 void ASoldierRts::SetAIController(AAiControllerRts* AiController)
 {
 	if (AiController)
-	{
 		AIController = AiController;
-	}
 }
 
 AAiControllerRts* ASoldierRts::GetAiController() const
@@ -330,24 +326,24 @@ void ASoldierRts::SetBehavior_Implementation(const ECombatBehavior NewBehavior)
 	if (AIController)
 	{
 		AIController->SetupVariables();
-                if (CombatBehavior == ECombatBehavior::Passive)
-                {
-                        AIController->ResetAttack();
-                }
-                else if (CombatBehavior == ECombatBehavior::Aggressive)
-                {
-                        UpdateActorsInArea();
-
-                        for (AActor* Enemy : ActorsInRange)
-                        {
-                                if (IsEnemyActor(Enemy))
-                                {
-                                        IssueAttackOrder(MakeAttackCommand(Enemy));
-                                        break;
-                                }
-                        }
-                }
+        if (CombatBehavior == ECombatBehavior::Passive)
+        {
+			AIController->ResetAttack();
         }
+        else if (CombatBehavior == ECombatBehavior::Aggressive)
+        {
+            UpdateActorsInArea();
+
+            for (AActor* Enemy : ActorsInRange)
+            {
+                if (IsEnemyActor(Enemy))
+                {
+                    IssueAttackOrder(MakeAttackCommand(Enemy));
+                    break;
+                }
+            }
+        }
+	}
 }
 
 ECombatBehavior ASoldierRts::GetBehavior_Implementation()
@@ -357,21 +353,21 @@ ECombatBehavior ASoldierRts::GetBehavior_Implementation()
 
 void ASoldierRts::UpdateActorsInArea()
 {
-        ActorsInRange.RemoveAll([this](AActor* Actor)
-        {
-                return !IsEnemyActor(Actor);
-        });
+    ActorsInRange.RemoveAll([this](AActor* Actor)
+    {
+        return !IsEnemyActor(Actor);
+    });
 
-        AllyInRange.RemoveAll([this](AActor* Actor)
-        {
-                return !IsFriendlyActor(Actor);
-        });
+    AllyInRange.RemoveAll([this](AActor* Actor)
+    {
+        return !IsFriendlyActor(Actor);
+    });
 }
 
 
 void ASoldierRts::OnRep_CombatBehavior()
 {
-        OnBehaviorUpdate.Broadcast();
+    OnBehaviorUpdate.Broadcast();
 }
 
 #pragma endregion
@@ -379,116 +375,101 @@ void ASoldierRts::OnRep_CombatBehavior()
 
 bool ASoldierRts::IsValidSelectableActor(const AActor* Actor) const
 {
-        return Actor && IsValid(Actor) && Actor->Implements<USelectable>();
+    return Actor && IsValid(Actor) && Actor->Implements<USelectable>();
 }
 
-bool ASoldierRts::IsFriendlyActor(const AActor* Actor) const
+bool ASoldierRts::IsFriendlyActor(AActor* Actor) const
 {
-        return IsValidSelectableActor(Actor) && ISelectable::Execute_GetCurrentTeam(Actor) == CurrentTeam;
+    return IsValidSelectableActor(Actor) && ISelectable::Execute_GetCurrentTeam(Actor) == CurrentTeam;
 }
 
-bool ASoldierRts::IsEnemyActor(const AActor* Actor) const
+bool ASoldierRts::IsEnemyActor(AActor* Actor) const
 {
-        return IsValidSelectableActor(Actor) && ISelectable::Execute_GetCurrentTeam(Actor) != CurrentTeam;
+    return IsValidSelectableActor(Actor) && ISelectable::Execute_GetCurrentTeam(Actor) != CurrentTeam;
 }
 
 bool ASoldierRts::ShouldAutoEngage() const
 {
-        return bCanAttack && CombatBehavior == ECombatBehavior::Aggressive && AIController && CommandComp;
+    return bCanAttack && CombatBehavior == ECombatBehavior::Aggressive && AIController && CommandComp;
 }
 
 FCommandData ASoldierRts::MakeAttackCommand(AActor* Target) const
 {
-        FCommandData CommandData;
-        CommandData.Type = ECommandType::CommandAttack;
-        CommandData.Target = Target;
-        CommandData.Location = Target ? Target->GetActorLocation() : GetActorLocation();
-        CommandData.SourceLocation = GetActorLocation();
-        CommandData.Rotation = GetActorRotation();
-        return CommandData;
+    FCommandData CommandData;
+    CommandData.Type = ECommandType::CommandAttack;
+    CommandData.Target = Target;
+    CommandData.Location = Target ? Target->GetActorLocation() : GetActorLocation();
+    CommandData.SourceLocation = GetActorLocation();
+    CommandData.Rotation = GetActorRotation();
+	
+    return CommandData;
 }
 
 void ASoldierRts::IssueAttackOrder(const FCommandData& CommandData)
 {
-        if (!CommandComp || !CommandData.Target || !IsValid(CommandData.Target))
-        {
-                return;
-        }
+    if (!CommandComp || !CommandData.Target || !IsValid(CommandData.Target))
+		return;
 
-        GetCommandComponent()->CommandMoveToLocation(CommandData);
+    GetCommandComponent()->CommandMoveToLocation(CommandData);
 }
 
 void ASoldierRts::HandleAutoEngage(AActor* Target)
 {
-        if (!ShouldAutoEngage() || !IsEnemyActor(Target))
-        {
-                return;
-        }
+    if (!ShouldAutoEngage() || !IsEnemyActor(Target))
+		return;
 
-        if (!AIController->HasAttackTarget())
-        {
-                IssueAttackOrder(MakeAttackCommand(Target));
-        }
+    if (!AIController->HasAttackTarget())
+		IssueAttackOrder(MakeAttackCommand(Target));
 }
 
 void ASoldierRts::HandleTargetRemoval(AActor* OtherActor)
 {
-        if (!AIController)
+    if (!AIController)
+		return;
+
+    UpdateActorsInArea();
+
+    const bool bControllerAggressive = AIController->GetCombatBehavior() == ECombatBehavior::Aggressive;
+
+    if (CombatBehavior == ECombatBehavior::Aggressive && AIController->HasAttackTarget() && AIController->GetCurrentCommand().Target == OtherActor)
+    {
+        for (AActor* PotentialTarget : ActorsInRange)
         {
+            if (IsEnemyActor(PotentialTarget))
+            {
+                IssueAttackOrder(MakeAttackCommand(PotentialTarget));
                 return;
+            }
         }
+    }
 
-        UpdateActorsInArea();
-
-        const bool bControllerAggressive = AIController->GetCombatBehavior() == ECombatBehavior::Aggressive;
-
-        if (CombatBehavior == ECombatBehavior::Aggressive && AIController->HasAttackTarget() &&
-                AIController->GetCurrentCommand().Target == OtherActor)
-        {
-                for (AActor* PotentialTarget : ActorsInRange)
-                {
-                        if (IsEnemyActor(PotentialTarget))
-                        {
-                                IssueAttackOrder(MakeAttackCommand(PotentialTarget));
-                                return;
-                        }
-                }
-        }
-
-        if (ActorsInRange.Num() == 0 && bControllerAggressive)
-        {
-                AIController->ResetAttack();
-        }
+    if (ActorsInRange.Num() == 0 && bControllerAggressive)
+		AIController->ResetAttack();
 }
 
 void ASoldierRts::NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData)
 {
-        if (!Threat || !IsEnemyActor(Threat))
+    if (!Threat || !IsEnemyActor(Threat))
+		return;
+
+    for (int32 Index = AllyInRange.Num() - 1; Index >= 0; --Index)
+    {
+        AActor* Ally = AllyInRange[Index];
+        if (!IsFriendlyActor(Ally))
         {
-                return;
+            AllyInRange.RemoveAt(Index);
+            continue;
         }
 
-        for (int32 Index = AllyInRange.Num() - 1; Index >= 0; --Index)
+        if (!ISelectable::Execute_GetCanAttack(Ally))
+			continue;
+
+        const ECombatBehavior AllyBehavior = ISelectable::Execute_GetBehavior(Ally);
+        if ((AllyBehavior == ECombatBehavior::Neutral || AllyBehavior == ECombatBehavior::Aggressive) && !ISelectable::Execute_GetIsInAttack(Ally))
         {
-                AActor* Ally = AllyInRange[Index];
-                if (!IsFriendlyActor(Ally))
-                {
-                        AllyInRange.RemoveAt(Index);
-                        continue;
-                }
-
-                if (!ISelectable::Execute_GetCanAttack(Ally))
-                {
-                        continue;
-                }
-
-                const ECombatBehavior AllyBehavior = ISelectable::Execute_GetBehavior(Ally);
-                if ((AllyBehavior == ECombatBehavior::Neutral || AllyBehavior == ECombatBehavior::Aggressive) &&
-                        !ISelectable::Execute_GetIsInAttack(Ally))
-                {
-                        ISelectable::Execute_CommandMove(Ally, CommandData);
-                }
+            ISelectable::Execute_CommandMove(Ally, CommandData);
         }
+    }
 }
 
 

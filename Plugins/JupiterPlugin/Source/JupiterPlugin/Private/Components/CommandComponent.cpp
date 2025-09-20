@@ -32,7 +32,8 @@ void UCommandComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 {
 	Super::OnComponentDestroyed(bDestroyingHierarchy);
     
-	if (MoveMarker) MoveMarker->Destroy();
+	if (MoveMarker)
+		MoveMarker->Destroy();
 }
 
 void UCommandComponent::InitializeMovementComponent() const
@@ -55,9 +56,7 @@ void UCommandComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 	{
 		SetOrientation(DeltaTime);
 		if (IsOrientated())
-		{
 			ShouldOrientate = false;
-		}
 	}
 }
 
@@ -81,24 +80,25 @@ FCommandData UCommandComponent::GetCurrentCommand() const
 
 void UCommandComponent::CommandMoveToLocation(const FCommandData CommandData)
 {
-        CurrentCommand = CommandData;
+    CurrentCommand = CommandData;
 
-        ApplyMovementSettings(CommandData);
+    ApplyMovementSettings(CommandData);
 
-        if (CommandData.Type == ECommandType::CommandPatrol)
-        {
-                HaveTargetAttack = false;
-                TargetLocation = ResolveDestinationFromCommand(CommandData);
-                CurrentCommand.Location = TargetLocation;
-                CommandPatrol(CurrentCommand);
-                return;
-        }
-
-        HaveTargetAttack = ShouldFollowCommandTarget(CommandData);
+    if (CommandData.Type == ECommandType::CommandPatrol)
+    {
+        HaveTargetAttack = false;
         TargetLocation = ResolveDestinationFromCommand(CommandData);
         CurrentCommand.Location = TargetLocation;
+        CommandPatrol(CurrentCommand);
+    
+        return;
+    }
 
-        CommandMove(CurrentCommand);
+    HaveTargetAttack = ShouldFollowCommandTarget(CommandData);
+    TargetLocation = ResolveDestinationFromCommand(CommandData);
+    CurrentCommand.Location = TargetLocation;
+
+    CommandMove(CurrentCommand);
 }
 
 void UCommandComponent::CommandPatrol(const FCommandData CommandData)
@@ -112,74 +112,70 @@ void UCommandComponent::CommandPatrol(const FCommandData CommandData)
 
 void UCommandComponent::CommandMove(const FCommandData CommandData)
 {
-        if (!OwnerAIController) return;
+    if (!OwnerAIController)
+    	return;
 
-        OwnerAIController->OnReachedDestination.Clear();
+    OwnerAIController->OnReachedDestination.Clear();
+    if (!OwnerAIController->OnReachedDestination.IsBound())
+            OwnerAIController->OnReachedDestination.AddDynamic(this, &UCommandComponent::DestinationReached);
 
-        if (!OwnerAIController->OnReachedDestination.IsBound())
-                OwnerAIController->OnReachedDestination.AddDynamic(this, &UCommandComponent::DestinationReached);
+    OwnerAIController->CommandMove(CommandData, HaveTargetAttack);
+    SetMoveMarker(TargetLocation, CommandData);
 
-        OwnerAIController->CommandMove(CommandData, HaveTargetAttack);
-        SetMoveMarker(TargetLocation, CommandData);
-
-        HaveTargetAttack = false;
+    HaveTargetAttack = false;
 }
 
 void UCommandComponent::DestinationReached(const FCommandData CommandData)
 {
-        ShowMoveMarker(false);
-        TargetOrientation = CommandData.Rotation;
+    ShowMoveMarker(false);
+    TargetOrientation = CommandData.Rotation;
 
-        if (CommandData.Target && IsValid(CommandData.Target))
-        {
-                TargetOrientation = UKismetMathLibrary::FindLookAtRotation(OwnerActor->GetActorLocation(), CommandData.Target->GetActorLocation());
-        }
+    if (CommandData.Target && IsValid(CommandData.Target))
+		TargetOrientation = UKismetMathLibrary::FindLookAtRotation(OwnerActor->GetActorLocation(), CommandData.Target->GetActorLocation());
 
-        ShouldOrientate = true;
+    ShouldOrientate = true;
 }
 
 #pragma endregion
 
 bool UCommandComponent::ShouldFollowCommandTarget(const FCommandData& CommandData) const
 {
-        return CommandData.Type == ECommandType::CommandAttack && HasValidAttackTarget(CommandData);
+    return CommandData.Type == ECommandType::CommandAttack && HasValidAttackTarget(CommandData);
 }
 
 bool UCommandComponent::HasValidAttackTarget(const FCommandData& CommandData) const
 {
-        return CommandData.Target && IsValid(CommandData.Target) && CommandData.Target != OwnerActor;
+    return CommandData.Target && IsValid(CommandData.Target) && CommandData.Target != OwnerActor;
 }
 
 FVector UCommandComponent::ResolveDestinationFromCommand(const FCommandData& CommandData) const
 {
-        if (ShouldFollowCommandTarget(CommandData))
-        {
-                return CommandData.Target->GetActorLocation();
-        }
+    if (ShouldFollowCommandTarget(CommandData))
+		return CommandData.Target->GetActorLocation();
 
-        return CommandData.Location;
+    return CommandData.Location;
 }
 
 void UCommandComponent::ApplyMovementSettings(const FCommandData& CommandData)
 {
-        switch (CommandData.Type)
-        {
-        case ECommandType::CommandMoveSlow:
-                SetWalk();
-                break;
-        case ECommandType::CommandMoveFast:
-                SetSprint();
-                break;
-        case ECommandType::CommandAttack:
-                SetSprint();
-                break;
-        case ECommandType::CommandPatrol:
-                SetWalk();
-                break;
-        default:
-                SetRun();
-                break;
-        }
+    switch (CommandData.Type)
+    {
+    case ECommandType::CommandMoveSlow:
+            SetWalk();
+            break;
+    case ECommandType::CommandMoveFast:
+            SetSprint();
+            break;
+    case ECommandType::CommandAttack:
+            SetSprint();
+            break;
+    case ECommandType::CommandPatrol:
+            SetWalk();
+            break;
+    default:
+            SetRun();
+            break;
+    }
 }
 
  
@@ -189,25 +185,19 @@ void UCommandComponent::ApplyMovementSettings(const FCommandData& CommandData)
 void UCommandComponent::SetWalk() const
 {
 	if (OwnerCharaMovementComp)
-	{
 		OwnerCharaMovementComp->MaxWalkSpeed = MaxSpeed * 0.5f;
-	}
 }
 
 void UCommandComponent::SetRun() const
 {
 	if (OwnerCharaMovementComp)
-	{
 		OwnerCharaMovementComp->MaxWalkSpeed = MaxSpeed;
-	}
 }
 
 void UCommandComponent::SetSprint() const
 {
 	if (OwnerCharaMovementComp)
-	{
 		OwnerCharaMovementComp->MaxWalkSpeed = MaxSpeed * 1.25f;
-	}
 }
 
 #pragma endregion
@@ -231,7 +221,8 @@ void UCommandComponent::SetOrientation(float DeltaTime)
 
 bool UCommandComponent::IsOrientated() const
 {
-	if (!OwnerActor) return false;
+	if (!OwnerActor)
+		return false;
 
 	const FRotator CurrentRotation = OwnerActor->GetActorRotation();
 	return FMath::IsNearlyEqual(CurrentRotation.Yaw, TargetOrientation.Yaw, 0.25f);
@@ -256,10 +247,8 @@ void UCommandComponent::SetMoveMarker_Implementation(const FVector Location, con
 	
 	MoveMarker->SetActorLocation(Location);
     
-        if (HaveTargetAttack && CommandData.Target && IsValid(CommandData.Target))
-        {
-                MoveMarker->AttachToActor(CommandData.Target, FAttachmentTransformRules::KeepWorldTransform);
-        }
+    if (HaveTargetAttack && CommandData.Target && IsValid(CommandData.Target))
+		MoveMarker->AttachToActor(CommandData.Target, FAttachmentTransformRules::KeepWorldTransform);
 }
 
 void UCommandComponent::ShowMoveMarker_Implementation(bool bIsSelected)
@@ -279,9 +268,7 @@ void UCommandComponent::CreatMoveMarker()
         
 		MoveMarker = GetWorld()->SpawnActor<AActor>(MoveMarkerClass, GetPositionTransform(OwnerActor->GetActorLocation()), SpawnParams);
 		if (MoveMarker)
-		{
 			ShowMoveMarker(false);
-		}
 	}
 	
 }
@@ -305,6 +292,7 @@ FTransform UCommandComponent::GetPositionTransform(const FVector Position) const
 				FRotator TerrainRotation = UKismetMathLibrary::MakeRotFromZX(Hit.Normal, FVector::UpVector);
 				TerrainRotation += FRotator(90.f, 0.f, 0.f);
 				HitTransform.SetRotation(TerrainRotation.Quaternion());
+				
 				return HitTransform;
 			}
 		}
