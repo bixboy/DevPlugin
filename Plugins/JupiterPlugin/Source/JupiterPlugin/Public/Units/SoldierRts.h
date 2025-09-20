@@ -111,12 +111,16 @@ public:
 	FSelectedDelegate OnSelected;
 	
 protected:
-	/*- Variables -*/
-	UPROPERTY()
-	bool Selected;
-	
-	UPROPERTY()
-	TObjectPtr<APlayerControllerRts> PlayerOwner;
+        /*- Variables -*/
+        UPROPERTY()
+        bool Selected;
+
+        UPROPERTY()
+        TObjectPtr<APlayerControllerRts> PlayerOwner;
+
+        /** Custom depth stencil value applied when the unit is highlighted. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection", meta = (ClampMin = "0", ClampMax = "255"))
+        int32 SelectionStencilValue = 1;
 
 #pragma endregion
 

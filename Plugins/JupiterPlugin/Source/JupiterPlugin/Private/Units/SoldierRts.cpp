@@ -163,16 +163,17 @@ void ASoldierRts::Deselect()
 
 void ASoldierRts::Highlight(const bool Highlight)
 {
-	TArray<UPrimitiveComponent*> Components;
-	GetComponents<UPrimitiveComponent>(Components);
-	
-	for (UPrimitiveComponent* VisualComp : Components)
-	{
-		if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(VisualComp))
-		{
-			Prim->SetRenderCustomDepth(Highlight);
-		}
-	}
+        TArray<UPrimitiveComponent*> Components;
+        GetComponents<UPrimitiveComponent>(Components);
+
+        for (UPrimitiveComponent* VisualComp : Components)
+        {
+                if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(VisualComp))
+                {
+                        Prim->SetRenderCustomDepth(Highlight);
+                        Prim->SetCustomDepthStencilValue(Highlight ? SelectionStencilValue : 0);
+                }
+        }
 }
 
 bool ASoldierRts::GetIsSelected_Implementation()
