@@ -38,10 +38,10 @@ void UJupiterHudWidget::SetBehaviorSelectionWidget(const bool bEnabled) const
 
 void UJupiterHudWidget::SetUnitsSelectionWidget(bool bEnabled) const
 {
-	if (UnitsSelector)
-	{
-		BehaviorSelector->SetVisibility(bEnabled ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	}
+        if (UnitsSelector)
+        {
+                UnitsSelector->SetVisibility(bEnabled ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        }
 }
 
 void UJupiterHudWidget::InitializedJupiterHud(APawn* PawnLinked)
@@ -56,10 +56,11 @@ void UJupiterHudWidget::InitializedJupiterHud(APawn* PawnLinked)
 	SetUnitsSelectionWidget(true);
 
 
-	if (SelectionComponent)
-	{
-		SelectionComponent->OnSelectedUpdate.AddDynamic(this, &UJupiterHudWidget::OnSelectionUpdated);
-	}
+        if (SelectionComponent)
+        {
+                SelectionComponent->OnSelectedUpdate.AddUniqueDynamic(this, &UJupiterHudWidget::OnSelectionUpdated);
+                OnSelectionUpdated();
+        }
 }
 
 void UJupiterHudWidget::OnSelectionUpdated()

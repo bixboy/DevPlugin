@@ -6,6 +6,7 @@
 #include "Interfaces/Selectable.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Widget/JupiterHudWidget.h"
 
 namespace
@@ -48,6 +49,12 @@ UUnitSelectionComponent::UUnitSelectionComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
+
+    static ConstructorHelpers::FClassFinder<UJupiterHudWidget> DefaultHudClass(TEXT("/JupiterPlugin/BP/Widgets/WB_Hud"));
+    if (DefaultHudClass.Succeeded())
+    {
+        HudClass = DefaultHudClass.Class;
+    }
 }
 
 void UUnitSelectionComponent::BeginPlay()
@@ -191,6 +198,20 @@ void UUnitSelectionComponent::CreateHud()
     if (HudInstance)
     {
         HudInstance->AddToViewport();
+
+        APawn* OwnerPawn = Cast<APawn>(GetOwner());
+        if (!OwnerPawn)
+        {
+            if (APlayerController* PC = ResolveOwnerController())
+            {
+                OwnerPawn = PC->GetPawn();
+            }
+        }
+
+        if (OwnerPawn)
+        {
+            HudInstance->InitializedJupiterHud(OwnerPawn);
+        }
     }
 }
 
