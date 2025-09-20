@@ -207,6 +207,12 @@ public:
 	UFUNCTION()
 	ECombatBehavior GetCombatBehavior() const;
 
+	UFUNCTION()
+	float GetRangedStopDistance() const;
+
+	UFUNCTION()
+	float GetMeleeStopDistanceFactor() const;
+
 	
 protected:
 
@@ -275,6 +281,12 @@ private:
 
         UPROPERTY(EditAnywhere, Category = "Settings|Attack")
         float AttackRange = 200.f;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
+	float RangedStopDistance = 200.f;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
+	float MeleeStopDistanceFactor = 1.f;
 
         UPROPERTY(EditAnywhere, Category = "Settings|Attack")
         float AllyDetectionRange = 200.f;

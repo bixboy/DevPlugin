@@ -74,6 +74,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category="AI")
 	float MeleeApproachFactor = 0.3f;
 
+	/** Default distance used when a controlled soldier does not provide its own ranged stop distance. */
 	UPROPERTY(EditAnywhere, Category="AI")
 	float RangedStopDistance = 200.f;
 

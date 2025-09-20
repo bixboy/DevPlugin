@@ -412,23 +412,24 @@ void ASoldierRts::SetBehavior_Implementation(const ECombatBehavior NewBehavior)
 	if (AIController)
 	{
 		AIController->SetupVariables();
-        if (CombatBehavior == ECombatBehavior::Passive)
-        {
-			AIController->ResetAttack();
-        }
-        else if (CombatBehavior == ECombatBehavior::Aggressive)
-        {
-            UpdateActorsInArea();
 
-            for (AActor* Enemy : ActorsInRange)
-            {
-                if (IsEnemyActor(Enemy))
-                {
-                    IssueAttackOrder(MakeAttackCommand(Enemy));
-                    break;
-                }
-            }
-        }
+		if (CombatBehavior == ECombatBehavior::Passive)
+		{
+			AIController->StopAttack();
+		}
+		else if (CombatBehavior == ECombatBehavior::Aggressive)
+		{
+			UpdateActorsInArea();
+
+			for (AActor* Enemy : ActorsInRange)
+			{
+				if (IsEnemyActor(Enemy))
+				{
+					IssueAttackOrder(MakeAttackCommand(Enemy));
+					break;
+				}
+			}
+		}
 	}
 }
 
@@ -844,6 +845,16 @@ float ASoldierRts::GetAttackCooldown() const
 ECombatBehavior ASoldierRts::GetCombatBehavior() const
 {
 	return CombatBehavior;
+}
+
+float ASoldierRts::GetRangedStopDistance() const
+{
+	return RangedStopDistance;
+}
+
+float ASoldierRts::GetMeleeStopDistanceFactor() const
+{
+	return MeleeStopDistanceFactor;
 }
 
 UWeaponMaster* ASoldierRts::GetCurrentWeapon()

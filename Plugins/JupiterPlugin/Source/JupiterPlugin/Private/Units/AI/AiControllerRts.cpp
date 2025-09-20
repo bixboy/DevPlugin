@@ -1,7 +1,9 @@
 ﻿#include "JupiterPlugin/Public/Units/AI/AiControllerRts.h"
 #include "NavigationSystem.h"
 #include "TimerManager.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Data/AiData.h"
+#include "Interfaces/Selectable.h"
 #include "Units/SoldierRts.h"
 
 // ---- Setup ---- //
@@ -77,6 +79,11 @@ void AAiControllerRts::CommandMove(const FCommandData Cmd, bool bAttack)
 {
         bool bShouldAttack = bAttack;
 
+        if (bShouldAttack && Soldier && HasAuthority() && Soldier->GetCombatBehavior() == ECombatBehavior::Passive)
+        {
+                ISelectable::Execute_SetBehavior(Soldier, ECombatBehavior::Neutral);
+        }
+
         if (bShouldAttack && !ValidateAttackCommand(Cmd))
         {
                 bShouldAttack = false;
@@ -127,9 +134,32 @@ float AAiControllerRts::GetAcceptanceRadius() const
                 return 0.f;
         }
 
-        return Soldier->GetHaveWeapon()
-                ? RangedStopDistance
-                : Soldier->GetAttackRange() * MeleeApproachFactor;
+        if (Soldier->GetHaveWeapon())
+        {
+                const float SoldierStopDistance = Soldier->GetRangedStopDistance();
+                return SoldierStopDistance > 0.f ? SoldierStopDistance : RangedStopDistance;
+        }
+
+        float ComputedStopDistance = 0.f;
+
+        if (const USkeletalMeshComponent* MeshComp = Soldier->GetMesh())
+        {
+                const FBoxSphereBounds Bounds = MeshComp->Bounds;
+                const float HorizontalExtent = FMath::Max(Bounds.BoxExtent.X, Bounds.BoxExtent.Y);
+                const float StopFactor = FMath::Max(Soldier->GetMeleeStopDistanceFactor(), 0.f);
+                ComputedStopDistance = HorizontalExtent * 2.f * StopFactor;
+        }
+
+        if (ComputedStopDistance <= KINDA_SMALL_NUMBER)
+        {
+                ComputedStopDistance = Soldier->GetAttackRange() * MeleeApproachFactor;
+        }
+        else if (Soldier->GetAttackRange() > 0.f)
+        {
+                ComputedStopDistance = FMath::Min(ComputedStopDistance, Soldier->GetAttackRange());
+        }
+
+        return ComputedStopDistance;
 }
 
 bool AAiControllerRts::ShouldApproach() const
