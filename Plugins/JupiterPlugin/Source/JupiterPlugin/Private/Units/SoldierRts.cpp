@@ -5,6 +5,7 @@
 #include "Components/WeaponMaster.h"
 #include "DrawDebugHelpers.h"
 #include "Containers/Set.h"
+#include "Engine/EngineTypes.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
@@ -185,17 +186,19 @@ void ASoldierRts::Deselect()
 
 void ASoldierRts::Highlight(const bool Highlight)
 {
-        TArray<UPrimitiveComponent*> Components;
-        GetComponents<UPrimitiveComponent>(Components);
+	TArray<UPrimitiveComponent*> Components;
+	GetComponents<UPrimitiveComponent>(Components);
 
-        for (UPrimitiveComponent* VisualComp : Components)
-        {
-                if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(VisualComp))
-                {
-                        Prim->SetRenderCustomDepth(Highlight);
-                        Prim->SetCustomDepthStencilValue(Highlight ? SelectionStencilValue : 0);
-                }
-        }
+	for (UPrimitiveComponent* VisualComp : Components)
+	{
+		if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(VisualComp))
+		{
+			Prim->SetCustomDepthStencilWriteMask(Highlight ? ERendererStencilMask::ERSM_255 : ERendererStencilMask::ERSM_Default);
+			Prim->SetRenderCustomDepth(Highlight);
+			Prim->SetCustomDepthStencilValue(Highlight ? SelectionStencilValue : 0);
+			Prim->MarkRenderStateDirty();
+		}
+	}
 }
 
 bool ASoldierRts::GetIsSelected_Implementation()

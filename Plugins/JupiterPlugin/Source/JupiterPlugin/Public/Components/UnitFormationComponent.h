@@ -57,6 +57,7 @@ protected:
     void OnRep_Spacing();
 
     FVector CalculateOffset(int32 Index, int32 TotalUnits) const;
+    void CenterFormationOffsets(TArray<FVector>& Offsets) const;
     void CacheFormationCommand(const FCommandData& CommandData, const TArray<AActor*>& Units);
     void BroadcastFormationChanged();
     UFormationDataAsset* GetFormationData() const;
@@ -70,6 +71,10 @@ protected:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Formation")
     bool bRespectCommandRotation = true;
+
+    /** Keeps the destination of the original command at the center of the generated formation. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Formation")
+    bool bMaintainFormationCenter = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Formation")
     bool bCacheLastFormationCommand = true;
