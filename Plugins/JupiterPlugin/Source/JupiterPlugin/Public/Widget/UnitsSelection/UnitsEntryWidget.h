@@ -9,7 +9,7 @@ class UUnitsSelectionDataAsset;
 class ASoldierRts;
 class UTextBlock;
 class UImage;
-class USelectionComponent;
+class UUnitSpawnComponent;
 
 UCLASS()
 class JUPITERPLUGIN_API UUnitsEntryWidget : public UUserWidget
@@ -33,6 +33,6 @@ protected:
 	UPROPERTY()
 	TSubclassOf<ASoldierRts> UnitClass;
 
-	UPROPERTY()
-	USelectionComponent* SelectionComponent;
+        UPROPERTY()
+        UUnitSpawnComponent* SpawnComponent;
 };
