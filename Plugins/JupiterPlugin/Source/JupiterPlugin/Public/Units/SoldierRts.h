@@ -6,7 +6,56 @@
 #include "GameFramework/Pawn.h"
 #include "Interfaces/Damageable.h"
 #include "Interfaces/Selectable.h"
+#if WITH_EDITOR
+#include "UObject/UnrealType.h"
+#endif
 #include "SoldierRts.generated.h"
+
+USTRUCT(BlueprintType)
+struct FAttackDetectionSettings
+{
+        GENERATED_BODY()
+
+        /** When enabled the legacy overlap component is used for detection instead of the calculation based approach. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true"))
+        bool bUseComponentOverlap = false;
+
+        /** How often the detection should be refreshed when using the calculation based detection. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true", ClampMin = "0.05"))
+        float RefreshInterval = 0.25f;
+
+        /** Maximum number of enemies to keep in range. 0 means no limit. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true", ClampMin = "0"))
+        int32 MaxEnemiesTracked = 0;
+
+        /** Maximum number of allies to keep in range. 0 means no limit. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true", ClampMin = "0"))
+        int32 MaxAlliesTracked = 0;
+
+        /** When true the tracked actors are sorted by distance before being stored. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true"))
+        bool bPrioritizeClosestTargets = true;
+
+        /** Enable to visualize the attack range and detected actors. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true"))
+        bool bDebugDrawDetection = false;
+
+        /** Color used when drawing the debug information. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection"))
+        FLinearColor DebugColor = FLinearColor::Red;
+
+        /** Duration in seconds for which debug shapes stay visible. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection", ClampMin = "0.0"))
+        float DebugDuration = 0.1f;
+
+        /** Draw a line to every detected target when debugging. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection"))
+        bool bDrawTargetLines = true;
+
+        /** Thickness of the debug lines when enabled. */
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection", ClampMin = "0.0"))
+        float DebugLineThickness = 1.5f;
+};
 
 class UWeaponMaster;
 class USphereComponent;
@@ -40,11 +89,15 @@ public:
 
 	
 protected:
-	UFUNCTION()
-	virtual void OnConstruction(const FTransform& Transform) override;
+        UFUNCTION()
+        virtual void OnConstruction(const FTransform& Transform) override;
 
-	UFUNCTION()
-	virtual void Destroyed() override;
+        UFUNCTION()
+        virtual void Destroyed() override;
+
+#if WITH_EDITOR
+        virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
 	TObjectPtr<UCommandComponent> CommandComp;
@@ -156,10 +209,10 @@ public:
 
 	
 protected:
-	
-	/*- Function -*/
-	UFUNCTION()
-	void OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+        /*- Function -*/
+        UFUNCTION()
+        void OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
 	UFUNCTION()
 	void OnAreaAttackEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
@@ -181,6 +234,13 @@ protected:
 
         UFUNCTION()
         void OnRep_CombatBehavior();
+
+        void UpdateAttackDetection(float DeltaSeconds);
+        void EvaluateCalculatedDetection();
+        void ProcessDetectionResults(TArray<AActor*>&& NewEnemies, TArray<AActor*>&& NewAllies);
+        void DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const TArray<AActor*>& DetectedAllies) const;
+        bool ShouldUseComponentDetection() const;
+        void ConfigureDetectionComponent();
 
 private:
         bool IsValidSelectableActor(const AActor* Actor) const;
@@ -204,14 +264,20 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
 	float AttackCooldown = 1.5f;
 
-	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
-	float AttackRange = 200.f;
-	
-	UPROPERTY()
-	TArray<AActor*> ActorsInRange;
+        UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+        float AttackRange = 200.f;
 
-	UPROPERTY()
-	TArray<AActor*> AllyInRange;
+        UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+        FAttackDetectionSettings DetectionSettings;
+
+        UPROPERTY()
+        float DetectionElapsedTime = 0.f;
+
+        UPROPERTY()
+        TArray<AActor*> ActorsInRange;
+
+        UPROPERTY()
+        TArray<AActor*> AllyInRange;
 
 	UPROPERTY()
 	FBehaviorUpdatedDelegate OnBehaviorUpdate;
