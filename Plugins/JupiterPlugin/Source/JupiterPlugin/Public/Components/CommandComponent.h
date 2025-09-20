@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
@@ -44,17 +44,33 @@ protected:
 // Commands
 #pragma region Command Functions
 private:
-	UFUNCTION()
-	void CommandPatrol(const FCommandData CommandData);
-	UFUNCTION()
-	void CommandMove(const FCommandData CommandData);
-	UFUNCTION()
-	void DestinationReached(const FCommandData CommandData);
+        UFUNCTION()
+        void CommandPatrol(const FCommandData CommandData);
+        UFUNCTION()
+        void CommandMove(const FCommandData CommandData);
+        UFUNCTION()
+        void DestinationReached(const FCommandData CommandData);
 
-	UFUNCTION()
-	void SetWalk() const;
-	UFUNCTION()
-	void SetRun() const;
+        UFUNCTION()
+        bool ShouldFollowCommandTarget(const FCommandData& CommandData) const;
+        UFUNCTION()
+        bool HasValidAttackTarget(const FCommandData& CommandData) const;
+        UFUNCTION()
+        FVector ResolveDestinationFromCommand(const FCommandData& CommandData) const;
+        UFUNCTION()
+        void ApplyMovementSettings(const FCommandData& CommandData);
+
+        void PrepareCommand(FCommandData& CommandData);
+        void BeginPatrol(const FCommandData& CommandData);
+        void BeginMove(const FCommandData& CommandData);
+        void UpdateTrackedTarget();
+        void UpdateMoveMarkerAttachment(const FCommandData& CommandData);
+        void ResetMoveMarkerAttachment();
+
+        UFUNCTION()
+        void SetWalk() const;
+        UFUNCTION()
+        void SetRun() const;
 	UFUNCTION()
 	void SetSprint() const;
 
@@ -82,10 +98,15 @@ private:
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<AAiControllerRts> OwnerAIController;
 
-	UPROPERTY(EditAnywhere, Category = "Command|Settings")
-	float MaxSpeed = 100.f;
-	UPROPERTY()
-	FVector TargetLocation;
+        UPROPERTY(EditAnywhere, Category = "Command|Settings")
+        float MaxSpeed = 100.f;
+        UPROPERTY(EditAnywhere, Category = "Command|Settings")
+        float TargetUpdateTolerance = 25.f;
+
+        UPROPERTY(EditAnywhere, Category = "Command|Settings")
+        float OrientationInterpSpeed = 2.f;
+        UPROPERTY()
+        FVector TargetLocation;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true), Category = "Command|Settings")
 	TSubclassOf<AActor> MoveMarkerClass;
@@ -97,19 +118,22 @@ private:
 	UPROPERTY()
 	uint8 ShouldOrientate;
 
-	UPROPERTY()
-	bool HaveTargetAttack;
+        UPROPERTY()
+        bool bTrackCommandTarget = false;
+
+        UPROPERTY()
+        bool bAttachMarkerToCommandTarget = false;
 	
 #pragma endregion
 
 #pragma region Move Marker
 public:
-	UFUNCTION(Client, Reliable)
-	void ShowMoveMarker(bool bIsSelected);
-	
+        UFUNCTION(Client, Reliable)
+        void ShowMoveMarker(bool bIsSelected);
+
 protected:
-	UFUNCTION()
-	void CreatMoveMarker();
+        UFUNCTION()
+        void CreateMoveMarker();
 
 	UFUNCTION(NetMulticast, Reliable)
 	void SetMoveMarker(const FVector Location, const FCommandData CommandData);

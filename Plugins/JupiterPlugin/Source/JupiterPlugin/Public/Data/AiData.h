@@ -1,4 +1,6 @@
-﻿#pragma once
+#pragma once
+
+#include "CoreMinimal.h"
 #include "AiData.generated.h"
 
 
@@ -37,6 +39,74 @@ enum class ETeams : uint8
 	Droid	UMETA(DisplayName = "Droid Team"),
 	HiveMind	UMETA(DisplayName = "HiveMind Team")
 };
+
+UENUM(BlueprintType)
+enum class EAttackType : uint8
+{
+	Melee	UMETA(DisplayName = "Melee"),
+	Ranged	UMETA(DisplayName = "Ranged")
+};
+
+USTRUCT(BlueprintType)
+struct FAttackSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0.0"))
+	float MinRange = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0.0"))
+	float PreferredRange = 150.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0.0"))
+	float MaxRange = 200.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0.0"))
+	float ChaseDistance = 400.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0.0"))
+	float Cooldown = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	EAttackType AttackType = EAttackType::Melee;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	bool bUseWeaponRange = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0.0", EditCondition = "bUseWeaponRange"))
+	float WeaponRangePadding = 50.f;
+
+	float ResolveMaxRange(const float WeaponRange) const
+	{
+		const bool bHasWeaponRange = bUseWeaponRange && WeaponRange > 0.f;
+		const float EffectiveMaxRange = bHasWeaponRange ? FMath::Max(WeaponRange - WeaponRangePadding, 0.f) : MaxRange;
+		return FMath::Max(EffectiveMaxRange, PreferredRange);
+	}
+
+	float ResolvePreferredRange(const float WeaponRange) const
+	{
+		const float ClampedMax = ResolveMaxRange(WeaponRange);
+		return FMath::Clamp(PreferredRange, MinRange, ClampedMax);
+	}
+
+	float ResolveMinRange(const float WeaponRange) const
+	{
+		const float ClampedMax = ResolveMaxRange(WeaponRange);
+		return FMath::Clamp(MinRange, 0.f, ClampedMax);
+	}
+
+	float ResolveChaseDistance(const float WeaponRange) const
+	{
+		const float EffectiveMax = ResolveMaxRange(WeaponRange);
+		return FMath::Max(ChaseDistance, EffectiveMax);
+	}
+
+	float ResolveCooldown() const
+	{
+		return FMath::Max(Cooldown, 0.f);
+	}
+};
+
 
 USTRUCT(BlueprintType)
 struct FCommandData

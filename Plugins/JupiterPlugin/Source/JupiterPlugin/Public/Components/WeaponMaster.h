@@ -16,13 +16,16 @@ public:
 	UWeaponMaster();
 	virtual void BeginPlay() override;
 
-	UFUNCTION()
-	void AIShoot(AActor* Target);
+        UFUNCTION()
+        void AIShoot(AActor* Target);
 
-	UFUNCTION()
-	void SetAiOwner(ASoldierRts* NewOwner);
-	UFUNCTION(Server, Reliable)
-	void SetAiOwner_Server(ASoldierRts* NewOwner);
+        UFUNCTION()
+        void SetAiOwner(ASoldierRts* NewOwner);
+        UFUNCTION(Server, Reliable)
+        void SetAiOwner_Server(ASoldierRts* NewOwner);
+
+        UFUNCTION(BlueprintCallable, Category = "Weapon")
+        float GetWeaponRange() const { return WeaponRange; }
 
 protected:
 	/*- Function -*/

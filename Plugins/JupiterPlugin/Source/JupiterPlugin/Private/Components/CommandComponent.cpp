@@ -1,4 +1,4 @@
-﻿#include "Components/CommandComponent.h"
+#include "Components/CommandComponent.h"
 #include "Units/AI/AiControllerRts.h"
 #include "Units/SoldierRts.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -16,16 +16,17 @@ void UCommandComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	OwnerActor = Cast<ASoldierRts>(GetOwner());
-	if (OwnerActor)
-	{
-		OwnerActor->OnSelected.AddDynamic(this, &UCommandComponent::ShowMoveMarker);
-		OwnerCharaMovementComp = OwnerActor->GetCharacterMovement();
-		
-		CreatMoveMarker();
-	}
+        OwnerActor = Cast<ASoldierRts>(GetOwner());
+        if (OwnerActor)
+        {
+                OwnerActor->OnSelected.AddDynamic(this, &UCommandComponent::ShowMoveMarker);
+                OwnerCharaMovementComp = OwnerActor->GetCharacterMovement();
 
-	InitializeMovementComponent();
+                TargetOrientation = OwnerActor->GetActorRotation();
+                CreateMoveMarker();
+        }
+
+        InitializeMovementComponent();
 }
 
 void UCommandComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
@@ -49,14 +50,21 @@ void UCommandComponent::InitializeMovementComponent() const
 
 void UCommandComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+        Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (OwnerActor->HasAuthority() && ShouldOrientate)
-	{
-		SetOrientation(DeltaTime);
-		if (IsOrientated())
-		{
-			ShouldOrientate = false;
+        if (!OwnerActor)
+        {
+                return;
+        }
+
+        UpdateTrackedTarget();
+
+        if (OwnerActor->HasAuthority() && ShouldOrientate)
+        {
+                SetOrientation(DeltaTime);
+                if (IsOrientated())
+                {
+                        ShouldOrientate = false;
 		}
 	}
 }
@@ -81,86 +89,180 @@ FCommandData UCommandComponent::GetCurrentCommand() const
 
 void UCommandComponent::CommandMoveToLocation(const FCommandData CommandData)
 {
-	TargetLocation = CommandData.Location;
-	CurrentCommand = CommandData;
+        FCommandData WorkingCommand = CommandData;
 
-	switch (CommandData.Type)
-	{
-	case ECommandType::CommandMoveSlow:
-		{
-			TargetLocation = CommandData.Location;
-			SetWalk();
-			break;	
-		}
-	case ECommandType::CommandMoveFast:
-		{
-			TargetLocation = CommandData.Location;
-			SetSprint();
-			break;	
-		}
-	case ECommandType::CommandAttack:
-		{
-			TargetLocation = CommandData.Target->GetActorLocation();
-			HaveTargetAttack = true;
-			SetSprint();
-			break;	
-		}
-	case ECommandType::CommandPatrol:
-		{
-			SetWalk();
-			CommandPatrol(CommandData);
-			return;
-		}
-	default:
-		{
-			TargetLocation = CommandData.Location;
-			SetRun();
-			break;
-		}
-	}
+        ApplyMovementSettings(WorkingCommand);
+        PrepareCommand(WorkingCommand);
 
-	CommandMove(CommandData);
+        if (WorkingCommand.Type == ECommandType::CommandPatrol)
+        {
+                BeginPatrol(WorkingCommand);
+                return;
+        }
+
+        BeginMove(WorkingCommand);
 }
 
 void UCommandComponent::CommandPatrol(const FCommandData CommandData)
 {
-	if (OwnerAIController)
-	{
-		OwnerAIController->OnReachedDestination.Clear();
-		OwnerAIController->CommandPatrol(CommandData);
-	}
+        if (OwnerAIController)
+        {
+                OwnerAIController->OnReachedDestination.Clear();
+                OwnerAIController->CommandPatrol(CommandData);
+        }
 }
 
 void UCommandComponent::CommandMove(const FCommandData CommandData)
 {
-	if (!OwnerAIController) return;
+        if (!OwnerAIController) return;
 
-	OwnerAIController->OnReachedDestination.Clear();
-	
-	if (!OwnerAIController->OnReachedDestination.IsBound())
-		OwnerAIController->OnReachedDestination.AddDynamic(this, &UCommandComponent::DestinationReached);
+        OwnerAIController->OnReachedDestination.Clear();
 
-	OwnerAIController->CommandMove(CommandData, HaveTargetAttack);
-	SetMoveMarker(TargetLocation, CommandData);
-	
-	HaveTargetAttack = false;
+        if (!OwnerAIController->OnReachedDestination.IsBound())
+                OwnerAIController->OnReachedDestination.AddDynamic(this, &UCommandComponent::DestinationReached);
+
+        OwnerAIController->CommandMove(CommandData, bTrackCommandTarget);
+        UpdateMoveMarkerAttachment(CommandData);
+}
+
+void UCommandComponent::PrepareCommand(FCommandData& CommandData)
+{
+        if (!HasValidAttackTarget(CommandData))
+        {
+                CommandData.Target = nullptr;
+        }
+
+        bTrackCommandTarget = ShouldFollowCommandTarget(CommandData);
+        bAttachMarkerToCommandTarget = bTrackCommandTarget;
+
+        TargetLocation = ResolveDestinationFromCommand(CommandData);
+        CommandData.Location = TargetLocation;
+        CurrentCommand = CommandData;
+
+        if (!bTrackCommandTarget)
+        {
+                ResetMoveMarkerAttachment();
+        }
+
+        TargetOrientation = CommandData.Rotation;
+        ShouldOrientate = false;
+}
+
+void UCommandComponent::BeginPatrol(const FCommandData& CommandData)
+{
+        bTrackCommandTarget = false;
+        bAttachMarkerToCommandTarget = false;
+        ResetMoveMarkerAttachment();
+        ShowMoveMarker(false);
+
+        CommandPatrol(CommandData);
+}
+
+void UCommandComponent::BeginMove(const FCommandData& CommandData)
+{
+        CommandMove(CommandData);
+}
+
+void UCommandComponent::UpdateTrackedTarget()
+{
+        if (!bTrackCommandTarget)
+        {
+                return;
+        }
+
+        if (!CurrentCommand.Target || !IsValid(CurrentCommand.Target))
+        {
+                bTrackCommandTarget = false;
+                bAttachMarkerToCommandTarget = false;
+                CurrentCommand.Target = nullptr;
+                ResetMoveMarkerAttachment();
+                return;
+        }
+
+        const FVector NewLocation = CurrentCommand.Target->GetActorLocation();
+        if (!NewLocation.Equals(TargetLocation, TargetUpdateTolerance))
+        {
+                TargetLocation = NewLocation;
+                CurrentCommand.Location = TargetLocation;
+                UpdateMoveMarkerAttachment(CurrentCommand);
+        }
+}
+
+void UCommandComponent::UpdateMoveMarkerAttachment(const FCommandData& CommandData)
+{
+        if (OwnerActor && OwnerActor->HasAuthority())
+        {
+                SetMoveMarker(TargetLocation, CommandData);
+        }
+}
+
+void UCommandComponent::ResetMoveMarkerAttachment()
+{
+        if (MoveMarker && MoveMarker->GetAttachParentActor())
+        {
+                MoveMarker->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+        }
 }
 
 void UCommandComponent::DestinationReached(const FCommandData CommandData)
 {
-	ShowMoveMarker(false);
-	TargetOrientation = CommandData.Rotation;
+        ResetMoveMarkerAttachment();
+        ShowMoveMarker(false);
+        TargetOrientation = CommandData.Rotation;
 
-	if (CommandData.Target)
-	{
-		TargetOrientation = UKismetMathLibrary::FindLookAtRotation(OwnerActor->GetActorLocation(), CommandData.Target->GetActorLocation());
-	}
+        if (CommandData.Target && IsValid(CommandData.Target))
+        {
+                TargetOrientation = UKismetMathLibrary::FindLookAtRotation(OwnerActor->GetActorLocation(), CommandData.Target->GetActorLocation());
+        }
 
-	ShouldOrientate = true;
+        ShouldOrientate = true;
 }
 
 #pragma endregion
 
+bool UCommandComponent::ShouldFollowCommandTarget(const FCommandData& CommandData) const
+{
+        return CommandData.Type == ECommandType::CommandAttack && HasValidAttackTarget(CommandData);
+}
+
+bool UCommandComponent::HasValidAttackTarget(const FCommandData& CommandData) const
+{
+        return CommandData.Target && IsValid(CommandData.Target) && CommandData.Target != OwnerActor;
+}
+
+FVector UCommandComponent::ResolveDestinationFromCommand(const FCommandData& CommandData) const
+{
+        if (ShouldFollowCommandTarget(CommandData))
+        {
+                return CommandData.Target->GetActorLocation();
+        }
+
+        return CommandData.Location;
+}
+
+void UCommandComponent::ApplyMovementSettings(const FCommandData& CommandData)
+{
+        switch (CommandData.Type)
+        {
+        case ECommandType::CommandMoveSlow:
+                SetWalk();
+                break;
+        case ECommandType::CommandMoveFast:
+                SetSprint();
+                break;
+        case ECommandType::CommandAttack:
+                SetSprint();
+                break;
+        case ECommandType::CommandPatrol:
+                SetWalk();
+                break;
+        default:
+                SetRun();
+                break;
+        }
+}
+
+ 
 // Walk Speed
 #pragma region Walk Speed
 
@@ -197,12 +299,12 @@ void UCommandComponent::SetOrientation(float DeltaTime)
 {
 	if (!OwnerActor) return;
 
-	FRotator InterpolatedRotation = UKismetMathLibrary::RInterpTo(
-		FRotator(OwnerActor->GetActorRotation().Pitch, OwnerActor->GetActorRotation().Yaw, 0.f),
-		TargetOrientation,
-		DeltaTime,
-		2.f
-	);
+        FRotator InterpolatedRotation = UKismetMathLibrary::RInterpTo(
+                FRotator(OwnerActor->GetActorRotation().Pitch, OwnerActor->GetActorRotation().Yaw, 0.f),
+                TargetOrientation,
+                DeltaTime,
+                OrientationInterpSpeed
+        );
 
 	OwnerActor->SetActorRotation(InterpolatedRotation);
 }
@@ -222,37 +324,54 @@ bool UCommandComponent::IsOrientated() const
 
 void UCommandComponent::SetMoveMarker_Implementation(const FVector Location, const FCommandData CommandData)
 {
-	if (!MoveMarker)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveMarker is null"));
-		return;
-	}
-	UE_LOG(LogTemp, Warning, TEXT("MoveMarker is Valid"));
+        if (!MoveMarker)
+        {
+                return;
+        }
 
-	if (CommandData.RequestingController && CommandData.RequestingController->IsLocalController())
-		ShowMoveMarker(true);
-	
-	MoveMarker->SetActorLocation(Location);
-    
-	if (HaveTargetAttack && CommandData.Target)
-	{
-		MoveMarker->AttachToActor(CommandData.Target, FAttachmentTransformRules::KeepWorldTransform);
-	}
+        if (CommandData.RequestingController && CommandData.RequestingController->IsLocalController())
+                ShowMoveMarker(true);
+
+        MoveMarker->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+        MoveMarker->SetActorLocation(Location);
+
+        if (bAttachMarkerToCommandTarget && CommandData.Target && IsValid(CommandData.Target))
+        {
+                MoveMarker->AttachToActor(CommandData.Target, FAttachmentTransformRules::KeepWorldTransform);
+        }
 }
 
 void UCommandComponent::ShowMoveMarker_Implementation(bool bIsSelected)
 {
-	if (MoveMarker)
-		MoveMarker->SetActorHiddenInGame(!bIsSelected);
+        if (!MoveMarker)
+        {
+                return;
+        }
+
+        if (bIsSelected)
+        {
+                if (bAttachMarkerToCommandTarget && CurrentCommand.Target && IsValid(CurrentCommand.Target))
+                {
+                        MoveMarker->AttachToActor(CurrentCommand.Target, FAttachmentTransformRules::KeepWorldTransform);
+                }
+
+                MoveMarker->SetActorHiddenInGame(false);
+                MoveMarker->SetActorLocation(TargetLocation);
+        }
+        else
+        {
+                ResetMoveMarkerAttachment();
+                MoveMarker->SetActorHiddenInGame(true);
+        }
 }
 
 // Spawn Move Marker
-void UCommandComponent::CreatMoveMarker()
+void UCommandComponent::CreateMoveMarker()
 {
-	if (!MoveMarker && MoveMarkerClass && OwnerActor)
-	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Instigator = OwnerActor;
+        if (!MoveMarker && MoveMarkerClass && OwnerActor)
+        {
+                FActorSpawnParameters SpawnParams;
+                SpawnParams.Instigator = OwnerActor;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
         
 		MoveMarker = GetWorld()->SpawnActor<AActor>(MoveMarkerClass, GetPositionTransform(OwnerActor->GetActorLocation()), SpawnParams);

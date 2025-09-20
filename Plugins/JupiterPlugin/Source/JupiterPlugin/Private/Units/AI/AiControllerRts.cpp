@@ -1,5 +1,6 @@
-﻿#include "JupiterPlugin/Public/Units/AI/AiControllerRts.h"
+#include "JupiterPlugin/Public/Units/AI/AiControllerRts.h"
 #include "NavigationSystem.h"
+#include "TimerManager.h"
 #include "Data/AiData.h"
 #include "Units/SoldierRts.h"
 
@@ -33,24 +34,51 @@ void AAiControllerRts::SetupVariables()
 
 void AAiControllerRts::Tick(float DeltaSeconds)
 {
-    Super::Tick(DeltaSeconds);
+        Super::Tick(DeltaSeconds);
 
-    if (!HasAuthority() || !bAttackTarget || !Soldier || !CurrentCommand.Target) return;
-
-    if (ShouldAttack())
-    {
-        if (!bMoveComplete)
+        if (!HasAuthority() || !Soldier)
         {
-            StopMovement();
-            bMoveComplete = true;
+                return;
         }
-        PerformAttack();
-    }
-    else if (ShouldApproach())
-    {
-        bMoveComplete = false;
-        MoveToActor(CurrentCommand.Target, GetAcceptanceRadius());
-    }
+
+        if (!bAttackTarget)
+        {
+                return;
+        }
+
+        if (!HasValidAttackCommand())
+        {
+                HandleInvalidAttackTarget();
+                return;
+        }
+
+        if (IsOutsideLeashRange())
+        {
+                StopAttack();
+                return;
+        }
+
+        if (ShouldRetreat())
+        {
+                MaintainDistance();
+                return;
+        }
+
+        if (ShouldAttack())
+        {
+                if (!bMoveComplete)
+                {
+                        StopMovement();
+                        bMoveComplete = true;
+                }
+
+                PerformAttack();
+        }
+        else if (ShouldApproach())
+        {
+                bMoveComplete = false;
+                MoveToActor(CurrentCommand.Target, GetAcceptanceRadius());
+        }
 }
 
 
@@ -59,20 +87,34 @@ void AAiControllerRts::Tick(float DeltaSeconds)
 
 void AAiControllerRts::CommandMove(const FCommandData Cmd, bool bAttack)
 {
-    CurrentCommand = Cmd;
-    bAttackTarget = bAttack;
-    bMoveComplete = false;
-    bPatrolling = false;
+        bool bShouldAttack = bAttack;
 
-    if (bAttackTarget)
-    {
-        MoveToActor(Cmd.Target, GetAcceptanceRadius());
-    }
-    else
-    {
-        MoveToLocation(Cmd.Location);
-    }
-    OnNewDestination.Broadcast(Cmd);
+        if (bShouldAttack && !ValidateAttackCommand(Cmd))
+        {
+                bShouldAttack = false;
+        }
+
+        if (!bShouldAttack && bAttackTarget)
+        {
+                StopAttack();
+        }
+
+        CurrentCommand = Cmd;
+        bPatrolling = false;
+        bMoveComplete = false;
+        bAttackTarget = bShouldAttack;
+
+        if (bAttackTarget && CurrentCommand.Target)
+        {
+                CurrentCommand.Location = CurrentCommand.Target->GetActorLocation();
+                MoveToActor(CurrentCommand.Target, GetAcceptanceRadius());
+        }
+        else
+        {
+                MoveToLocation(CurrentCommand.Location);
+        }
+
+        OnNewDestination.Broadcast(CurrentCommand);
 }
 
 void AAiControllerRts::OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result)
@@ -92,15 +134,23 @@ void AAiControllerRts::OnMoveCompleted(FAIRequestID RequestID, const FPathFollow
 // Utilities ------
 float AAiControllerRts::GetAcceptanceRadius() const
 {
-    if (!Soldier) return 0.f;
-    return Soldier->GetHaveWeapon()
-        ? RangedStopDistance
-        : Soldier->GetAttackRange() * MeleeApproachFactor;
+        if (!Soldier)
+        {
+                return 0.f;
+        }
+
+        const float PreferredDistance = Soldier->GetPreferredAttackDistance();
+        return FMath::Max(PreferredDistance, DistanceTolerance);
 }
 
 bool AAiControllerRts::ShouldApproach() const
 {
-    return bMoveComplete && GetDistanceToTarget() > Soldier->GetAttackRange();
+        if (!HasValidAttackCommand() || !Soldier)
+        {
+                return false;
+        }
+
+        return bMoveComplete && GetDistanceToTarget() > Soldier->GetAttackRange() + DistanceTolerance;
 }
 
 #pragma endregion
@@ -111,45 +161,151 @@ bool AAiControllerRts::ShouldApproach() const
 
 void AAiControllerRts::PerformAttack()
 {
-    bCanAttack = false;
-    OnStartAttack.Broadcast(CurrentCommand.Target);
-    GetWorld()->GetTimerManager().SetTimer(AttackTimer, this, &AAiControllerRts::ResetAttack, Soldier->GetAttackCooldown(), false);
+        if (!HasValidAttackCommand())
+        {
+                return;
+        }
+
+        bCanAttack = false;
+        OnStartAttack.Broadcast(CurrentCommand.Target);
+
+        if (UWorld* World = GetWorld())
+        {
+                World->GetTimerManager().SetTimer(AttackTimer, this, &AAiControllerRts::ResetAttack, Soldier->GetAttackCooldown(), false);
+        }
 }
 
 void AAiControllerRts::ResetAttack()
 {
-    bCanAttack = true;
+        bCanAttack = true;
 }
 
 void AAiControllerRts::StopAttack()
 {
-    GetWorld()->GetTimerManager().ClearTimer(AttackTimer);
-    bCanAttack = true;
+        if (UWorld* World = GetWorld())
+        {
+                World->GetTimerManager().ClearTimer(AttackTimer);
+        }
+
+        bCanAttack = true;
+        bAttackTarget = false;
+        bMoveComplete = true;
+        CurrentCommand.Target = nullptr;
+
+        StopMovement();
 }
 
 
 // Utilities ------
 float AAiControllerRts::GetDistanceToTarget() const
 {
-    return FVector::Dist(Soldier->GetActorLocation(), CurrentCommand.Target->GetActorLocation());
+        if (!Soldier || !HasValidAttackCommand())
+        {
+                return 0.f;
+        }
+
+        return FVector::Dist(Soldier->GetActorLocation(), CurrentCommand.Target->GetActorLocation());
 }
 
 bool AAiControllerRts::ShouldAttack() const
 {
-    return bCanAttack && bAttackTarget && GetDistanceToTarget() <= Soldier->GetAttackRange();
+        if (!HasValidAttackCommand() || !Soldier)
+        {
+                return false;
+        }
+
+        const float Distance = GetDistanceToTarget();
+        const float MinDistance = Soldier->GetMinAttackDistance();
+        const float MaxRange = Soldier->GetAttackRange();
+
+        const bool bAboveMinimumRange = MinDistance <= 0.f || Distance >= MinDistance - DistanceTolerance;
+        return bCanAttack && bAboveMinimumRange && Distance <= MaxRange + DistanceTolerance;
+}
+
+bool AAiControllerRts::ShouldRetreat() const
+{
+        if (!HasValidAttackCommand() || !Soldier)
+        {
+                return false;
+        }
+
+        const float MinDistance = Soldier->GetMinAttackDistance();
+        if (MinDistance <= 0.f)
+        {
+                return false;
+        }
+
+        return GetDistanceToTarget() < MinDistance - DistanceTolerance;
+}
+
+void AAiControllerRts::MaintainDistance()
+{
+        if (!HasValidAttackCommand() || !Soldier)
+        {
+                return;
+        }
+
+        const FVector SoldierLocation = Soldier->GetActorLocation();
+        const FVector TargetLocation = CurrentCommand.Target->GetActorLocation();
+        FVector RetreatDirection = SoldierLocation - TargetLocation;
+        if (!RetreatDirection.Normalize())
+        {
+                return;
+        }
+
+        const float DesiredDistance = Soldier->GetPreferredAttackDistance();
+        const float MinimumDistance = Soldier->GetMinAttackDistance();
+        const float RetreatDistance = FMath::Max(DesiredDistance, MinimumDistance + RetreatBuffer);
+        const FVector Destination = TargetLocation + RetreatDirection * RetreatDistance;
+
+        bMoveComplete = false;
+        MoveToLocation(Destination, DistanceTolerance);
+}
+
+bool AAiControllerRts::IsOutsideLeashRange() const
+{
+        if (!HasValidAttackCommand() || !Soldier)
+        {
+                return false;
+        }
+
+        return GetDistanceToTarget() > Soldier->GetAttackChaseDistance() + DistanceTolerance;
 }
 
 #pragma endregion
 
 
+bool AAiControllerRts::HasValidAttackCommand() const
+{
+        return bAttackTarget && ValidateAttackCommand(CurrentCommand);
+}
+
+bool AAiControllerRts::ValidateAttackCommand(const FCommandData& Cmd) const
+{
+        if (!Soldier)
+        {
+                return false;
+        }
+
+        return Cmd.Target && IsValid(Cmd.Target) && Cmd.Target != Soldier;
+}
+
+void AAiControllerRts::HandleInvalidAttackTarget()
+{
+        StopAttack();
+}
+
+ 
 // ---- Patrol ---- //
 #pragma region Patrol Commands
 
 void AAiControllerRts::CommandPatrol(const FCommandData Cmd)
 {
-    CurrentCommand = Cmd;
-    bPatrolling = true;
-    StartPatrol();
+        StopAttack();
+        CurrentCommand = Cmd;
+        bPatrolling = true;
+        bMoveComplete = false;
+        StartPatrol();
 }
 
 void AAiControllerRts::StartPatrol()

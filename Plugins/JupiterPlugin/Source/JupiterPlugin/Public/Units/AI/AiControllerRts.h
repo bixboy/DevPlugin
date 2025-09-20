@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "Data/AiData.h"
@@ -70,36 +70,41 @@ public:
 	void SetupVariables();
 
 protected:
-	/** AI settings */
-	UPROPERTY(EditAnywhere, Category="AI")
-	float MeleeApproachFactor = 0.3f;
+        /** AI settings */
+        UPROPERTY(EditAnywhere, Category="AI")
+        float DistanceTolerance = 25.f;
 
-	UPROPERTY(EditAnywhere, Category="AI")
-	float RangedStopDistance = 200.f;
-
-	UPROPERTY(EditAnywhere, Category="AI")
-	float AttackCooldown = 1.f;
+        UPROPERTY(EditAnywhere, Category="AI")
+        float RetreatBuffer = 100.f;
 
 private:
-	// Variables
-	UPROPERTY() ASoldierRts*       Soldier = nullptr;
-	UPROPERTY() FCommandData       CurrentCommand;
-	
-	UPROPERTY() bool               bMoveComplete = true;
-	UPROPERTY() bool               bPatrolling = false;
-	
-	UPROPERTY() bool               bAttackTarget = false;
-	UPROPERTY() bool               bCanAttack = true;
-	UPROPERTY() FTimerHandle       AttackTimer;
-	UPROPERTY() ECombatBehavior    CombatBehavior;
-	
-	// Functions
-	UFUNCTION() float GetAcceptanceRadius() const;
-	UFUNCTION() bool  ShouldApproach() const;
+        // Variables
+        UPROPERTY() ASoldierRts*       Soldier = nullptr;
+        UPROPERTY() FCommandData       CurrentCommand;
 
-	UFUNCTION() float GetDistanceToTarget() const;
-	UFUNCTION() bool  ShouldAttack() const;
-	UFUNCTION() void  PerformAttack();
-	
-	UFUNCTION() void  StartPatrol();
+        UPROPERTY() bool               bMoveComplete = true;
+        UPROPERTY() bool               bPatrolling = false;
+
+        UPROPERTY() bool               bAttackTarget = false;
+        UPROPERTY() bool               bCanAttack = true;
+        UPROPERTY() FTimerHandle       AttackTimer;
+        UPROPERTY() ECombatBehavior    CombatBehavior;
+
+        // Functions
+        UFUNCTION() float GetAcceptanceRadius() const;
+        UFUNCTION() bool  ShouldApproach() const;
+        UFUNCTION() bool  ShouldRetreat() const;
+
+        UFUNCTION() float GetDistanceToTarget() const;
+        UFUNCTION() bool  ShouldAttack() const;
+        UFUNCTION() void  PerformAttack();
+        UFUNCTION() void  MaintainDistance();
+
+        bool             IsOutsideLeashRange() const;
+
+        bool             HasValidAttackCommand() const;
+        bool             ValidateAttackCommand(const FCommandData& Cmd) const;
+        void             HandleInvalidAttackTarget();
+
+        UFUNCTION() void  StartPatrol();
 };
