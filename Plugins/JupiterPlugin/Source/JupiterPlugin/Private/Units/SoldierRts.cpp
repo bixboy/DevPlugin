@@ -3,10 +3,9 @@
 #include "Components/CommandComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/WeaponMaster.h"
-#include "Containers/Set.h"
 #include "DrawDebugHelpers.h"
+#include "Containers/Set.h"
 #include "EngineUtils.h"
-#include "Templates/NumericLimits.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 
@@ -246,29 +245,22 @@ void ASoldierRts::OnStartAttack(AActor* Target)
 
 void ASoldierRts::TakeDamage_Implementation(AActor* DamageOwner)
 {
-        IDamageable::TakeDamage_Implementation(DamageOwner);
+    IDamageable::TakeDamage_Implementation(DamageOwner);
 
-        if (!bCanAttack || !DamageOwner || DamageOwner == this)
-        {
-                return;
-        }
+    if (!bCanAttack || !DamageOwner || DamageOwner == this)
+		return;
 
-        if (CombatBehavior == ECombatBehavior::Passive)
-        {
-                return;
-        }
+	GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red,
+		FString::Printf(TEXT("[%s] Took Damage from [%s] | Behavior=%s"),
+			*GetName(), *DamageOwner->GetName(), *UEnum::GetValueAsString(CombatBehavior)));
+	
+    const FCommandData AttackCommand = MakeAttackCommand(DamageOwner);
 
-        const FCommandData AttackCommand = MakeAttackCommand(DamageOwner);
+    if (!Execute_GetIsInAttack(this) && CombatBehavior != ECombatBehavior::Passive)
+		IssueAttackOrder(AttackCommand);
 
-        if (!ISelectable::Execute_GetIsInAttack(this))
-        {
-                IssueAttackOrder(AttackCommand);
-        }
-
-        if (IsEnemyActor(DamageOwner))
-        {
-                NotifyAlliesOfThreat(DamageOwner, AttackCommand);
-        }
+    if (IsEnemyActor(DamageOwner))
+		NotifyAlliesOfThreat(DamageOwner, AttackCommand);
 }
 
 void ASoldierRts::OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
