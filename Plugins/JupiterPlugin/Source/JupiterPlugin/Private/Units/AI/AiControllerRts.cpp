@@ -1,7 +1,9 @@
 ﻿#include "JupiterPlugin/Public/Units/AI/AiControllerRts.h"
 #include "NavigationSystem.h"
 #include "TimerManager.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Data/AiData.h"
+#include "Interfaces/Selectable.h"
 #include "Units/SoldierRts.h"
 
 // ---- Setup ---- //
@@ -15,19 +17,16 @@ AAiControllerRts::AAiControllerRts()
 void AAiControllerRts::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
+        
     Soldier = Cast<ASoldierRts>(InPawn);
     if (Soldier)
-    {
         Soldier->SetAIController(this);
-    }
 }
 
 void AAiControllerRts::SetupVariables()
 {
     if (Soldier)
-    {
         CombatBehavior = Soldier->GetCombatBehavior();
-    }
 }
 
 #pragma endregion
@@ -37,14 +36,10 @@ void AAiControllerRts::Tick(float DeltaSeconds)
         Super::Tick(DeltaSeconds);
 
         if (!HasAuthority() || !Soldier)
-        {
                 return;
-        }
 
         if (!bAttackTarget)
-        {
                 return;
-        }
 
         if (!HasValidAttackCommand())
         {
@@ -76,6 +71,11 @@ void AAiControllerRts::Tick(float DeltaSeconds)
 void AAiControllerRts::CommandMove(const FCommandData Cmd, bool bAttack)
 {
         bool bShouldAttack = bAttack;
+
+        if (bShouldAttack && Soldier && HasAuthority() && Soldier->GetCombatBehavior() == ECombatBehavior::Passive)
+        {
+                ISelectable::Execute_SetBehavior(Soldier, ECombatBehavior::Neutral);
+        }
 
         if (bShouldAttack && !ValidateAttackCommand(Cmd))
         {
@@ -127,9 +127,32 @@ float AAiControllerRts::GetAcceptanceRadius() const
                 return 0.f;
         }
 
-        return Soldier->GetHaveWeapon()
-                ? RangedStopDistance
-                : Soldier->GetAttackRange() * MeleeApproachFactor;
+        if (Soldier->GetHaveWeapon())
+        {
+                const float SoldierStopDistance = Soldier->GetRangedStopDistance();
+                return SoldierStopDistance > 0.f ? SoldierStopDistance : RangedStopDistance;
+        }
+
+        float ComputedStopDistance = 0.f;
+
+        if (const USkeletalMeshComponent* MeshComp = Soldier->GetMesh())
+        {
+                const FBoxSphereBounds Bounds = MeshComp->Bounds;
+                const float HorizontalExtent = FMath::Max(Bounds.BoxExtent.X, Bounds.BoxExtent.Y);
+                const float StopFactor = FMath::Max(Soldier->GetMeleeStopDistanceFactor(), 0.f);
+                ComputedStopDistance = HorizontalExtent * 2.f * StopFactor;
+        }
+
+        if (ComputedStopDistance <= KINDA_SMALL_NUMBER)
+        {
+                ComputedStopDistance = Soldier->GetAttackRange() * MeleeApproachFactor;
+        }
+        else if (Soldier->GetAttackRange() > 0.f)
+        {
+                ComputedStopDistance = FMath::Min(ComputedStopDistance, Soldier->GetAttackRange());
+        }
+
+        return ComputedStopDistance;
 }
 
 bool AAiControllerRts::ShouldApproach() const
@@ -217,9 +240,7 @@ bool AAiControllerRts::HasValidAttackCommand() const
 bool AAiControllerRts::ValidateAttackCommand(const FCommandData& Cmd) const
 {
         if (!Soldier)
-        {
                 return false;
-        }
 
         return Cmd.Target && IsValid(Cmd.Target) && Cmd.Target != Soldier;
 }
@@ -239,14 +260,15 @@ void AAiControllerRts::CommandPatrol(const FCommandData Cmd)
         CurrentCommand = Cmd;
         bPatrolling = true;
         bMoveComplete = false;
+        
         StartPatrol();
 }
 
 void AAiControllerRts::StartPatrol()
 {
     FVector Dest;
-    if (UNavigationSystemV1::K2_GetRandomLocationInNavigableRadius(
-        GetWorld(), CurrentCommand.SourceLocation, Dest, CurrentCommand.Radius))
+    if (UNavigationSystemV1::K2_GetRandomLocationInNavigableRadius(GetWorld(), CurrentCommand.SourceLocation,
+            Dest, CurrentCommand.Radius))
     {
         MoveToLocation(Dest, 20.f);
     }

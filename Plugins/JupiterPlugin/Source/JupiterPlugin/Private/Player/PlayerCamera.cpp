@@ -27,7 +27,7 @@
 
 APlayerCamera::APlayerCamera()
 {
-        PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = true;
 
 	SceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("SceneComponent"));
 	RootComponent = SceneComponent;
@@ -51,9 +51,7 @@ APlayerCamera::APlayerCamera()
 UUnitSelectionComponent* APlayerCamera::GetSelectionComponentChecked() const
 {
     if (SelectionComponent)
-    {
-        return SelectionComponent;
-    }
+		return SelectionComponent;
 
     UUnitSelectionComponent* FoundComponent = FindComponentByClass<UUnitSelectionComponent>();
     if (!FoundComponent)
@@ -68,7 +66,7 @@ UUnitSelectionComponent* APlayerCamera::GetSelectionComponentChecked() const
 
 void APlayerCamera::BeginPlay()
 {
-        Super::BeginPlay();
+	Super::BeginPlay();
 
     Player = Cast<APlayerController>(GetInstigatorController());
 	
@@ -83,8 +81,6 @@ void APlayerCamera::BeginPlay()
 	
 	CreateSelectionBox();
 	CreateSphereRadius();
-
-
 
 
     if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
@@ -210,7 +206,8 @@ void APlayerCamera::UnPossessed()
 		}
 	}
 
-	if(PreviewUnits) PreviewUnits->Destroy();
+	if(PreviewUnits)
+		PreviewUnits->Destroy();
 }
 
 void APlayerCamera::NotifyControllerChanged()

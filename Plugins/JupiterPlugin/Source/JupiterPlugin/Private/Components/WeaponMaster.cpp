@@ -53,9 +53,7 @@ TArray<FVector> UWeaponMaster::GetShootTrace(FVector Direction)
 	StartEndPoints.Empty();
 
 	if (GetOwner()->HasAuthority())
-	{
 		GetShootTrace_Server(Direction);
-	}
 
 	return StartEndPoints;
 }
@@ -128,9 +126,7 @@ void UWeaponMaster::AIShoot(AActor* Target)
 	if (AProjetiles* Bullet = GetWorld()->SpawnActor<AProjetiles>(BulletClass, SpawnLocation, SpawnRotation, SpawnParams))
 	{
 		if (AiOwner)
-		{
 			Bullet->SetOwnerActor(AiOwner);
-		}
 	}
 }
 
@@ -197,8 +193,6 @@ FVector UWeaponMaster::GetDirection()
 	{
 		return PerformSingleLineTrace(Start, End, ECollisionChannel::ECC_Visibility).TraceEnd;
 	}
-	else
-	{
-		return FVector::ZeroVector;
-	}
+
+	return FVector::ZeroVector;
 }

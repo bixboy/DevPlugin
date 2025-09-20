@@ -38,7 +38,8 @@ void UCommandComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 
 void UCommandComponent::InitializeMovementComponent() const
 {
-	if (!OwnerCharaMovementComp) return;
+	if (!OwnerCharaMovementComp)
+		return;
 
 	OwnerCharaMovementComp->bOrientRotationToMovement = true;
 	OwnerCharaMovementComp->RotationRate = FRotator(0.f, 640.f, 0.f);
@@ -55,6 +56,7 @@ void UCommandComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 	if (OwnerActor->HasAuthority() && ShouldOrientate)
 	{
 		SetOrientation(DeltaTime);
+		
 		if (IsOrientated())
 			ShouldOrientate = false;
 	}
@@ -160,21 +162,21 @@ void UCommandComponent::ApplyMovementSettings(const FCommandData& CommandData)
 {
     switch (CommandData.Type)
     {
-    case ECommandType::CommandMoveSlow:
-            SetWalk();
-            break;
-    case ECommandType::CommandMoveFast:
-            SetSprint();
-            break;
-    case ECommandType::CommandAttack:
-            SetSprint();
-            break;
-    case ECommandType::CommandPatrol:
-            SetWalk();
-            break;
-    default:
-            SetRun();
-            break;
+	    case ECommandType::CommandMoveSlow:
+	            SetWalk();
+	            break;
+	    case ECommandType::CommandMoveFast:
+	            SetSprint();
+	            break;
+	    case ECommandType::CommandAttack:
+	            SetSprint();
+	            break;
+	    case ECommandType::CommandPatrol:
+	            SetWalk();
+	            break;
+	    default:
+	            SetRun();
+	            break;
     }
 }
 
@@ -207,7 +209,8 @@ void UCommandComponent::SetSprint() const
 
 void UCommandComponent::SetOrientation(float DeltaTime)
 {
-	if (!OwnerActor) return;
+	if (!OwnerActor)
+		return;
 
 	FRotator InterpolatedRotation = UKismetMathLibrary::RInterpTo(
 		FRotator(OwnerActor->GetActorRotation().Pitch, OwnerActor->GetActorRotation().Yaw, 0.f),
@@ -240,6 +243,7 @@ void UCommandComponent::SetMoveMarker_Implementation(const FVector Location, con
 		UE_LOG(LogTemp, Warning, TEXT("MoveMarker is null"));
 		return;
 	}
+	
 	UE_LOG(LogTemp, Warning, TEXT("MoveMarker is Valid"));
 
 	if (CommandData.RequestingController && CommandData.RequestingController->IsLocalController())

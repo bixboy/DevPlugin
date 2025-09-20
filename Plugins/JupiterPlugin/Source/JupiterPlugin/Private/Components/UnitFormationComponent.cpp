@@ -69,9 +69,7 @@ void UUnitFormationComponent::BuildFormationCommands(const FCommandData& BaseCom
     OutCommands.Reserve(Units.Num());
 
     if (bCacheLastFormationCommand)
-    {
         CacheFormationCommand(BaseCommand, Units);
-    }
 
     for (int32 Index = 0; Index < Units.Num(); ++Index)
     {
@@ -127,50 +125,46 @@ FVector UUnitFormationComponent::CalculateOffset(int32 Index, int32 TotalUnits) 
 
         switch (CurrentFormation)
         {
-        case EFormation::Square:
-        {
-            const int32 GridSize = FMath::CeilToInt(FMath::Sqrt(static_cast<float>(TotalUnits)));
-            Offset.X = (Index / GridSize) * FormationSpacing - ((GridSize - 1) * FormationSpacing * 0.5f);
-            Offset.Y = (Index % GridSize) * FormationSpacing - ((GridSize - 1) * FormationSpacing * 0.5f);
-            break;
-        }
-        case EFormation::Blob:
-        {
-            if (Index != 0)
+            case EFormation::Square:
             {
-                FRandomStream Stream(Index * 137);
-                const float Angle = (Index / static_cast<float>(TotalUnits)) * TwoPi;
-                const float Radius = Stream.FRandRange(-0.5f, 0.5f) * FormationSpacing;
-                Offset.X += Radius * FMath::Cos(Angle);
-                Offset.Y += Radius * FMath::Sin(Angle);
+                const int32 GridSize = FMath::CeilToInt(FMath::Sqrt(static_cast<float>(TotalUnits)));
+                Offset.X = (Index / GridSize) * FormationSpacing - ((GridSize - 1) * FormationSpacing * 0.5f);
+                Offset.Y = (Index % GridSize) * FormationSpacing - ((GridSize - 1) * FormationSpacing * 0.5f);
+                    
+                break;
             }
-            break;
-        }
-        default:
-        {
-            const float Multiplier = FMath::Floor((Index + 1) / 2.f) * FormationSpacing;
-            const bool bAlternate = FormationData->Alternate;
-            if (bAlternate && Index % 2 == 0)
+            case EFormation::Blob:
             {
-                Offset.Y = -Offset.Y;
+                if (Index != 0)
+                {
+                    FRandomStream Stream(Index * 137);
+                    const float Angle = (Index / static_cast<float>(TotalUnits)) * TwoPi;
+                    const float Radius = Stream.FRandRange(-0.5f, 0.5f) * FormationSpacing;
+                    Offset.X += Radius * FMath::Cos(Angle);
+                    Offset.Y += Radius * FMath::Sin(Angle);
+                }
+                    
+                break;
             }
+            default:
+            {
+                const float Multiplier = FMath::Floor((Index + 1) / 2.f) * FormationSpacing;
+                const bool bAlternate = FormationData->Alternate;
+                    
+                if (bAlternate && Index % 2 == 0)
+                    Offset.Y = -Offset.Y;
 
-            if (bAlternate)
-            {
-                Offset *= Multiplier;
+                if (bAlternate)
+                    Offset *= Multiplier;
+                else
+                    Offset *= Index * FormationSpacing;
+                    
+                break;
             }
-            else
-            {
-                Offset *= Index * FormationSpacing;
-            }
-            break;
-        }
         }
     }
     else
-    {
         Offset = FVector(0.f, Index * FormationSpacing, 0.f);
-    }
 
     return Offset;
 }
@@ -197,9 +191,7 @@ UFormationDataAsset* UUnitFormationComponent::GetFormationData() const
     for (UFormationDataAsset* Asset : FormationDataAssets)
     {
         if (Asset && Asset->FormationType == CurrentFormation)
-        {
             return Asset;
-        }
     }
 
     return nullptr;

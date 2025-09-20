@@ -9,7 +9,6 @@
 ASphereRadius::ASphereRadius()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
 	
 	SphereComponent = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComponent"));
 	SphereComponent->SetSphereRadius(1.f);
@@ -28,13 +27,14 @@ void ASphereRadius::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	if(Decal) Decal->SetVisibility(false);
+	if(Decal)
+		Decal->SetVisibility(false);
 	
 	SetActorEnableCollision(false);
-        if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
-        {
-                SelectionComponent = OwnerPawn->FindComponentByClass<UUnitSelectionComponent>();
-        }
+    if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
+    {
+        SelectionComponent = OwnerPawn->FindComponentByClass<UUnitSelectionComponent>();
+    }
 }
 
 void ASphereRadius::Tick(float DeltaTime)
