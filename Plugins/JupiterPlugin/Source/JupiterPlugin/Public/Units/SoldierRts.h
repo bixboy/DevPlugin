@@ -214,8 +214,14 @@ protected:
         UFUNCTION()
         void OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	UFUNCTION()
-	void OnAreaAttackEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+        UFUNCTION()
+        void OnAreaAttackEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+        UFUNCTION()
+        void OnAllyDetectionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+        UFUNCTION()
+        void OnAllyDetectionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	UFUNCTION()
 	virtual void SetBehavior_Implementation(const ECombatBehavior NewBehavior) override;
@@ -258,6 +264,9 @@ private:
         UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
         TObjectPtr<USphereComponent> AreaAttack;
 
+        UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
+        TObjectPtr<USphereComponent> AllyDetectionArea;
+
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
 	bool bCanAttack = true;
 
@@ -266,6 +275,9 @@ private:
 
         UPROPERTY(EditAnywhere, Category = "Settings|Attack")
         float AttackRange = 200.f;
+
+        UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+        float AllyDetectionRange = 200.f;
 
         UPROPERTY(EditAnywhere, Category = "Settings|Attack")
         FAttackDetectionSettings DetectionSettings;
