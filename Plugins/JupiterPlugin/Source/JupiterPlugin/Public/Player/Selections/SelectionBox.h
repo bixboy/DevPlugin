@@ -4,7 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "SelectionBox.generated.h"
 
-class USelectionComponent;
+class UUnitSelectionComponent;
 class UBoxComponent;
 
 UCLASS()
@@ -56,6 +56,6 @@ private:
 	UPROPERTY()
 	bool BoxSelect;
 	
-	UPROPERTY()
-	USelectionComponent* SelectionComponent;
+        UPROPERTY()
+        UUnitSelectionComponent* SelectionComponent;
 };
