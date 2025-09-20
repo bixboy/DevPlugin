@@ -2,7 +2,7 @@
 #include "Player/PlayerControllerRts.h"
 #include "Components/BoxComponent.h"
 #include "Components/DecalComponent.h"
-#include "Components/SlectionComponent.h"
+#include "Components/UnitSelectionComponent.h"
 #include "Interfaces/Selectable.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -36,7 +36,10 @@ void ASelectionBox::BeginPlay()
 		Decal->SetVisibility(false);
 	}
 
-	verify((SelectionComponent = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn()->GetComponentByClass<USelectionComponent>()) != nullptr);
+        if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
+        {
+                SelectionComponent = OwnerPawn->FindComponentByClass<UUnitSelectionComponent>();
+        }
 }
 
 void ASelectionBox::Tick(float DeltaTime)
