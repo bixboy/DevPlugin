@@ -29,11 +29,7 @@ public:
     FHitResult GetMousePositionOnTerrain() const;
 
     /** Handles single unit selection from user input. */
-    UFUNCTION(BlueprintCallable, Category = "RTS|Selection")
     void Handle_Selection(AActor* ActorToSelect);
-
-    /** Handles group selection (typically from marquee selection). */
-    UFUNCTION(BlueprintCallable, Category = "RTS|Selection")
     void Handle_Selection(const TArray<AActor*>& ActorsToSelect);
 
     /** Clears the current selection set. */
@@ -65,8 +61,7 @@ public:
     void DestroyHud();
 
     /** Delegate fired whenever the replicated selection array changes. */
-    UPROPERTY(BlueprintAssignable, Category = "RTS|Selection")
-    FSelectedUpdatedDelegate OnSelectedUpdate;
+
 
     /** Delegate fired with the full selection payload for Blueprints. */
     UPROPERTY(BlueprintAssignable, Category = "RTS|Selection")
