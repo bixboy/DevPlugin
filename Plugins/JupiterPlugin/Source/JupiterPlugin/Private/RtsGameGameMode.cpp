@@ -2,24 +2,24 @@
 
 #include "JupiterPlugin/Public/RtsGameGameMode.h"
 #include "JupiterPlugin/Public/RtsGamePlayerController.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Player/PlayerControllerRts.h"
+#include "Components/SlectionComponent.h"
+#include "Systems/RtsOrderSystem.h"
 
 ARtsGameGameMode::ARtsGameGameMode()
 {
-	// // use our custom PlayerController class
-	// PlayerControllerClass = ARtsGamePlayerController::StaticClass();
-	//
-	// // set default pawn class to our Blueprinted character
-	// static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/TopDown/Blueprints/BP_TopDownCharacter"));
-	// if (PlayerPawnBPClass.Class != nullptr)
-	// {
-	// 	DefaultPawnClass = PlayerPawnBPClass.Class;
-	// }
-	//
-	// // set default controller to our Blueprinted controller
-	// static ConstructorHelpers::FClassFinder<APlayerController> PlayerControllerBPClass(TEXT("/Game/TopDown/Blueprints/BP_TopDownPlayerController"));
-	// if(PlayerControllerBPClass.Class != NULL)
-	// {
-	// 	PlayerControllerClass = PlayerControllerBPClass.Class;
-	// }
+        PlayerControllerClass = ARtsGamePlayerController::StaticClass();
+}
+
+void ARtsGameGameMode::IssueExampleMoveOrder(APlayerControllerRts* Controller, const FVector& TargetLocation)
+{
+        if (!Controller || !Controller->SelectionComponent)
+        {
+                return;
+        }
+
+        FRTSOrderRequest Request;
+        Request.OrderType = ERTSOrderType::Move;
+        Request.TargetLocation = TargetLocation;
+        Controller->SelectionComponent->IssueOrderToSelection(Request);
 }

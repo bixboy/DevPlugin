@@ -22,20 +22,21 @@ public class JupiterPlugin : ModuleRules
 			);
 			
 		
-		PublicDependencyModuleNames.AddRange(
-			new string[]
-			{
-				"Core",
-				"CoreUObject", 
-				"Engine", 
-				"InputCore", 
-				"NavigationSystem", 
-				"AIModule", 
-				"Niagara", 
-				"EnhancedInput", 
-				"UMG",
-			}
-			);
+PublicDependencyModuleNames.AddRange(
+new string[]
+{
+"Core",
+"CoreUObject",
+"Engine",
+"InputCore",
+"NavigationSystem",
+"AIModule",
+"Niagara",
+"EnhancedInput",
+"UMG",
+"GameplayTags",
+}
+);
 			
 		
 		PrivateDependencyModuleNames.AddRange(

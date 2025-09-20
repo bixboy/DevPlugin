@@ -6,6 +6,7 @@
 #include "GameFramework/Pawn.h"
 #include "Interfaces/Damageable.h"
 #include "Interfaces/Selectable.h"
+#include "Systems/RtsOrderSystem.h"
 #include "SoldierRts.generated.h"
 
 class UWeaponMaster;
@@ -123,8 +124,12 @@ protected:
 // Movement	
 #pragma region Movement
 public:
-	UFUNCTION()
-	virtual void CommandMove_Implementation(FCommandData CommandData) override;
+        UFUNCTION()
+        virtual void CommandMove_Implementation(FCommandData CommandData) override;
+
+        /** Blueprint friendly wrapper matching the simplified API requested by designers. */
+        UFUNCTION(BlueprintCallable, Category = "RTS|Orders")
+        void IssueOrder(ERTSOrderType OrderType, FVector TargetLocation, AActor* TargetActor, float Radius, const FGameplayTagContainer& OrderTags, bool bQueueCommand, const FCommandData& CommandData);
 
 #pragma endregion	
 

@@ -188,9 +188,49 @@ bool ASoldierRts::GetIsSelected_Implementation()
 
 void ASoldierRts::CommandMove_Implementation(FCommandData CommandData)
 {
-	ISelectable::CommandMove_Implementation(CommandData);
+        ISelectable::CommandMove_Implementation(CommandData);
 
-	GetCommandComponent()->CommandMoveToLocation(CommandData);
+        GetCommandComponent()->CommandMoveToLocation(CommandData);
+}
+
+void ASoldierRts::IssueOrder(ERTSOrderType OrderType, FVector TargetLocation, AActor* TargetActor, float Radius, const FGameplayTagContainer& OrderTags, bool bQueueCommand, const FCommandData& CommandData)
+{
+        if (!CommandComp)
+        {
+                return;
+        }
+
+        FCommandData LocalCommand = CommandData;
+        LocalCommand.Location = TargetLocation;
+        LocalCommand.SourceLocation = CommandData.SourceLocation.IsNearlyZero() ? GetActorLocation() : CommandData.SourceLocation;
+        LocalCommand.Target = TargetActor;
+        LocalCommand.Radius = Radius;
+
+        switch (OrderType)
+        {
+        case ERTSOrderType::MoveFast:
+                LocalCommand.Type = ECommandType::CommandMoveFast;
+                break;
+        case ERTSOrderType::MoveSlow:
+                LocalCommand.Type = ECommandType::CommandMoveSlow;
+                break;
+        case ERTSOrderType::Attack:
+        case ERTSOrderType::Harvest:
+                LocalCommand.Type = ECommandType::CommandAttack;
+                break;
+        case ERTSOrderType::Patrol:
+                LocalCommand.Type = ECommandType::CommandPatrol;
+                break;
+        default:
+                LocalCommand.Type = ECommandType::CommandMove;
+                break;
+        }
+
+        GetCommandComponent()->CommandMoveToLocation(LocalCommand);
+
+        // Tags and queueing are currently informational but kept for future extensibility.
+        (void)OrderTags;
+        (void)bQueueCommand;
 }
 
 FCommandData ASoldierRts::GetCurrentCommand_Implementation()

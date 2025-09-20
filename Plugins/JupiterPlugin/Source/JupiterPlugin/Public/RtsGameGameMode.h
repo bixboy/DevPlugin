@@ -9,10 +9,14 @@
 UCLASS(minimalapi)
 class ARtsGameGameMode : public AGameModeBase
 {
-	GENERATED_BODY()
+GENERATED_BODY()
 
 public:
-	ARtsGameGameMode();
+ARtsGameGameMode();
+
+/** Example helper showcasing how to issue a simple move order from C++. */
+UFUNCTION(BlueprintCallable, Category = "RTS|Examples")
+void IssueExampleMoveOrder(class APlayerControllerRts* Controller, const FVector& TargetLocation);
 };
 
 
