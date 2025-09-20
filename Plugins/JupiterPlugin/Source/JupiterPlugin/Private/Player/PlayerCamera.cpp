@@ -27,7 +27,7 @@
 
 APlayerCamera::APlayerCamera()
 {
-	PrimaryActorTick.bCanEverTick = true;
+        PrimaryActorTick.bCanEverTick = true;
 
 	SceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("SceneComponent"));
 	RootComponent = SceneComponent;
@@ -48,9 +48,27 @@ APlayerCamera::APlayerCamera()
     SpawnComponent = CreateDefaultSubobject<UUnitSpawnComponent>(TEXT("SpawnComponent"));
 }
 
+UUnitSelectionComponent* APlayerCamera::GetSelectionComponentChecked() const
+{
+    if (SelectionComponent)
+    {
+        return SelectionComponent;
+    }
+
+    UUnitSelectionComponent* FoundComponent = FindComponentByClass<UUnitSelectionComponent>();
+    if (!FoundComponent)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("%s is missing a UnitSelectionComponent."), *GetPathName());
+        return nullptr;
+    }
+
+    const_cast<APlayerCamera*>(this)->SelectionComponent = FoundComponent;
+    return FoundComponent;
+}
+
 void APlayerCamera::BeginPlay()
 {
-	Super::BeginPlay();
+        Super::BeginPlay();
 
     Player = Cast<APlayerController>(GetInstigatorController());
 	
@@ -65,13 +83,13 @@ void APlayerCamera::BeginPlay()
 	
 	CreateSelectionBox();
 	CreateSphereRadius();
-	
 
 
 
-    if (SelectionComponent)
+
+    if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
     {
-        SelectionComponent->CreateHud();
+        Selection->CreateHud();
     }
 
     if (FormationComponent && OrderComponent)
@@ -387,59 +405,81 @@ void APlayerCamera::Input_LeftMouseInputHold(const FInputActionValue& ActionValu
 
 void APlayerCamera::Input_SquareSelection()
 {
-	if(!Player) return;
+        if(!Player) return;
 
-	SelectionComponent->Handle_Selection(nullptr);
-	BoxSelect = false;
+        BoxSelect = false;
 
-    if (SpawnComponent)
-    {
-        SpawnComponent->SetUnitToSpawn(nullptr);
-    }
-	HidePreview();
+        if (SpawnComponent)
+        {
+            SpawnComponent->SetUnitToSpawn(nullptr);
+        }
 
-	FHitResult Hit = SelectionComponent->GetMousePositionOnTerrain();
-	
-	MouseProjectionIsGrounded = Hit.bBlockingHit;
-	
-	if(MouseProjectionIsGrounded) LeftMouseHitLocation = Hit.Location;
+        HidePreview();
+
+        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+        {
+            Selection->Handle_Selection(nullptr);
+
+            FHitResult Hit = Selection->GetMousePositionOnTerrain();
+            MouseProjectionIsGrounded = Hit.bBlockingHit;
+
+            if(MouseProjectionIsGrounded)
+            {
+                LeftMouseHitLocation = Hit.Location;
+            }
+        }
+        else
+        {
+            MouseProjectionIsGrounded = false;
+        }
 }
 
 //---------------- Left Click Utilities
 void APlayerCamera::HandleLeftMouse(EInputEvent InputEvent, float Value)
 {
-	if (!Player || !MouseProjectionIsGrounded) return;
+        if (!Player || !MouseProjectionIsGrounded) return;
 
-	switch (InputEvent)
-	{
-		case IE_Pressed:
-			SelectionComponent->Handle_Selection(nullptr);
-			BoxSelect = false;
-			LeftMouseHitLocation = SelectionComponent->GetMousePositionOnTerrain().Location;
-			CommandStart();
-			break;
+        switch (InputEvent)
+        {
+                case IE_Pressed:
+                {
+                        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+                        {
+                            Selection->Handle_Selection(nullptr);
+                            BoxSelect = false;
+                            LeftMouseHitLocation = Selection->GetMousePositionOnTerrain().Location;
+                            CommandStart();
+                        }
+                        break;
+                }
 
-		case IE_Released:
-			
-			MouseProjectionIsGrounded = false;
-		
+                case IE_Released:
+
+                        MouseProjectionIsGrounded = false;
+
 			if (BoxSelect && SelectionBox)
 			{
-				SelectionBox->End();
-				BoxSelect = false;
-			}
-			else
-			{
-				SelectionComponent->Handle_Selection(GetSelectedObject());
-			}
-			break;
+                                SelectionBox->End();
+                                BoxSelect = false;
+                        }
+                        else
+                        {
+                                if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+                                {
+                                    Selection->Handle_Selection(GetSelectedObject());
+                                }
+                        }
+                        break;
 
-		case IE_Repeat:
-			if (Value == 0.f)
-			{
-				SelectionBox->End();
-				return;
-			}
+                case IE_Repeat:
+                        if (Value == 0.f)
+                        {
+                                if (SelectionBox)
+                                {
+                                        SelectionBox->End();
+                                }
+                                return;
+                        }
 
 			if (Player->GetInputKeyTimeDown(EKeys::LeftMouseButton) >= LeftMouseHoldThreshold && SelectionBox)
 			{
@@ -458,24 +498,31 @@ void APlayerCamera::HandleLeftMouse(EInputEvent InputEvent, float Value)
 
 void APlayerCamera::Input_SelectAllUnitType()
 {
-	TArray<AActor*> SelectedInCameraBound = GetAllActorsOfClassInCameraBound<AActor>(GetWorld(), ASoldierRts::StaticClass());
-	TArray<AActor*> ActorsToSelect;
-	if (!SelectedInCameraBound.IsEmpty())
-	{
-		for (AActor* Solider : SelectedInCameraBound)
-		{
-			if (Player && !SelectionComponent->GetSelectedActors().IsEmpty())
-			{
-				ETeams Team = ISelectable::Execute_GetCurrentTeam(SelectionComponent->GetSelectedActors()[0]);
-				if (Team == ISelectable::Execute_GetCurrentTeam(Solider))
-				{
-					ActorsToSelect.Add(Solider);
-				}
-			}
-		}
+        TArray<AActor*> SelectedInCameraBound = GetAllActorsOfClassInCameraBound<AActor>(GetWorld(), ASoldierRts::StaticClass());
+        TArray<AActor*> ActorsToSelect;
+        if (!SelectedInCameraBound.IsEmpty())
+        {
+                if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+                {
+                        const TArray<AActor*> CurrentSelection = Selection->GetSelectedActors();
+                        if (Player && !CurrentSelection.IsEmpty())
+                        {
+                                const ETeams Team = ISelectable::Execute_GetCurrentTeam(CurrentSelection[0]);
+                                for (AActor* Solider : SelectedInCameraBound)
+                                {
+                                        if (Solider && Team == ISelectable::Execute_GetCurrentTeam(Solider))
+                                        {
+                                                ActorsToSelect.Add(Solider);
+                                        }
+                                }
 
-		SelectionComponent->Handle_Selection(ActorsToSelect);
-	}
+                                if (!ActorsToSelect.IsEmpty())
+                                {
+                                        Selection->Handle_Selection(ActorsToSelect);
+                                }
+                        }
+                }
+        }
 }
 
 AActor* APlayerCamera::GetSelectedObject()
@@ -531,17 +578,24 @@ void APlayerCamera::HandleAltRightMouse(EInputEvent InputEvent, float Value)
 	if (!Player) return;
 	FHitResult Result;
 
-	switch (InputEvent)
-	{
-		case IE_Pressed:
-		{
-			if (!bAltIsPressed) return;
-		
-			Result = SelectionComponent->GetMousePositionOnTerrain();
-			LeftMouseHitLocation = Result.Location;
-			
-			break;	
-		}
+        switch (InputEvent)
+        {
+                case IE_Pressed:
+                {
+                        if (!bAltIsPressed) return;
+
+                        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+                        {
+                            Result = Selection->GetMousePositionOnTerrain();
+                            LeftMouseHitLocation = Result.Location;
+                        }
+                        else
+                        {
+                            return;
+                        }
+
+                        break;
+                }
 		case IE_Released:
 		{
 			if (SphereRadiusEnable && SphereRadius)
@@ -555,20 +609,26 @@ void APlayerCamera::HandleAltRightMouse(EInputEvent InputEvent, float Value)
 			}
 			break;	
 		}
-		case IE_Repeat:  // Correspond au "Hold"
-		{
-			if (!bAltIsPressed)
-			{
-				SphereRadius->End();
-				SphereRadiusEnable = false;
-				return;
-			}
+                case IE_Repeat:  // Correspond au "Hold"
+                {
+                        if (!bAltIsPressed)
+                        {
+                                if (SphereRadius)
+                                {
+                                        SphereRadius->End();
+                                }
+                                SphereRadiusEnable = false;
+                                return;
+                        }
 
-			if (Value == 0.f)
-			{
-				SphereRadius->End();
-				return;
-			}
+                        if (Value == 0.f)
+                        {
+                                if (SphereRadius)
+                                {
+                                        SphereRadius->End();
+                                }
+                                return;
+                        }
 
 			if (Player->GetInputKeyTimeDown(EKeys::RightMouseButton) >= LeftMouseHoldThreshold && SphereRadius)
 			{
@@ -626,20 +686,26 @@ void APlayerCamera::CreateSphereRadius()
 
 void APlayerCamera::Input_PatrolZone(const FInputActionValue& ActionValue)
 {
-	float Value = ActionValue.Get<float>();
+        float Value = ActionValue.Get<float>();
 
-	if(!bAltIsPressed)
-	{
-		SphereRadius->End();
-		SphereRadiusEnable = false;
-		return;
-	}
-	
-	if (!Player || Value == 0.f)
-	{
-		SphereRadius->End();
-		return;
-	}
+        if(!bAltIsPressed)
+        {
+                if (SphereRadius)
+                {
+                        SphereRadius->End();
+                }
+                SphereRadiusEnable = false;
+                return;
+        }
+
+        if (!Player || Value == 0.f)
+        {
+                if (SphereRadius)
+                {
+                        SphereRadius->End();
+                }
+                return;
+        }
 
 	if (Player->GetInputKeyTimeDown(EKeys::RightMouseButton) >= LeftMouseHoldThreshold && SphereRadius)
 	{
@@ -653,13 +719,16 @@ void APlayerCamera::Input_PatrolZone(const FInputActionValue& ActionValue)
 
 void APlayerCamera::Input_OnDestroySelected()
 {
-	if(!Player) return;
+        if(!Player) return;
 
-	TArray<AActor*> SelectedActors = SelectionComponent->GetSelectedActors();
-	if(SelectedActors.Num() > 0)
-	{
-		Server_DestroyActor(SelectedActors);
-	}
+        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+        {
+                TArray<AActor*> SelectedActors = Selection->GetSelectedActors();
+                if(SelectedActors.Num() > 0)
+                {
+                        Server_DestroyActor(SelectedActors);
+                }
+        }
 }
 
 void APlayerCamera::Server_DestroyActor_Implementation(const TArray<AActor*>& ActorToDestroy)
@@ -673,18 +742,29 @@ void APlayerCamera::Server_DestroyActor_Implementation(const TArray<AActor*>& Ac
 //----------------
 void APlayerCamera::CommandStart()
 {
-	if (!Player && bIsInSpawnUnits) return;
+        if (!Player || bIsInSpawnUnits) return;
 
-	FVector MouseLocation = SelectionComponent->GetMousePositionOnTerrain().Location;
-	CommandLocation = FVector(MouseLocation.X, MouseLocation.Y, MouseLocation.Z);
+        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+        {
+                const FVector MouseLocation = Selection->GetMousePositionOnTerrain().Location;
+                CommandLocation = FVector(MouseLocation.X, MouseLocation.Y, MouseLocation.Z);
+        }
 }
 
 void APlayerCamera::Command()
 {
-	if (!Player || bAltIsPressed || bIsInSpawnUnits) return;
+        if (!Player || bAltIsPressed || bIsInSpawnUnits) return;
 
-	FHitResult Hit = SelectionComponent->GetMousePositionOnTerrain();
-	AActor* ActorEnemy = GetSelectedObject();
+        FHitResult Hit;
+        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+        {
+                Hit = Selection->GetMousePositionOnTerrain();
+        }
+        else
+        {
+                return;
+        }
+        AActor* ActorEnemy = GetSelectedObject();
 	
 	if (ActorEnemy && ActorEnemy->Implements<USelectable>())
 	{
@@ -792,7 +872,12 @@ void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
                                 {
                                         bIsInSpawnUnits = true;
                                         PreviewUnits->ShowPreview(MeshComponent->GetSkeletalMeshAsset(), DefaultSoldier->GetCapsuleComponent()->GetRelativeScale3D());
-                                        PreviewUnits->SetActorLocation(SelectionComponent->GetMousePositionOnTerrain().Location);
+                                        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+                                        {
+                                                PreviewUnits->SetActorLocation(Selection->GetMousePositionOnTerrain().Location);
+                                                return;
+                                        }
+                                        HidePreview();
                                         return;
                                 }
                         }
@@ -814,14 +899,22 @@ void APlayerCamera::HidePreview()
 void APlayerCamera::PreviewFollowMouse()
 {
 
-	if (bIsInSpawnUnits && PreviewUnits && Player)
-	{
+        if (bIsInSpawnUnits && PreviewUnits && Player)
+        {
 
-		FHitResult MouseHit = SelectionComponent->GetMousePositionOnTerrain();
-		FRotator MouseRotation = FRotator(0,  CameraComponent->GetComponentRotation().Yaw, CameraComponent->GetComponentRotation().Roll);
+                FHitResult MouseHit;
+                if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+                {
+                        MouseHit = Selection->GetMousePositionOnTerrain();
+                }
+                else
+                {
+                        return;
+                }
+                FRotator MouseRotation = FRotator(0,  CameraComponent->GetComponentRotation().Yaw, CameraComponent->GetComponentRotation().Roll);
 
-		if (MouseHit.Location != FVector::ZeroVector)
-		{
+                if (MouseHit.Location != FVector::ZeroVector)
+                {
 			PreviewUnits->SetActorLocation(MouseHit.Location);
 			PreviewUnits->SetActorRotation(MouseRotation);
 
