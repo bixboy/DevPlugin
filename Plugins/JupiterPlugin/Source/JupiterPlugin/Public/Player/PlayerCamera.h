@@ -16,7 +16,10 @@ class ASphereRadius;
 class ASelectionBox;
 class UCameraComponent;
 class USpringArmComponent;
-class USelectionComponent;
+class UUnitSelectionComponent;
+class UUnitOrderComponent;
+class UUnitFormationComponent;
+class UUnitSpawnComponent;
 UCLASS()
 class JUPITERPLUGIN_API APlayerCamera : public APawn
 {
@@ -38,8 +41,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UFloatingPawnMovement> PawnMovementComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	USelectionComponent* SelectionComponent;
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitSelectionComponent* SelectionComponent;
+
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitOrderComponent* OrderComponent;
+
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitFormationComponent* FormationComponent;
+
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitSpawnComponent* SpawnComponent;
 protected:
 //------------------------------------ Inputs ------------------------------------
 #pragma region Inputs
