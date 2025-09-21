@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 
+
 // ------------------- Setup ---------------------
 #pragma region Setup
 
@@ -192,12 +193,7 @@ void ASoldierRts::Highlight(const bool Highlight)
 	for (UPrimitiveComponent* VisualComp : Components)
 	{
 		if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(VisualComp))
-		{
-			Prim->SetCustomDepthStencilWriteMask(Highlight ? ERendererStencilMask::ERSM_255 : ERendererStencilMask::ERSM_Default);
 			Prim->SetRenderCustomDepth(Highlight);
-			Prim->SetCustomDepthStencilValue(Highlight ? SelectionStencilValue : 0);
-			Prim->MarkRenderStateDirty();
-		}
 	}
 }
 

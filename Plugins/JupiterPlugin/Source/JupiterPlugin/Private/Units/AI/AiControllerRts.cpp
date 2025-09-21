@@ -73,19 +73,13 @@ void AAiControllerRts::CommandMove(const FCommandData Cmd, bool bAttack)
         bool bShouldAttack = bAttack;
 
         if (bShouldAttack && Soldier && HasAuthority() && Soldier->GetCombatBehavior() == ECombatBehavior::Passive)
-        {
                 ISelectable::Execute_SetBehavior(Soldier, ECombatBehavior::Neutral);
-        }
 
         if (bShouldAttack && !ValidateAttackCommand(Cmd))
-        {
                 bShouldAttack = false;
-        }
 
         if (!bShouldAttack && bAttackTarget)
-        {
                 StopAttack();
-        }
 
         CurrentCommand = Cmd;
         bPatrolling = false;
@@ -123,9 +117,7 @@ void AAiControllerRts::OnMoveCompleted(FAIRequestID RequestID, const FPathFollow
 float AAiControllerRts::GetAcceptanceRadius() const
 {
         if (!Soldier)
-        {
                 return 0.f;
-        }
 
         if (Soldier->GetHaveWeapon())
         {
@@ -158,9 +150,7 @@ float AAiControllerRts::GetAcceptanceRadius() const
 bool AAiControllerRts::ShouldApproach() const
 {
         if (!HasValidAttackCommand() || !Soldier)
-        {
                 return false;
-        }
 
         return bMoveComplete && GetDistanceToTarget() > Soldier->GetAttackRange();
 }

@@ -1,5 +1,4 @@
 ﻿#pragma once
-
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "JupiterHudWidget.generated.h"
@@ -48,6 +47,6 @@ protected:
 	UFUNCTION()
 	void SetUnitsSelectionWidget(bool bEnabled) const;
 
-        UPROPERTY()
-        UUnitSelectionComponent* SelectionComponent;
+    UPROPERTY()
+    UUnitSelectionComponent* SelectionComponent;
 };
