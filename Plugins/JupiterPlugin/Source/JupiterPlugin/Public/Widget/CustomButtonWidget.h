@@ -107,13 +107,25 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Button", meta = (InlineEditConditionToggle))
 	uint8 bOverride_Texture_Shift : 1;
 	
-	UPROPERTY(EditAnywhere, Category = Button, meta = (InlineEditConditionToggle))
-	uint8 bOverride_ButtonText : 1;
+        UPROPERTY(EditAnywhere, Category = Button, meta = (InlineEditConditionToggle))
+        uint8 bOverride_ButtonText : 1;
 
-	// Texture Alpha
-	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Alpha"))
-	float TextureAlpha = 1.f;
-	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Alpha"))
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (InlineEditConditionToggle))
+        uint8 bOverride_FillColor : 1;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (InlineEditConditionToggle))
+        uint8 bOverride_FillHoverColor : 1;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (InlineEditConditionToggle))
+        uint8 bOverride_BorderColor : 1;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (InlineEditConditionToggle))
+        uint8 bOverride_BorderHoverColor : 1;
+
+        // Texture Alpha
+        UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Alpha"))
+        float TextureAlpha = 1.f;
+        UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Alpha"))
 	float TextureHoverAlpha = 1.f;
 
 	// Texture Scale
@@ -124,9 +136,30 @@ protected:
 
 	// Texture Shift
 	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Shift"))
-	float TextureShiftX = 0.f;
-	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Shift"))
-	float TextureShiftY = 0.f;
+        float TextureShiftX = 0.f;
+        UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Shift"))
+        float TextureShiftY = 0.f;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (EditCondition = "bOverride_FillColor"))
+        FLinearColor FillColor = FLinearColor::White;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (EditCondition = "bOverride_FillHoverColor"))
+        FLinearColor FillHoverColor = FLinearColor::White;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (EditCondition = "bOverride_BorderColor"))
+        FLinearColor BorderColor = FLinearColor::White;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (EditCondition = "bOverride_BorderHoverColor"))
+        FLinearColor BorderHoverColor = FLinearColor::White;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance")
+        bool bEnableFill = true;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance")
+        bool bAllowFillWhenTextureIsSet = false;
+
+        UPROPERTY(EditAnywhere, Category = "Button|Appearance")
+        bool bEnableTexture = true;
 
 #pragma endregion
 };

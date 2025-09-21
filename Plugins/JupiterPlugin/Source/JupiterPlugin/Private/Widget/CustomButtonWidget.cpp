@@ -5,6 +5,8 @@
 #include "Components/ScaleBox.h"
 #include "Components/ScaleBoxSlot.h"
 #include "Components/TextBlock.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Styling/SlateBrush.h"
 
 void UCustomButtonWidget::NativePreConstruct()
 {
@@ -55,15 +57,9 @@ void UCustomButtonWidget::ToggleButtonIsSelected(bool bNewValue)
 
 void UCustomButtonWidget::SetButtonTexture(UTexture2D* NewTexture)
 {
-	ButtonTexture = NewTexture;
-	
-	if (ButtonTexture)
-	{
-		if (UMaterialInstanceDynamic* MaterialInstance = ButtonBorder->GetDynamicMaterial())
-		{
-			MaterialInstance->SetTextureParameterValue("Texture", ButtonTexture);
-		}
-	}
+        ButtonTexture = NewTexture;
+
+        SetButtonSettings();
 }
 
 //-------------------------- Events & Delegates -----------------------------
@@ -132,15 +128,51 @@ void UCustomButtonWidget::UpdateButtonText(const FText& InText)
 
 void UCustomButtonWidget::SetButtonSettings() const
 {
-	if (ButtonBorder)
-	{
-		if (UMaterialInstanceDynamic* MaterialInstance = ButtonBorder->GetDynamicMaterial())
-		{
-			if (bOverride_Texture_Alpha > 0)
-			{
-				MaterialInstance->SetScalarParameterValue("TextAlpha", TextureAlpha);
-				MaterialInstance->SetScalarParameterValue("TextAlphaHover", TextureHoverAlpha);
-			}
+        if (ButtonBorder)
+        {
+                if (UMaterialInstanceDynamic* MaterialInstance = ButtonBorder->GetDynamicMaterial())
+                {
+                        const bool bHasTexture = ButtonTexture != nullptr && bEnableTexture;
+                        const bool bShouldUseFill = bEnableFill && (!bHasTexture || bAllowFillWhenTextureIsSet);
+
+                        static const FName TextureParamName(TEXT("Texture"));
+                        static const FName UseTextureParamName(TEXT("UseTexture"));
+                        static const FName UseFillParamName(TEXT("UseFill"));
+                        static const FName FillColorParamName(TEXT("FillColor"));
+                        static const FName FillHoverColorParamName(TEXT("FillHoverColor"));
+                        static const FName BorderColorParamName(TEXT("BorderColor"));
+                        static const FName BorderHoverColorParamName(TEXT("BorderHoverColor"));
+
+                        MaterialInstance->SetScalarParameterValue(UseTextureParamName, bHasTexture ? 1.f : 0.f);
+                        MaterialInstance->SetScalarParameterValue(UseFillParamName, bShouldUseFill ? 1.f : 0.f);
+
+                        if (bHasTexture && ButtonTexture)
+                        {
+                                MaterialInstance->SetTextureParameterValue(TextureParamName, ButtonTexture);
+                        }
+                        else
+                        {
+                                MaterialInstance->ClearParameterValue(TextureParamName);
+                        }
+
+                        const FSlateBrush& BorderBrush = ButtonBorder->GetBrush();
+                        const FLinearColor BrushColor = BorderBrush.TintColor.GetSpecifiedColor();
+
+                        const FLinearColor EffectiveFillColor = bOverride_FillColor ? FillColor : BrushColor;
+                        const FLinearColor EffectiveFillHoverColor = bOverride_FillHoverColor ? FillHoverColor : EffectiveFillColor;
+                        const FLinearColor EffectiveBorderColor = bOverride_BorderColor ? BorderColor : EffectiveFillColor;
+                        const FLinearColor EffectiveBorderHoverColor = bOverride_BorderHoverColor ? BorderHoverColor : EffectiveBorderColor;
+
+                        MaterialInstance->SetVectorParameterValue(FillColorParamName, EffectiveFillColor);
+                        MaterialInstance->SetVectorParameterValue(FillHoverColorParamName, EffectiveFillHoverColor);
+                        MaterialInstance->SetVectorParameterValue(BorderColorParamName, EffectiveBorderColor);
+                        MaterialInstance->SetVectorParameterValue(BorderHoverColorParamName, EffectiveBorderHoverColor);
+
+                        if (bOverride_Texture_Alpha > 0)
+                        {
+                                MaterialInstance->SetScalarParameterValue("TextAlpha", TextureAlpha);
+                                MaterialInstance->SetScalarParameterValue("TextAlphaHover", TextureHoverAlpha);
+                        }
 
 			if (bOverride_Texture_Scale > 0)
 			{
@@ -154,15 +186,11 @@ void UCustomButtonWidget::SetButtonSettings() const
 				MaterialInstance->SetScalarParameterValue("Shift_Y", TextureShiftY);
 			}
 
-			if (ButtonTexture)
-			{
-				MaterialInstance->SetTextureParameterValue("Texture", ButtonTexture);
-			}
-		}
-	}
-	
-	if (UScaleBoxSlot* ScaleBoxSlot = Cast<UScaleBoxSlot>(ButtonTextBlock->Slot))
-	{
+                }
+        }
+
+        if (UScaleBoxSlot* ScaleBoxSlot = Cast<UScaleBoxSlot>(ButtonTextBlock->Slot))
+        {
 		ScaleBoxSlot->SetHorizontalAlignment(TextAlignmentHorizontal);
 		ScaleBoxSlot->SetVerticalAlignment(TextAlignmentVertical);
 	}
