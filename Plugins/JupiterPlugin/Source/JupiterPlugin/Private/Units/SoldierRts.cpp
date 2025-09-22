@@ -5,6 +5,8 @@
 #include "Components/WeaponMaster.h"
 #include "DrawDebugHelpers.h"
 #include "Containers/Set.h"
+#include "Algo/BinarySearch.h"
+#include "Algo/Sort.h"
 #include "Engine/EngineTypes.h"
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
@@ -464,15 +466,27 @@ namespace
     struct FDetectionCandidate
     {
         FDetectionCandidate() = default;
-        FDetectionCandidate(AActor* InActor, float InDistSq, bool bInEnemy)
+        FDetectionCandidate(AActor* InActor, float InDistSq)
             : Actor(InActor)
             , DistanceSq(InDistSq)
-            , bIsEnemy(bInEnemy) {}
+        {
+        }
 
         AActor* Actor = nullptr;
         float DistanceSq = 0.f;
-        bool bIsEnemy = false;
     };
+
+    template <typename AllocatorType>
+    void InsertCandidateSorted(TArray<FDetectionCandidate, AllocatorType>& Candidates, AActor* Actor, float DistanceSq, int32 MaxCount)
+    {
+        const int32 InsertIndex = Algo::LowerBoundBy(Candidates, DistanceSq, &FDetectionCandidate::DistanceSq);
+        Candidates.Insert(FDetectionCandidate(Actor, DistanceSq), InsertIndex);
+
+        if (MaxCount > 0 && Candidates.Num() > MaxCount)
+        {
+            Candidates.Pop(false);
+        }
+    }
 }
 
 void ASoldierRts::EvaluateCalculatedDetection()
@@ -494,8 +508,7 @@ void ASoldierRts::EvaluateCalculatedDetection()
                 return;
     }
 
-    TArray<FOverlapResult> Overlaps;
-    Overlaps.Reserve(16);
+    TArray<FOverlapResult, TInlineAllocator<32>> Overlaps;
 
     const FCollisionShape DetectionSphere = FCollisionShape::MakeSphere(MaxDetectionRange);
     FCollisionObjectQueryParams ObjectQueryParams;
@@ -503,67 +516,163 @@ void ASoldierRts::EvaluateCalculatedDetection()
 
     FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SoldierEvaluateCalculatedDetection), false, this);
     QueryParams.bReturnPhysicalMaterial = false;
+    QueryParams.AddIgnoredActor(this);
 
-    World->OverlapMultiByObjectType(Overlaps, SelfLocation, FQuat::Identity, ObjectQueryParams, DetectionSphere, QueryParams);
-
-    TArray<FDetectionCandidate> Candidates;
-    Candidates.Reserve(Overlaps.Num());
-
-    for (const FOverlapResult& Overlap : Overlaps)
+    if (!World->OverlapMultiByObjectType(Overlaps, SelfLocation, FQuat::Identity, ObjectQueryParams, DetectionSphere, QueryParams))
     {
-        AActor* CandidateActor = Overlap.GetActor();
-        if (CandidateActor == nullptr || CandidateActor == this)
-                        continue;
-
-        if (!IsValidSelectableActor(CandidateActor))
-                        continue;
-
-        const float DistanceSq = FVector::DistSquared(SelfLocation, CandidateActor->GetActorLocation());
-        const bool bWithinEnemyRange = DistanceSq <= EnemyRangeSq;
-        const bool bWithinAllyRange = DistanceSq <= AllyRangeSq;
-
-        if (!bWithinEnemyRange && !bWithinAllyRange)
-                        continue;
-
-        if (bWithinEnemyRange && IsEnemyActor(CandidateActor))
-        {
-                        Candidates.Emplace(CandidateActor, DistanceSq, true);
-                        continue;
-        }
-
-        if (bWithinAllyRange && IsFriendlyActor(CandidateActor))
-                        Candidates.Emplace(CandidateActor, DistanceSq, false);
+        TArray<AActor*> EmptyEnemies;
+        TArray<AActor*> EmptyAllies;
+        ProcessDetectionResults(MoveTemp(EmptyEnemies), MoveTemp(EmptyAllies));
+        return;
     }
 
-    if (DetectionSettings.bPrioritizeClosestTargets)
-    {
-        Candidates.Sort([](const FDetectionCandidate& Lhs, const FDetectionCandidate& Rhs)
-        {
-            return Lhs.DistanceSq < Rhs.DistanceSq;
-        });
-    }
+    const bool bPrioritizeClosestTargets = DetectionSettings.bPrioritizeClosestTargets;
+    const int32 EnemyLimit = DetectionSettings.MaxEnemiesTracked;
+    const int32 AllyLimit = DetectionSettings.MaxAlliesTracked;
+    const bool bUnlimitedEnemies = EnemyLimit <= 0;
+    const bool bUnlimitedAllies = AllyLimit <= 0;
+    const int32 EnemyReserve = bUnlimitedEnemies ? Overlaps.Num() : FMath::Min(Overlaps.Num(), EnemyLimit);
+    const int32 AllyReserve = bUnlimitedAllies ? Overlaps.Num() : FMath::Min(Overlaps.Num(), AllyLimit);
 
     TArray<AActor*> NewEnemies;
     TArray<AActor*> NewAllies;
 
-    const int32 MaxEnemies = DetectionSettings.MaxEnemiesTracked > 0 ? DetectionSettings.MaxEnemiesTracked : TNumericLimits<int32>::Max();
-    const int32 MaxAllies = DetectionSettings.MaxAlliesTracked > 0 ? DetectionSettings.MaxAlliesTracked : TNumericLimits<int32>::Max();
-
-    for (const FDetectionCandidate& Candidate : Candidates)
+    if (bPrioritizeClosestTargets)
     {
-        if (Candidate.bIsEnemy)
-        {
-            if (NewEnemies.Num() >= MaxEnemies)
-				continue;
+        TArray<FDetectionCandidate, TInlineAllocator<32>> EnemyCandidates;
+        TArray<FDetectionCandidate, TInlineAllocator<32>> AllyCandidates;
+        EnemyCandidates.Reserve(EnemyReserve);
+        AllyCandidates.Reserve(AllyReserve);
+        const bool bCapEnemies = EnemyLimit > 0;
+        const bool bCapAllies = AllyLimit > 0;
 
+        for (const FOverlapResult& Overlap : Overlaps)
+        {
+            AActor* CandidateActor = Overlap.GetActor();
+            if (CandidateActor == nullptr || CandidateActor == this)
+            {
+                continue;
+            }
+
+            if (!IsValidSelectableActor(CandidateActor))
+            {
+                continue;
+            }
+
+            const float DistanceSq = FVector::DistSquared(SelfLocation, CandidateActor->GetActorLocation());
+            const bool bWithinEnemyRange = DistanceSq <= EnemyRangeSq;
+            const bool bWithinAllyRange = DistanceSq <= AllyRangeSq;
+
+            if (!bWithinEnemyRange && !bWithinAllyRange)
+            {
+                continue;
+            }
+
+            const ETeams CandidateTeam = ISelectable::Execute_GetCurrentTeam(CandidateActor);
+            if (bWithinEnemyRange && CandidateTeam != CurrentTeam)
+            {
+                if (bCapEnemies)
+                {
+                    if (EnemyCandidates.Num() >= EnemyLimit && DistanceSq >= EnemyCandidates.Last().DistanceSq)
+                    {
+                        continue;
+                    }
+
+                    InsertCandidateSorted(EnemyCandidates, CandidateActor, DistanceSq, EnemyLimit);
+                }
+                else
+                {
+                    EnemyCandidates.Emplace(CandidateActor, DistanceSq);
+                }
+            }
+            else if (bWithinAllyRange && CandidateTeam == CurrentTeam)
+            {
+                if (bCapAllies)
+                {
+                    if (AllyCandidates.Num() >= AllyLimit && DistanceSq >= AllyCandidates.Last().DistanceSq)
+                    {
+                        continue;
+                    }
+
+                    InsertCandidateSorted(AllyCandidates, CandidateActor, DistanceSq, AllyLimit);
+                }
+                else
+                {
+                    AllyCandidates.Emplace(CandidateActor, DistanceSq);
+                }
+            }
+        }
+
+        if (!bCapEnemies && EnemyCandidates.Num() > 1)
+        {
+            Algo::SortBy(EnemyCandidates, &FDetectionCandidate::DistanceSq);
+        }
+
+        if (!bCapAllies && AllyCandidates.Num() > 1)
+        {
+            Algo::SortBy(AllyCandidates, &FDetectionCandidate::DistanceSq);
+        }
+
+        NewEnemies.Reserve(EnemyCandidates.Num());
+        for (const FDetectionCandidate& Candidate : EnemyCandidates)
+        {
             NewEnemies.Add(Candidate.Actor);
         }
-        else
-        {
-            if (NewAllies.Num() >= MaxAllies)
-				continue;
 
+        NewAllies.Reserve(AllyCandidates.Num());
+        for (const FDetectionCandidate& Candidate : AllyCandidates)
+        {
             NewAllies.Add(Candidate.Actor);
+        }
+    }
+    else
+    {
+        NewEnemies.Reserve(EnemyReserve);
+        NewAllies.Reserve(AllyReserve);
+
+        for (const FOverlapResult& Overlap : Overlaps)
+        {
+            AActor* CandidateActor = Overlap.GetActor();
+            if (CandidateActor == nullptr || CandidateActor == this)
+            {
+                continue;
+            }
+
+            if (!IsValidSelectableActor(CandidateActor))
+            {
+                continue;
+            }
+
+            const float DistanceSq = FVector::DistSquared(SelfLocation, CandidateActor->GetActorLocation());
+            const bool bWithinEnemyRange = DistanceSq <= EnemyRangeSq;
+            const bool bWithinAllyRange = DistanceSq <= AllyRangeSq;
+
+            if (!bWithinEnemyRange && !bWithinAllyRange)
+            {
+                continue;
+            }
+
+            const ETeams CandidateTeam = ISelectable::Execute_GetCurrentTeam(CandidateActor);
+            if (bWithinEnemyRange && CandidateTeam != CurrentTeam)
+            {
+                if (bUnlimitedEnemies || NewEnemies.Num() < EnemyLimit)
+                {
+                    NewEnemies.Add(CandidateActor);
+                }
+            }
+            else if (bWithinAllyRange && CandidateTeam == CurrentTeam)
+            {
+                if (bUnlimitedAllies || NewAllies.Num() < AllyLimit)
+                {
+                    NewAllies.Add(CandidateActor);
+                }
+            }
+
+            if (!bUnlimitedEnemies && !bUnlimitedAllies &&
+                NewEnemies.Num() >= EnemyLimit && NewAllies.Num() >= AllyLimit)
+            {
+                break;
+            }
         }
     }
 
@@ -572,39 +681,38 @@ void ASoldierRts::EvaluateCalculatedDetection()
 
 void ASoldierRts::ProcessDetectionResults(TArray<AActor*>&& NewEnemies, TArray<AActor*>&& NewAllies)
 {
-    TArray<AActor*> PreviousEnemies = ActorsInRange;
+    TArray<AActor*> PreviousEnemies = MoveTemp(ActorsInRange);
 
     ActorsInRange = MoveTemp(NewEnemies);
     AllyInRange = MoveTemp(NewAllies);
 
     if (DetectionSettings.bDebugDrawDetection)
-		DrawAttackDebug(ActorsInRange, AllyInRange);
+                DrawAttackDebug(ActorsInRange, AllyInRange);
 
-    TSet<AActor*> PreviousEnemySet;
+    if (PreviousEnemies.Num() == 0 && ActorsInRange.Num() == 0)
+                return;
+
+    TSet<AActor*, DefaultKeyFuncs<AActor*>, TInlineSetAllocator<8>> PreviousEnemySet;
     PreviousEnemySet.Reserve(PreviousEnemies.Num());
     for (AActor* PrevEnemy : PreviousEnemies)
     {
         if (PrevEnemy)
-			PreviousEnemySet.Add(PrevEnemy);
+                        PreviousEnemySet.Add(PrevEnemy);
     }
 
-    TSet<AActor*> CurrentEnemySet;
-    CurrentEnemySet.Reserve(ActorsInRange.Num());
     for (AActor* Enemy : ActorsInRange)
     {
         if (!Enemy)
-			continue;
+                        continue;
 
-        CurrentEnemySet.Add(Enemy);
-
-        if (!PreviousEnemySet.Contains(Enemy))
-			HandleAutoEngage(Enemy);
+        if (PreviousEnemySet.Remove(Enemy) == 0)
+                        HandleAutoEngage(Enemy);
     }
 
-    for (AActor* PrevEnemy : PreviousEnemies)
+    for (AActor* PrevEnemy : PreviousEnemySet)
     {
-        if (PrevEnemy && !CurrentEnemySet.Contains(PrevEnemy))
-			HandleTargetRemoval(PrevEnemy);
+        if (PrevEnemy)
+                        HandleTargetRemoval(PrevEnemy);
     }
 }
 
