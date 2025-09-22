@@ -4,15 +4,19 @@
 #include "Components/SphereComponent.h"
 #include "Components/WeaponMaster.h"
 #include "DrawDebugHelpers.h"
+#include "JupiterGameState.h"
 #include "Containers/Set.h"
 #include "Engine/EngineTypes.h"
-#include "EngineUtils.h"
+#include "Components/SoldierManagerComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
 
 // ------------------- Setup ---------------------
 #pragma region Setup
+
+class AJupiterGameState;
 
 ASoldierRts::ASoldierRts(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -44,14 +48,14 @@ void ASoldierRts::OnConstruction(const FTransform& Transform)
     Super::OnConstruction(Transform);
 
     AIControllerClass = AiControllerRtsClass;
-    ConfigureDetectionComponent();
 }
 
 void ASoldierRts::BeginPlay()
 {
     Super::BeginPlay();
 
-    ConfigureDetectionComponent();
+	GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ASoldierRts::TryRegisterPrompt);
+
     if (WeaponClass && CurrentTeam != ETeams::HiveMind)
     {
 		CurrentWeapon = Cast<UWeaponMaster>(AddComponentByClass(*WeaponClass, false, FTransform::Identity, true));
@@ -63,6 +67,18 @@ void ASoldierRts::BeginPlay()
 	}
 }
 
+void ASoldierRts::TryRegisterPrompt()
+{
+	if (GetOwner()->GetNetMode() == NM_DedicatedServer)
+		return;
+	
+	if (AJupiterGameState* GS = GetWorld()->GetGameState<AJupiterGameState>())
+		SoldierManager = GS->GetSoldierManager();
+
+	if (SoldierManager)
+		SoldierManager->RegisterSoldier(this);
+}
+
 void ASoldierRts::Destroyed()
 {
     Super::Destroyed();
@@ -72,6 +88,17 @@ void ASoldierRts::Destroyed()
         if (ASoldierRts* SoldierRts = Cast<ASoldierRts>(Soldier))
                 SoldierRts->UpdateActorsInArea();
     }
+}
+
+void ASoldierRts::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (USoldierManagerComponent* Manager = PC->FindComponentByClass<USoldierManagerComponent>())
+			Manager->UnregisterSoldier(this);
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 #if WITH_EDITOR
@@ -144,8 +171,6 @@ void ASoldierRts::Tick(float DeltaSeconds)
         bIsMoving = false;
         EndWalkingEvent_Delegate.Broadcast();
     }
-
-    UpdateAttackDetection(DeltaSeconds);
 }
 
 
@@ -435,104 +460,7 @@ bool ASoldierRts::IsEnemyActor(AActor* Actor) const
     return IsValidSelectableActor(Actor) && ISelectable::Execute_GetCurrentTeam(Actor) != CurrentTeam;
 }
 
-void ASoldierRts::UpdateAttackDetection(float DeltaSeconds)
-{
-    if (!bCanAttack || ShouldUseComponentDetection())
-		return;
-
-    if (!HasAuthority())
-		return;
-
-    if (!ensure(DetectionSettings.RefreshInterval > KINDA_SMALL_NUMBER))
-		return;
-
-    DetectionElapsedTime += DeltaSeconds;
-    if (DetectionElapsedTime < DetectionSettings.RefreshInterval)
-		return;
-
-    DetectionElapsedTime = 0.f;
-    EvaluateCalculatedDetection();
-}
-
-namespace
-{
-    struct FDetectionCandidate
-    {
-        FDetectionCandidate() = default;
-        FDetectionCandidate(AActor* InActor, float InDistSq, bool bInEnemy)
-            : Actor(InActor)
-            , DistanceSq(InDistSq)
-            , bIsEnemy(bInEnemy) {}
-
-        AActor* Actor = nullptr;
-        float DistanceSq = 0.f;
-        bool bIsEnemy = false;
-    };
-}
-
-void ASoldierRts::EvaluateCalculatedDetection()
-{
-    const FVector SelfLocation = GetActorLocation();
-    const float EnemyRangeSq = FMath::Square(AttackRange);
-    const float AllyRangeSq = FMath::Square(AllyDetectionRange);
-
-    TArray<FDetectionCandidate> Candidates;
-
-    for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-    {
-        AActor* CandidateActor = *It;
-        if (CandidateActor == nullptr || CandidateActor == this)
-			continue;
-
-        if (!IsValidSelectableActor(CandidateActor))
-			continue;
-
-        const float DistanceSq = FVector::DistSquared(SelfLocation, CandidateActor->GetActorLocation());
-        const bool bIsEnemy = IsEnemyActor(CandidateActor);
-        const bool bIsFriendly = !bIsEnemy && IsFriendlyActor(CandidateActor);
-
-        if (bIsEnemy && DistanceSq <= EnemyRangeSq)
-			Candidates.Emplace(CandidateActor, DistanceSq, true);
-        else if (bIsFriendly && DistanceSq <= AllyRangeSq)
-			Candidates.Emplace(CandidateActor, DistanceSq, false);
-    }
-
-    if (DetectionSettings.bPrioritizeClosestTargets)
-    {
-        Candidates.Sort([](const FDetectionCandidate& Lhs, const FDetectionCandidate& Rhs)
-        {
-            return Lhs.DistanceSq < Rhs.DistanceSq;
-        });
-    }
-
-    TArray<AActor*> NewEnemies;
-    TArray<AActor*> NewAllies;
-
-    const int32 MaxEnemies = DetectionSettings.MaxEnemiesTracked > 0 ? DetectionSettings.MaxEnemiesTracked : TNumericLimits<int32>::Max();
-    const int32 MaxAllies = DetectionSettings.MaxAlliesTracked > 0 ? DetectionSettings.MaxAlliesTracked : TNumericLimits<int32>::Max();
-
-    for (const FDetectionCandidate& Candidate : Candidates)
-    {
-        if (Candidate.bIsEnemy)
-        {
-            if (NewEnemies.Num() >= MaxEnemies)
-				continue;
-
-            NewEnemies.Add(Candidate.Actor);
-        }
-        else
-        {
-            if (NewAllies.Num() >= MaxAllies)
-				continue;
-
-            NewAllies.Add(Candidate.Actor);
-        }
-    }
-
-    ProcessDetectionResults(MoveTemp(NewEnemies), MoveTemp(NewAllies));
-}
-
-void ASoldierRts::ProcessDetectionResults(TArray<AActor*>&& NewEnemies, TArray<AActor*>&& NewAllies)
+void ASoldierRts::ProcessDetectionResults(TArray<AActor*> NewEnemies, TArray<AActor*> NewAllies)
 {
     TArray<AActor*> PreviousEnemies = ActorsInRange;
 
@@ -738,6 +666,11 @@ void ASoldierRts::NotifyAlliesOfThreat(AActor* Threat, const FCommandData& Comma
 float ASoldierRts::GetAttackRange() const
 {
 	return AttackRange;
+}
+
+float ASoldierRts::GetAllyDetectionRange() const
+{
+	return AllyDetectionRange;
 }
 
 float ASoldierRts::GetAttackCooldown() const
