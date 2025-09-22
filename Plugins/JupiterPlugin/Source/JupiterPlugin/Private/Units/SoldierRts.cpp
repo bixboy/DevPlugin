@@ -1,6 +1,7 @@
 ﻿#include "JupiterPlugin/Public/Units/SoldierRts.h"
 #include "Units/AI/AiControllerRts.h"
 #include "Components/CommandComponent.h"
+#include "Components/SoldierManagerComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/WeaponMaster.h"
 #include "DrawDebugHelpers.h"
@@ -56,13 +57,32 @@ void ASoldierRts::BeginPlay()
     ConfigureDetectionComponent();
     if (WeaponClass && CurrentTeam != ETeams::HiveMind)
     {
-		CurrentWeapon = Cast<UWeaponMaster>(AddComponentByClass(*WeaponClass, false, FTransform::Identity, true));
-		if (CurrentWeapon)
-		{
-			CurrentWeapon->SetAiOwner(this);
-			HaveWeapon = true;
-		}
-	}
+                CurrentWeapon = Cast<UWeaponMaster>(AddComponentByClass(*WeaponClass, false, FTransform::Identity, true));
+                if (CurrentWeapon)
+                {
+                        CurrentWeapon->SetAiOwner(this);
+                        HaveWeapon = true;
+                }
+        }
+
+    if (HasAuthority())
+    {
+        TryRegisterWithManager();
+    }
+}
+
+void ASoldierRts::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (USoldierManagerComponent* Manager = SoldierManager.Get())
+    {
+        Manager->UnregisterSoldier(this);
+    }
+    else
+    {
+        SoldierManager.Reset();
+    }
+
+    Super::EndPlay(EndPlayReason);
 }
 
 void ASoldierRts::Destroyed()
@@ -88,7 +108,7 @@ void ASoldierRts::PossessedBy(AController* NewController)
 {
     Super::PossessedBy(NewController);
 
-	if (HasAuthority())
+        if (HasAuthority())
 	{
 		AAiControllerRts* ControllerAi = Cast<AAiControllerRts>(NewController);
 		if (CommandComp && ControllerAi)
@@ -97,8 +117,13 @@ void ASoldierRts::PossessedBy(AController* NewController)
 			SetAIController(ControllerAi);
 
 			ControllerAi->OnStartAttack.AddDynamic(this, &ASoldierRts::OnStartAttack);
-		}	
-	}
+                }
+        }
+
+    if (HasAuthority())
+    {
+        TryRegisterWithManager();
+    }
 }
 
 auto ASoldierRts::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const -> void
@@ -126,7 +151,12 @@ AAiControllerRts* ASoldierRts::GetAiController() const
 
 UCommandComponent* ASoldierRts::GetCommandComponent() const
 {
-	return CommandComp;
+        return CommandComp;
+}
+
+USoldierManagerComponent* ASoldierRts::GetSoldierManager() const
+{
+    return SoldierManager.Get();
 }
 
 #pragma endregion
@@ -134,7 +164,7 @@ UCommandComponent* ASoldierRts::GetCommandComponent() const
 
 void ASoldierRts::Tick(float DeltaSeconds)
 {
-	Super::Tick(DeltaSeconds);
+        Super::Tick(DeltaSeconds);
 
     if(GetCharacterMovement()->Velocity.Length() != 0 && !bIsMoving)
     {
@@ -147,7 +177,25 @@ void ASoldierRts::Tick(float DeltaSeconds)
         EndWalkingEvent_Delegate.Broadcast();
     }
 
-    UpdateAttackDetection(DeltaSeconds);
+    if (HasAuthority())
+    {
+        if (USoldierManagerComponent* Manager = SoldierManager.Get())
+        {
+            ManagerRegistrationElapsedTime = 0.0f;
+        }
+        else
+        {
+            constexpr float ManagerRetryInterval = 0.5f;
+            ManagerRegistrationElapsedTime += DeltaSeconds;
+            if (ManagerRegistrationElapsedTime >= ManagerRetryInterval)
+            {
+                TryRegisterWithManager();
+                ManagerRegistrationElapsedTime = 0.0f;
+            }
+
+            UpdateAttackDetection(DeltaSeconds);
+        }
+    }
 }
 
 
@@ -760,7 +808,7 @@ bool ASoldierRts::ShouldUseComponentDetection() const
 void ASoldierRts::ConfigureDetectionComponent()
 {
     if (!AreaAttack)
-		return;
+                return;
 
     AreaAttack->SetSphereRadius(AttackRange);
     if (AllyDetectionArea)
@@ -791,6 +839,36 @@ void ASoldierRts::ConfigureDetectionComponent()
     }
 
     DetectionElapsedTime = 0.f;
+}
+
+void ASoldierRts::TryRegisterWithManager()
+{
+    if (!HasAuthority() || SoldierManager.IsValid())
+                return;
+
+    if (USoldierManagerComponent* Manager = USoldierManagerComponent::GetSoldierManager(this))
+    {
+        Manager->RegisterSoldier(this);
+    }
+}
+
+void ASoldierRts::OnSoldierManagerRegistered(USoldierManagerComponent* InManager)
+{
+    if (!InManager)
+                return;
+
+    SoldierManager = InManager;
+    ManagerRegistrationElapsedTime = 0.0f;
+}
+
+void ASoldierRts::OnSoldierManagerUnregistered(USoldierManagerComponent* InManager)
+{
+    if (SoldierManager.Get() == InManager)
+    {
+        SoldierManager.Reset();
+    }
+
+    ManagerRegistrationElapsedTime = 0.0f;
 }
 
 bool ASoldierRts::ShouldAutoEngage() const

@@ -63,6 +63,7 @@ class UCommandComponent;
 class AAiControllerRts;
 class UCharacterMovementComponent;
 class APlayerControllerRts;
+class USoldierManagerComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FActionEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FBehaviorUpdatedDelegate);
@@ -71,23 +72,31 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSelectedDelegate, bool, bIsSelected
 UCLASS(Blueprintable)
 class JUPITERPLUGIN_API ASoldierRts : public ACharacter, public ISelectable, public IDamageable
 {
-	GENERATED_BODY()
+        GENERATED_BODY()
 
 public:
-	ASoldierRts(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
-	
-	virtual void BeginPlay() override;
+        friend class USoldierManagerComponent;
 
-	virtual void Tick(float DeltaSeconds) override;
+        ASoldierRts(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	
-	virtual void PossessedBy(AController* NewController) override;
+        virtual void BeginPlay() override;
+
+        virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+        virtual void Tick(float DeltaSeconds) override;
+
+        virtual void PossessedBy(AController* NewController) override;
 
 	virtual FCommandData GetCurrentCommand_Implementation() override;
 
-	UFUNCTION(BlueprintCallable, BlueprintPure)
-	UCommandComponent* GetCommandComponent() const;
+        UFUNCTION(BlueprintCallable, BlueprintPure)
+        UCommandComponent* GetCommandComponent() const;
 
-	
+        /** Returns the centralized soldier manager assigned to this unit, if any. */
+        UFUNCTION(BlueprintCallable, BlueprintPure)
+        USoldierManagerComponent* GetSoldierManager() const;
+
+
 protected:
         UFUNCTION()
         virtual void OnConstruction(const FTransform& Transform) override;
@@ -253,6 +262,9 @@ protected:
         void DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const TArray<AActor*>& DetectedAllies) const;
         bool ShouldUseComponentDetection() const;
         void ConfigureDetectionComponent();
+        void TryRegisterWithManager();
+        void OnSoldierManagerRegistered(USoldierManagerComponent* InManager);
+        void OnSoldierManagerUnregistered(USoldierManagerComponent* InManager);
 
 private:
         bool IsValidSelectableActor(const AActor* Actor) const;
@@ -303,8 +315,15 @@ private:
         UPROPERTY()
         TArray<AActor*> AllyInRange;
 
-	UPROPERTY()
-	FBehaviorUpdatedDelegate OnBehaviorUpdate;
+        UPROPERTY()
+        FBehaviorUpdatedDelegate OnBehaviorUpdate;
+
+        /** Weak reference to the centralized manager responsible for this soldier's updates. */
+        UPROPERTY(Transient)
+        TWeakObjectPtr<USoldierManagerComponent> SoldierManager;
+
+        /** Accumulated time used to throttle manager registration attempts. */
+        float ManagerRegistrationElapsedTime = 0.0f;
 
 #pragma endregion
 
