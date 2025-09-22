@@ -6,7 +6,8 @@
 #include "DrawDebugHelpers.h"
 #include "Containers/Set.h"
 #include "Engine/EngineTypes.h"
-#include "EngineUtils.h"
+#include "CollisionQueryParams.h"
+#include "CollisionShape.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 
@@ -476,29 +477,62 @@ namespace
 
 void ASoldierRts::EvaluateCalculatedDetection()
 {
+    UWorld* World = GetWorld();
+    if (!World)
+                return;
+
     const FVector SelfLocation = GetActorLocation();
     const float EnemyRangeSq = FMath::Square(AttackRange);
     const float AllyRangeSq = FMath::Square(AllyDetectionRange);
+    const float MaxDetectionRange = FMath::Max(AttackRange, AllyDetectionRange);
+
+    if (MaxDetectionRange <= KINDA_SMALL_NUMBER)
+    {
+                TArray<AActor*> EmptyEnemies;
+                TArray<AActor*> EmptyAllies;
+                ProcessDetectionResults(MoveTemp(EmptyEnemies), MoveTemp(EmptyAllies));
+                return;
+    }
+
+    TArray<FOverlapResult> Overlaps;
+    Overlaps.Reserve(16);
+
+    const FCollisionShape DetectionSphere = FCollisionShape::MakeSphere(MaxDetectionRange);
+    FCollisionObjectQueryParams ObjectQueryParams;
+    ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+
+    FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SoldierEvaluateCalculatedDetection), false, this);
+    QueryParams.bReturnPhysicalMaterial = false;
+
+    World->OverlapMultiByObjectType(Overlaps, SelfLocation, FQuat::Identity, ObjectQueryParams, DetectionSphere, QueryParams);
 
     TArray<FDetectionCandidate> Candidates;
+    Candidates.Reserve(Overlaps.Num());
 
-    for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+    for (const FOverlapResult& Overlap : Overlaps)
     {
-        AActor* CandidateActor = *It;
+        AActor* CandidateActor = Overlap.GetActor();
         if (CandidateActor == nullptr || CandidateActor == this)
-			continue;
+                        continue;
 
         if (!IsValidSelectableActor(CandidateActor))
-			continue;
+                        continue;
 
         const float DistanceSq = FVector::DistSquared(SelfLocation, CandidateActor->GetActorLocation());
-        const bool bIsEnemy = IsEnemyActor(CandidateActor);
-        const bool bIsFriendly = !bIsEnemy && IsFriendlyActor(CandidateActor);
+        const bool bWithinEnemyRange = DistanceSq <= EnemyRangeSq;
+        const bool bWithinAllyRange = DistanceSq <= AllyRangeSq;
 
-        if (bIsEnemy && DistanceSq <= EnemyRangeSq)
-			Candidates.Emplace(CandidateActor, DistanceSq, true);
-        else if (bIsFriendly && DistanceSq <= AllyRangeSq)
-			Candidates.Emplace(CandidateActor, DistanceSq, false);
+        if (!bWithinEnemyRange && !bWithinAllyRange)
+                        continue;
+
+        if (bWithinEnemyRange && IsEnemyActor(CandidateActor))
+        {
+                        Candidates.Emplace(CandidateActor, DistanceSq, true);
+                        continue;
+        }
+
+        if (bWithinAllyRange && IsFriendlyActor(CandidateActor))
+                        Candidates.Emplace(CandidateActor, DistanceSq, false);
     }
 
     if (DetectionSettings.bPrioritizeClosestTargets)
