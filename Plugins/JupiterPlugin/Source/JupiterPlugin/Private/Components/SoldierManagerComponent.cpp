@@ -24,32 +24,26 @@ void USoldierManagerComponent::BeginPlay()
 
 void USoldierManagerComponent::RegisterSoldier(ASoldierRts* Soldier)
 {
-	if (!Soldier) return;
-
-	if (!Soldiers.Contains(Soldier))
-		Soldiers.Add(Soldier);
+	AddSoldierInternal(Soldier);
 }
 
+void USoldierManagerComponent::Server_RegisterSoldier_Implementation(ASoldierRts* Soldier)
+{
+	if (AddSoldierInternal(Soldier) && Soldiers.Num() > 0)
+	{
+		SetComponentTickEnabled(true);
+		UpdateSoldierDetections();
+	}
+}
 
 void USoldierManagerComponent::UnregisterSoldier(ASoldierRts* Soldier)
 {
-	if (!Soldier || Soldiers.Contains(Soldier))
-		return;
-	
-	Soldiers.Remove(Soldier);
+	RemoveSoldierInternal(Soldier);
 }
 
 void USoldierManagerComponent::PrintSoldierCount() const
 {
 	UE_LOG(LogTemp, Log, TEXT("SoldierManager: %d soldiers managed"), Soldiers.Num());
-}
-
-void USoldierManagerComponent::Server_RegisterSoldier_Implementation(ASoldierRts* Soldier)
-{
-	if (!Soldier || Soldiers.Contains(Soldier))
-		return;
-	
-	Soldiers.Add(Soldier);
 }
 
 void USoldierManagerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -59,6 +53,18 @@ void USoldierManagerComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	ENetMode Mode = GetOwner()->GetNetMode();
 	if (Mode == NM_Client)
 		return;
+
+	if (!Soldiers.Num() == 0)
+	{
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	if (DetectionInterval <= 0.f)
+	{
+		UpdateSoldierDetections();
+		return;
+	}
 
 	ElapsedTime += DeltaTime;
 	if (ElapsedTime >= DetectionInterval)
@@ -107,5 +113,30 @@ void USoldierManagerComponent::UpdateSoldierDetections()
 
 		Soldier->ProcessDetectionResults(NewEnemies,NewAllies);
 	}
+}
+
+
+bool USoldierManagerComponent::AddSoldierInternal(ASoldierRts* Soldier)
+{
+	if (!Soldier)
+		return false;
+
+	Soldiers.Remove(nullptr);
+
+	if (Soldiers.Contains(Soldier))
+		return false;
+
+	Soldiers.Add(Soldier);
+	return true;
+}
+
+bool USoldierManagerComponent::RemoveSoldierInternal(ASoldierRts* Soldier)
+{
+	if (!Soldier || Soldiers.Contains(Soldier))
+		return false;
+
+	Soldiers.Remove(nullptr);
+
+	return Soldiers.Remove(Soldier) > 0;
 }
 

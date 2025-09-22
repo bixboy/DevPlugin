@@ -19,10 +19,6 @@ struct FAttackDetectionSettings
 {
     GENERATED_BODY()
 
-    /** When enabled the legacy overlap component is used for detection instead of the calculation based approach. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true"))
-    bool bUseComponentOverlap = false;
-
     /** How often the detection should be refreshed when using the calculation based detection. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true", ClampMin = "0.05"))
     float RefreshInterval = 0.25f;
@@ -168,7 +164,7 @@ public:
 	virtual void Highlight(const bool Highlight) override;
 	
 	UFUNCTION()
-	virtual bool GetIsSelected_Implementation();
+	virtual bool GetIsSelected_Implementation() override;
 
 	UPROPERTY()
 	FSelectedDelegate OnSelected;
@@ -238,18 +234,6 @@ public:
 protected:
 
     /*- Function -*/
-    UFUNCTION()
-    void OnAreaAttackBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
-    UFUNCTION()
-    void OnAreaAttackEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-
-    UFUNCTION()
-    void OnAllyDetectionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
-    UFUNCTION()
-    void OnAllyDetectionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-
 	UFUNCTION()
 	virtual void SetBehavior_Implementation(const ECombatBehavior NewBehavior) override;
 
@@ -269,34 +253,26 @@ protected:
         void OnRep_CombatBehavior();
 
         void DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const TArray<AActor*>& DetectedAllies) const;
-        bool ShouldUseComponentDetection() const;
-        void ConfigureDetectionComponent();
 
 private:
-        bool IsValidSelectableActor(const AActor* Actor) const;
-        bool ShouldAutoEngage() const;
-        FCommandData MakeAttackCommand(AActor* Target) const;
-        void IssueAttackOrder(const FCommandData& CommandData);
-        void HandleAutoEngage(AActor* Target);
-        void HandleTargetRemoval(AActor* OtherActor);
-        void NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData);
+    bool IsValidSelectableActor(const AActor* Actor) const;
+    bool ShouldAutoEngage() const;
+    FCommandData MakeAttackCommand(AActor* Target) const;
+    void IssueAttackOrder(const FCommandData& CommandData);
+    void HandleAutoEngage(AActor* Target);
+    void HandleTargetRemoval(AActor* OtherActor);
+    void NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData);
 
 
-        /*- Variables -*/
-        UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-        TObjectPtr<USphereComponent> AreaAttack;
-
-        UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-        TObjectPtr<USphereComponent> AllyDetectionArea;
-
+    /*- Variables -*/
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
 	bool bCanAttack = true;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
 	float AttackCooldown = 1.5f;
 
-        UPROPERTY(EditAnywhere, Category = "Settings|Attack")
-        float AttackRange = 200.f;
+    UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+    float AttackRange = 200.f;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
 	float RangedStopDistance = 200.f;
@@ -304,20 +280,20 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
 	float MeleeStopDistanceFactor = 1.f;
 
-        UPROPERTY(EditAnywhere, Category = "Settings|Attack")
-        float AllyDetectionRange = 200.f;
+    UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+    float AllyDetectionRange = 200.f;
 
-        UPROPERTY(EditAnywhere, Category = "Settings|Attack")
-        FAttackDetectionSettings DetectionSettings;
+    UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+    FAttackDetectionSettings DetectionSettings;
 
-        UPROPERTY()
-        float DetectionElapsedTime = 0.f;
+    UPROPERTY()
+    float DetectionElapsedTime = 0.f;
 
-        UPROPERTY()
-        TArray<AActor*> ActorsInRange;
+    UPROPERTY()
+    TArray<AActor*> ActorsInRange;
 
-        UPROPERTY()
-        TArray<AActor*> AllyInRange;
+    UPROPERTY()
+    TArray<AActor*> AllyInRange;
 
 	UPROPERTY()
 	FBehaviorUpdatedDelegate OnBehaviorUpdate;

@@ -20,7 +20,6 @@ public:
 	UFUNCTION()
 	void UnregisterSoldier(ASoldierRts* Soldier);
 
-
 protected:
 	virtual void BeginPlay() override;
 
@@ -32,14 +31,20 @@ protected:
 		return Soldiers;
 	}
 
-	UFUNCTION(BlueprintCallable, Category="Settinsg")
-	void PrintSoldierCount() const;
-	
 	UFUNCTION(Server, Reliable)
 	void Server_RegisterSoldier(ASoldierRts* Soldier);
 
 	UFUNCTION()
 	void UpdateSoldierDetections();
+
+	UFUNCTION()
+	bool AddSoldierInternal(ASoldierRts* Soldier);
+
+	UFUNCTION()
+	bool RemoveSoldierInternal(ASoldierRts* Soldier);
+
+	UFUNCTION(BlueprintCallable, Category="Settinsg")
+	void PrintSoldierCount() const;
 
 	UPROPERTY()
 	TArray<ASoldierRts*> Soldiers;
