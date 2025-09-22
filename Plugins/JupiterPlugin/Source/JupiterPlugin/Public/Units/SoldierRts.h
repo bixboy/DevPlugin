@@ -1,18 +1,17 @@
-﻿#pragma once
+#pragma once
+
 #include "CoreMinimal.h"
 #include "Data/AiData.h"
 #include "GameFramework/Character.h"
-#include "GameFramework/Pawn.h"
 #include "Interfaces/Damageable.h"
 #include "Interfaces/Selectable.h"
-
-#if WITH_EDITOR
-#include "UObject/UnrealType.h"
-#endif
 
 #include "SoldierRts.generated.h"
 
 class USoldierManagerComponent;
+class UWeaponMaster;
+class UCommandComponent;
+class AAiControllerRts;
 
 USTRUCT(BlueprintType)
 struct FAttackDetectionSettings
@@ -56,13 +55,6 @@ struct FAttackDetectionSettings
     float DebugLineThickness = 1.5f;
 };
 
-class UWeaponMaster;
-class USphereComponent;
-class UCommandComponent;
-class AAiControllerRts;
-class UCharacterMovementComponent;
-class APlayerControllerRts;
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FActionEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FBehaviorUpdatedDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSelectedDelegate, bool, bIsSelected);
@@ -70,189 +62,116 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSelectedDelegate, bool, bIsSelected
 UCLASS(Blueprintable)
 class JUPITERPLUGIN_API ASoldierRts : public ACharacter, public ISelectable, public IDamageable
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	ASoldierRts(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+    ASoldierRts(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	virtual void BeginPlay() override;
-
-	virtual void Tick(float DeltaSeconds) override;
-	
-	virtual void PossessedBy(AController* NewController) override;
-
-	virtual FCommandData GetCurrentCommand_Implementation() override;
-
-	UFUNCTION(BlueprintCallable, BlueprintPure)
-	UCommandComponent* GetCommandComponent() const;
-
-	
-protected:
-    UFUNCTION()
+    // AActor interface
     virtual void OnConstruction(const FTransform& Transform) override;
+    virtual void BeginPlay() override;
+    virtual void Tick(float DeltaSeconds) override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void PossessedBy(AController* NewController) override;
+
+    // ISelectable interface
+    virtual void Select() override;
+    virtual void Deselect() override;
+    virtual void Highlight(bool bHighlight) override;
+    virtual bool GetIsSelected_Implementation() override;
+    virtual void CommandMove_Implementation(FCommandData CommandData) override;
+    virtual FCommandData GetCurrentCommand_Implementation() override;
+    virtual void SetBehavior_Implementation(ECombatBehavior NewBehavior) override;
+    virtual ECombatBehavior GetBehavior_Implementation() override;
+    virtual ETeams GetCurrentTeam_Implementation() override;
+
+    // IDamageable interface
+    virtual void TakeDamage_Implementation(AActor* DamageOwner) override;
+    virtual bool GetIsInAttack_Implementation() override;
+    virtual bool GetCanAttack_Implementation() override;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    UCommandComponent* GetCommandComponent() const;
+
+    UFUNCTION(BlueprintCallable)
+    void SetAIController(AAiControllerRts* AiController);
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    AAiControllerRts* GetAiController() const;
+
+    // Networking helpers
+    UFUNCTION(NetMulticast, Unreliable)
+    void NetMulticast_Unreliable_CallOnStartAttack();
+
+    UFUNCTION(NetMulticast, Unreliable)
+    void NetMulticast_Unreliable_CallOnStartWalking();
+
+    UFUNCTION(NetMulticast, Unreliable)
+    void NetMulticast_Unreliable_CallOnEndWalking();
+
+    // Attack accessors
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    float GetAttackRange() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    float GetAllyDetectionRange() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    float GetAttackCooldown() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    float GetRangedStopDistance() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    float GetMeleeStopDistanceFactor() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    ECombatBehavior GetCombatBehavior() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    bool IsFriendlyActor(AActor* Actor) const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    bool IsEnemyActor(AActor* Actor) const;
+
     UFUNCTION()
-    virtual void Destroyed() override;
-	UFUNCTION()
-	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
+    void ProcessDetectionResults(TArray<AActor*> NewEnemies, TArray<AActor*> NewAllies);
 
-	UFUNCTION()
-	void TryRegisterPrompt();
+    // Weapon helpers
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    UWeaponMaster* GetCurrentWeapon();
 
-#if WITH_EDITOR
-    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-#endif
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-	TObjectPtr<UCommandComponent> CommandComp;
+    UFUNCTION(BlueprintCallable, BlueprintPure)
+    bool GetHaveWeapon();
 
-	UPROPERTY()
-	bool bIsMoving;
+    // Delegates
+    UPROPERTY(BlueprintAssignable)
+    FActionEvent AttackEvent_Delegate;
 
-	UPROPERTY()
-	USoldierManagerComponent* SoldierManager;
-	
-public:
-	UPROPERTY(BlueprintAssignable)
-	FActionEvent AttackEvent_Delegate;
+    UPROPERTY(BlueprintAssignable)
+    FActionEvent StartWalkingEvent_Delegate;
 
-	UPROPERTY(BlueprintAssignable)
-	FActionEvent StartWalkingEvent_Delegate;
-	
-	UPROPERTY(BlueprintAssignable)
-	FActionEvent EndWalkingEvent_Delegate;
+    UPROPERTY(BlueprintAssignable)
+    FActionEvent EndWalkingEvent_Delegate;
 
+    UPROPERTY(BlueprintAssignable)
+    FSelectedDelegate OnSelected;
 
-#pragma region Net Functions
+    UPROPERTY()
+    FBehaviorUpdatedDelegate OnBehaviorUpdate;
 
-	UFUNCTION(NetMulticast, Unreliable)
-	void NetMulticast_Unreliable_CallOnStartAttack();
-
-	UFUNCTION(NetMulticast, Unreliable)
-	void NetMulticast_Unreliable_CallOnStartWalking();
-
-	UFUNCTION(NetMulticast, Unreliable)
-	void NetMulticast_Unreliable_CallOnEndWalking();
-
-#pragma endregion	
-	
-// AI controller
-#pragma region AI Controller
-	
-public:
-	UFUNCTION()
-	void SetAIController(AAiControllerRts* AiController);
-	
-	UFUNCTION(BlueprintCallable, BlueprintPure)
-	AAiControllerRts* GetAiController() const;
-	
 protected:
-	UPROPERTY()
-	TObjectPtr<AAiControllerRts> AIController;
-	
-	UPROPERTY(EditAnywhere, Category = "Settings|DefaultValue")
-	TSubclassOf<AAiControllerRts> AiControllerRtsClass;
+    void TryRegisterPrompt();
 
-#pragma endregion	
+    UFUNCTION()
+    void OnStartAttack(AActor* Target);
 
-// Selection	
-#pragma region Selection
-	
-public:
-	/*- Function -*/
-	virtual void Select() override;
-	virtual void Deselect() override;
-	virtual void Highlight(const bool Highlight) override;
-	
-	UFUNCTION()
-	virtual bool GetIsSelected_Implementation() override;
+    void UpdateActorsInArea();
 
-	UPROPERTY()
-	FSelectedDelegate OnSelected;
-	
-protected:
-        /*- Variables -*/
-        UPROPERTY()
-        bool Selected;
+    UFUNCTION()
+    void OnRep_CombatBehavior();
 
-        UPROPERTY()
-        TObjectPtr<APlayerControllerRts> PlayerOwner;
-
-        /** Custom depth stencil value applied when the unit is highlighted. */
-        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection", meta = (ClampMin = "0", ClampMax = "255"))
-        int32 SelectionStencilValue = 1;
-
-#pragma endregion
-
-// Movement	
-#pragma region Movement
-public:
-	UFUNCTION()
-	virtual void CommandMove_Implementation(FCommandData CommandData) override;
-
-#pragma endregion	
-
-// Attack
-#pragma region Attack
-
-public:
-	
-	/*- Interface -*/
-	virtual void TakeDamage_Implementation(AActor* DamageOwner) override;
-	
-	virtual bool GetIsInAttack_Implementation() override;
-
-	virtual bool GetCanAttack_Implementation() override;
-	
-	/*- Getter -*/
-	UFUNCTION()
-	float GetAttackRange() const;
-
-	UFUNCTION()
-	float GetAllyDetectionRange() const;
-
-	UFUNCTION()
-	float GetAttackCooldown() const;
-
-	UFUNCTION()
-	bool IsFriendlyActor(AActor* Actor) const;
-
-	UFUNCTION()
-	bool IsEnemyActor(AActor* Actor) const;
-
-	UFUNCTION()
-	ECombatBehavior GetCombatBehavior() const;
-
-	UFUNCTION()
-	float GetRangedStopDistance() const;
-
-	UFUNCTION()
-	float GetMeleeStopDistanceFactor() const;
-
-	UFUNCTION()
-	void ProcessDetectionResults(TArray<AActor*> NewEnemies, TArray<AActor*> NewAllies);
-	
-protected:
-
-    /*- Function -*/
-	UFUNCTION()
-	virtual void SetBehavior_Implementation(const ECombatBehavior NewBehavior) override;
-
-	UFUNCTION()
-	virtual ECombatBehavior GetBehavior_Implementation() override;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Attack", ReplicatedUsing = OnRep_CombatBehavior)
-	ECombatBehavior CombatBehavior = ECombatBehavior::Passive;
-
-	UFUNCTION()
-	virtual void OnStartAttack(AActor* Target);
-
-        UFUNCTION()
-        void UpdateActorsInArea();
-
-        UFUNCTION()
-        void OnRep_CombatBehavior();
-
-        void DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const TArray<AActor*>& DetectedAllies) const;
+    void DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const TArray<AActor*>& DetectedAllies) const;
 
 private:
     bool IsValidSelectableActor(const AActor* Actor) const;
@@ -263,22 +182,46 @@ private:
     void HandleTargetRemoval(AActor* OtherActor);
     void NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData);
 
+    // Components and references
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UCommandComponent> CommandComp;
 
-    /*- Variables -*/
-	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
-	bool bCanAttack = true;
+    UPROPERTY()
+    TObjectPtr<AAiControllerRts> AIController = nullptr;
 
-	UPROPERTY(EditAnywhere, Category = "Settings|Attack")
-	float AttackCooldown = 1.5f;
+    UPROPERTY()
+    TObjectPtr<USoldierManagerComponent> SoldierManager = nullptr;
+
+    // Selection state
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection", meta = (ClampMin = "0", ClampMax = "255", AllowPrivateAccess = "true"))
+    int32 SelectionStencilValue = 1;
+
+    UPROPERTY()
+    bool bIsSelected = false;
+
+    // Movement state
+    UPROPERTY()
+    bool bIsMoving = false;
+
+    // AI configuration
+    UPROPERTY(EditAnywhere, Category = "Settings|DefaultValue")
+    TSubclassOf<AAiControllerRts> AiControllerRtsClass;
+
+    // Attack configuration
+    UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+    bool bCanAttack = true;
+
+    UPROPERTY(EditAnywhere, Category = "Settings|Attack")
+    float AttackCooldown = 1.5f;
 
     UPROPERTY(EditAnywhere, Category = "Settings|Attack")
     float AttackRange = 200.f;
 
-	UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
-	float RangedStopDistance = 200.f;
+    UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
+    float RangedStopDistance = 200.f;
 
-	UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
-	float MeleeStopDistanceFactor = 1.f;
+    UPROPERTY(EditAnywhere, Category = "Settings|Attack", meta = (ClampMin = "0.0"))
+    float MeleeStopDistanceFactor = 1.f;
 
     UPROPERTY(EditAnywhere, Category = "Settings|Attack")
     float AllyDetectionRange = 200.f;
@@ -286,8 +229,8 @@ private:
     UPROPERTY(EditAnywhere, Category = "Settings|Attack")
     FAttackDetectionSettings DetectionSettings;
 
-    UPROPERTY()
-    float DetectionElapsedTime = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Attack", ReplicatedUsing = OnRep_CombatBehavior)
+    ECombatBehavior CombatBehavior = ECombatBehavior::Passive;
 
     UPROPERTY()
     TArray<AActor*> ActorsInRange;
@@ -295,42 +238,17 @@ private:
     UPROPERTY()
     TArray<AActor*> AllyInRange;
 
-	UPROPERTY()
-	FBehaviorUpdatedDelegate OnBehaviorUpdate;
+    // Team configuration
+    UPROPERTY(EditAnywhere, Category = "Settings|Team")
+    ETeams CurrentTeam = ETeams::Clone;
 
-#pragma endregion
+    // Weapons
+    UPROPERTY(EditAnywhere, Category = "Settings|Weapons")
+    TSubclassOf<UWeaponMaster> WeaponClass;
 
-// Team	
-#pragma region Team
-public:
-	UFUNCTION(BlueprintCallable)
-	virtual ETeams GetCurrentTeam_Implementation() override;
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = "true"))
+    UWeaponMaster* CurrentWeapon = nullptr;
 
-protected:
-	UPROPERTY(EditAnywhere, Category = "Settings|Team")
-	ETeams CurrentTeam = ETeams::Clone;
-
-#pragma endregion
-
-// Weapons
-#pragma region Weapons
-	
-public:
-	UFUNCTION()
-	UWeaponMaster* GetCurrentWeapon();
-	
-	UFUNCTION()
-	bool GetHaveWeapon();
-	
-protected:
-	UPROPERTY(EditAnywhere, Category = "Settings|Weapons")
-	TSubclassOf<UWeaponMaster> WeaponClass;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-	UWeaponMaster* CurrentWeapon;
-	
-	UPROPERTY(BlueprintReadWrite)
-	bool HaveWeapon;
-
-#pragma endregion
+    UPROPERTY(BlueprintReadWrite, Category = "Settings|Weapons", meta = (AllowPrivateAccess = "true"))
+    bool bHasWeapon = false;
 };
