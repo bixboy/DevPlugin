@@ -6,15 +6,35 @@
 #include "Components/ScaleBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Styling/SlateBrush.h"
+#include "Misc/EngineVersionComparison.h"
 
 namespace
 {
+        void SetBrushCornerRadius(FSlateBrush& Brush, const FMargin& CornerRadius)
+        {
+#if UE_VERSION_NEWER_THAN(5, 3, 0)
+                Brush.OutlineSettings.CornerRadii = FVector4(CornerRadius.Left, CornerRadius.Top, CornerRadius.Right, CornerRadius.Bottom);
+#else
+                Brush.OutlineSettings.CornerRadius = CornerRadius;
+#endif
+        }
+
+        FMargin GetBrushCornerRadius(const FSlateBrush& Brush)
+        {
+#if UE_VERSION_NEWER_THAN(5, 3, 0)
+                const FVector4& CornerRadii = Brush.OutlineSettings.CornerRadii;
+                return FMargin(CornerRadii.X, CornerRadii.Y, CornerRadii.Z, CornerRadii.W);
+#else
+                return Brush.OutlineSettings.CornerRadius;
+#endif
+        }
+
         FSlateBrush CreateUpdatedBrush(const FSlateBrush& InBrush, const FLinearColor& TintColor, const FLinearColor& OutlineColor, const FMargin& CornerRadius)
         {
                 FSlateBrush Result = InBrush;
                 Result.TintColor = FSlateColor(TintColor);
                 Result.OutlineSettings.Color = OutlineColor;
-                Result.OutlineSettings.CornerRadius = CornerRadius;
+                SetBrushCornerRadius(Result, CornerRadius);
                 Result.DrawAs = CornerRadius != FMargin(0.f) ? ESlateBrushDrawType::RoundedBox : InBrush.DrawAs;
                 return Result;
         }
@@ -118,8 +138,8 @@ void UCustomButtonWidget::SetButtonSettings()
         CachedBorderColor = bOverride_BorderColor ? BorderColor : CachedFillColor;
         CachedBorderHoverColor = bOverride_BorderHoverColor ? BorderHoverColor : CachedBorderColor;
 
-        const FMargin DefaultBorderCornerRadius = ButtonBorder->Background.OutlineSettings.CornerRadius;
-        const FMargin DefaultTextureCornerRadius = ButtonImage ? ButtonImage->GetBrush().OutlineSettings.CornerRadius : DefaultBorderCornerRadius;
+        const FMargin DefaultBorderCornerRadius = GetBrushCornerRadius(ButtonBorder->Background);
+        const FMargin DefaultTextureCornerRadius = ButtonImage ? GetBrushCornerRadius(ButtonImage->GetBrush()) : DefaultBorderCornerRadius;
 
         CachedBorderCornerRadius = bOverride_BorderCornerRadius ? BorderCornerRadius : DefaultBorderCornerRadius;
         CachedBorderHoverCornerRadius = bOverride_BorderCornerRadius ? BorderHoverCornerRadius : CachedBorderCornerRadius;
@@ -146,7 +166,7 @@ void UCustomButtonWidget::SetButtonSettings()
                         Brush.SetResourceObject(ButtonTexture);
                         Brush.ImageSize = FVector2D(ButtonTexture->GetSizeX(), ButtonTexture->GetSizeY());
                         Brush.DrawAs = bRoundedTexture ? ESlateBrushDrawType::RoundedBox : ESlateBrushDrawType::Image;
-                        Brush.OutlineSettings.CornerRadius = CachedTextureCornerRadius;
+                        SetBrushCornerRadius(Brush, CachedTextureCornerRadius);
 
                         ButtonImage->SetBrush(Brush);
                         ButtonImage->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -163,7 +183,7 @@ void UCustomButtonWidget::SetButtonSettings()
                 BrushCopy.SetResourceObject(ButtonTexture);
                 BrushCopy.ImageSize = FVector2D(ButtonTexture->GetSizeX(), ButtonTexture->GetSizeY());
                 BrushCopy.DrawAs = bRoundedTexture ? ESlateBrushDrawType::RoundedBox : BrushCopy.DrawAs;
-                BrushCopy.OutlineSettings.CornerRadius = CachedTextureCornerRadius;
+                SetBrushCornerRadius(BrushCopy, CachedTextureCornerRadius);
                 ButtonBorder->SetBrush(BrushCopy);
         }
         else
@@ -238,10 +258,10 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
                         FSlateBrush BrushCopy = ButtonImage->GetBrush();
                         const bool bUseRoundedCorners = CornerRadiusToApply != FMargin(0.f);
                         const ESlateBrushDrawType::Type DesiredDrawType = bUseRoundedCorners ? ESlateBrushDrawType::RoundedBox : ESlateBrushDrawType::Image;
-                        if (BrushCopy.DrawAs != DesiredDrawType || BrushCopy.OutlineSettings.CornerRadius != CornerRadiusToApply)
+                        if (BrushCopy.DrawAs != DesiredDrawType || GetBrushCornerRadius(BrushCopy) != CornerRadiusToApply)
                         {
                                 BrushCopy.DrawAs = DesiredDrawType;
-                                BrushCopy.OutlineSettings.CornerRadius = CornerRadiusToApply;
+                                SetBrushCornerRadius(BrushCopy, CornerRadiusToApply);
                                 ButtonImage->SetBrush(BrushCopy);
                         }
                 }
