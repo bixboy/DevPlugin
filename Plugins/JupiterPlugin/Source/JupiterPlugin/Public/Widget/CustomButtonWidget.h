@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
+
 #include "CoreMinimal.h"
-#include "Components/Button.h"
+#include "Blueprint/UserWidget.h"
 #include "CustomButtonWidget.generated.h"
 
 class UScaleBox;
@@ -16,97 +17,97 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FButtonUnHovered, UCustomButtonWidg
 UCLASS()
 class JUPITERPLUGIN_API UCustomButtonWidget : public UUserWidget
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	virtual void NativePreConstruct() override;
-	
-	UFUNCTION(BlueprintCallable)
-	void SetButtonText(const FText& InText);
+    virtual void NativePreConstruct() override;
 
-	UFUNCTION(BlueprintCallable)
-	void ToggleButtonIsSelected(bool bNewValue);
+    UFUNCTION(BlueprintCallable)
+    void SetButtonText(const FText& InText);
 
-	UFUNCTION(BlueprintCallable)
-	void SetButtonTexture(UTexture2D* NewTexture);
+    UFUNCTION(BlueprintCallable)
+    void ToggleButtonIsSelected(bool bNewValue);
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Button")
-	int ButtonIndex;
+    UFUNCTION(BlueprintCallable)
+    void SetButtonTexture(UTexture2D* NewTexture);
 
-	UPROPERTY(BlueprintReadOnly, BlueprintCallable)
-	FButtonClicked OnButtonClicked;
-	
-	UPROPERTY(BlueprintReadOnly, BlueprintCallable)
-	FButtonHovered OnButtonHovered;
-	
-	UPROPERTY(BlueprintReadOnly, BlueprintCallable)
-	FButtonUnHovered OnButtonUnHovered;
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Button")
+    int ButtonIndex;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	UButton* Button;
+    UPROPERTY(BlueprintReadOnly, BlueprintCallable)
+    FButtonClicked OnButtonClicked;
+
+    UPROPERTY(BlueprintReadOnly, BlueprintCallable)
+    FButtonHovered OnButtonHovered;
+
+    UPROPERTY(BlueprintReadOnly, BlueprintCallable)
+    FButtonUnHovered OnButtonUnHovered;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    UButton* Button;
 
 protected:
-	UFUNCTION()
-	void ApplyMaterial() const;
-	
-	UFUNCTION()
-	void UpdateButtonText(const FText& InText);
-	
-	UFUNCTION()
-	void SetButtonSettings() const;
+    UFUNCTION()
+    void UpdateButtonText(const FText& InText);
 
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UTextBlock* ButtonTextBlock;
-	
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UBorder* ButtonBorder;
+    UFUNCTION()
+    void SetButtonSettings();
 
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UScaleBox* TextScaleBox;
+    UFUNCTION()
+    void UpdateButtonVisuals(bool bForceStateUpdate = false);
 
-	UPROPERTY(EditAnywhere, Category = "Button|Text")
-	float TextScale = 15.f;
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    UTextBlock* ButtonTextBlock;
 
-	UPROPERTY(EditAnywhere, Category = "Button|Text")
-	TEnumAsByte<EHorizontalAlignment> TextAlignmentHorizontal = EHorizontalAlignment::HAlign_Center;
-	
-	UPROPERTY(EditAnywhere, Category = "Button|Text")
-	TEnumAsByte<EVerticalAlignment> TextAlignmentVertical = EVerticalAlignment::VAlign_Center;
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    UBorder* ButtonBorder;
 
-	UPROPERTY()
-	bool bIsSelected = false;
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+    UImage* ButtonImage;
+
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    UScaleBox* TextScaleBox;
+
+    UPROPERTY(EditAnywhere, Category = "Button|Text")
+    float TextScale = 15.f;
+
+    UPROPERTY(EditAnywhere, Category = "Button|Text")
+    TEnumAsByte<EHorizontalAlignment> TextAlignmentHorizontal = EHorizontalAlignment::HAlign_Center;
+
+    UPROPERTY(EditAnywhere, Category = "Button|Text")
+    TEnumAsByte<EVerticalAlignment> TextAlignmentVertical = EVerticalAlignment::VAlign_Center;
+
+    UPROPERTY()
+    bool bIsSelected = false;
 
 //-------------------- Hover & Press ----------------------
 #pragma region Hover & Press Settings
 
-	UFUNCTION()
-	void OnCustomUIButtonClickedEvent();
-	
-	UFUNCTION()
-	void OnCustomUIButtonHoveredEvent();
-	
-	UFUNCTION()
-	void OnCustomUIButtonUnHoveredEvent();
-	
-	UPROPERTY(EditAnywhere, Category = Button)
-	UMaterialInstance* Material;
-	
-	UPROPERTY(EditAnywhere, Category = "Button|Texture")
-	UTexture2D* ButtonTexture;
+    UFUNCTION()
+    void OnCustomUIButtonClickedEvent();
 
-	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_ButtonText"))
-	FText ButtonText;
+    UFUNCTION()
+    void OnCustomUIButtonHoveredEvent();
 
-	// Meta bool
-	UPROPERTY(EditAnywhere, Category = "Button", meta = (InlineEditConditionToggle))
-	uint8 bOverride_Texture_Alpha : 1;
-	
-	UPROPERTY(EditAnywhere, Category = "Button", meta = (InlineEditConditionToggle))
-	uint8 bOverride_Texture_Scale : 1;
-	
-	UPROPERTY(EditAnywhere, Category = "Button", meta = (InlineEditConditionToggle))
-	uint8 bOverride_Texture_Shift : 1;
-	
+    UFUNCTION()
+    void OnCustomUIButtonUnHoveredEvent();
+
+    UPROPERTY(EditAnywhere, Category = "Button|Texture")
+    UTexture2D* ButtonTexture;
+
+    UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_ButtonText"))
+    FText ButtonText;
+
+    // Meta bool
+    UPROPERTY(EditAnywhere, Category = "Button", meta = (InlineEditConditionToggle))
+    uint8 bOverride_Texture_Alpha : 1;
+
+    UPROPERTY(EditAnywhere, Category = "Button", meta = (InlineEditConditionToggle))
+    uint8 bOverride_Texture_Scale : 1;
+
+    UPROPERTY(EditAnywhere, Category = "Button", meta = (InlineEditConditionToggle))
+    uint8 bOverride_Texture_Shift : 1;
+
     UPROPERTY(EditAnywhere, Category = Button, meta = (InlineEditConditionToggle))
     uint8 bOverride_ButtonText : 1;
 
@@ -125,18 +126,21 @@ protected:
     // Texture Alpha
     UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Alpha"))
     float TextureAlpha = 1.f;
+
     UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Alpha"))
-	float TextureHoverAlpha = 1.f;
+    float TextureHoverAlpha = 1.f;
 
-	// Texture Scale
-	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Scale"))
-	float TextureScale = 0.75f;
-	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Scale"))
-	float TextureHoverScale = 1.f;
+    // Texture Scale
+    UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Scale"))
+    float TextureScale = 0.75f;
 
-	// Texture Shift
-	UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Shift"))
+    UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Scale"))
+    float TextureHoverScale = 1.f;
+
+    // Texture Shift
+    UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Shift"))
     float TextureShiftX = 0.f;
+
     UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Shift"))
     float TextureShiftY = 0.f;
 
@@ -160,6 +164,42 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Button|Appearance")
     bool bEnableTexture = true;
+
+    UPROPERTY(Transient)
+    bool bIsHovered = false;
+
+    UPROPERTY(Transient)
+    bool bUseTexture = false;
+
+    UPROPERTY(Transient)
+    bool bUseFill = true;
+
+    UPROPERTY(Transient)
+    FLinearColor CachedFillColor = FLinearColor::White;
+
+    UPROPERTY(Transient)
+    FLinearColor CachedFillHoverColor = FLinearColor::White;
+
+    UPROPERTY(Transient)
+    FLinearColor CachedBorderColor = FLinearColor::White;
+
+    UPROPERTY(Transient)
+    FLinearColor CachedBorderHoverColor = FLinearColor::White;
+
+    UPROPERTY(Transient)
+    float CachedTextureAlpha = 1.f;
+
+    UPROPERTY(Transient)
+    float CachedTextureHoverAlpha = 1.f;
+
+    UPROPERTY(Transient)
+    float CachedTextureScale = 1.f;
+
+    UPROPERTY(Transient)
+    float CachedTextureHoverScale = 1.f;
+
+    UPROPERTY(Transient)
+    FVector2D CachedTextureShift = FVector2D::ZeroVector;
 
 #pragma endregion
 };
