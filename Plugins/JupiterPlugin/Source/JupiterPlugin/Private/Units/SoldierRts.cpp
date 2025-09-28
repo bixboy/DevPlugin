@@ -1,5 +1,4 @@
 #include "Units/SoldierRts.h"
-
 #include "Components/CommandComponent.h"
 #include "Components/SoldierManagerComponent.h"
 #include "Components/WeaponMaster.h"
@@ -9,7 +8,6 @@
 #include "Net/UnrealNetwork.h"
 #include "Units/AI/AiControllerRts.h"
 #include "UObject/UnrealType.h"
-
 #include "Containers/Set.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -66,7 +64,6 @@ void ASoldierRts::EndPlay(const EEndPlayReason::Type EndPlayReason)
     if (HasAuthority() && SoldierManager)
     {
         SoldierManager->UnregisterSoldier(this);
-        SoldierManager->UpdateSoldierDetections();
         SoldierManager = nullptr;
     }
 
@@ -78,16 +75,12 @@ void ASoldierRts::PossessedBy(AController* NewController)
     Super::PossessedBy(NewController);
 
     if (!HasAuthority())
-    {
         return;
-    }
 
     if (AAiControllerRts* ControllerAi = Cast<AAiControllerRts>(NewController))
     {
         if (CommandComp)
-        {
             CommandComp->SetOwnerAIController(ControllerAi);
-        }
 
         SetAIController(ControllerAi);
         ControllerAi->OnStartAttack.AddDynamic(this, &ASoldierRts::OnStartAttack);
@@ -103,15 +96,11 @@ void ASoldierRts::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 void ASoldierRts::TryRegisterPrompt()
 {
     if (!HasAuthority())
-    {
         return;
-    }
 
     UWorld* World = GetWorld();
     if (!World)
-    {
         return;
-    }
 
     if (AJupiterGameState* GameState = World->GetGameState<AJupiterGameState>())
     {
@@ -119,7 +108,6 @@ void ASoldierRts::TryRegisterPrompt()
         if (SoldierManager)
         {
             SoldierManager->RegisterSoldier(this);
-            SoldierManager->UpdateSoldierDetections();
             return;
         }
     }
@@ -133,9 +121,7 @@ void ASoldierRts::Tick(float DeltaSeconds)
 
     const bool bCurrentlyMoving = !GetCharacterMovement()->Velocity.IsNearlyZero();
     if (bCurrentlyMoving == bIsMoving)
-    {
         return;
-    }
 
     bIsMoving = bCurrentlyMoving;
     if (bIsMoving)
@@ -185,9 +171,7 @@ void ASoldierRts::Highlight(bool bHighlight)
     for (UPrimitiveComponent* VisualComp : Components)
     {
         if (!VisualComp)
-        {
             continue;
-        }
 
         VisualComp->SetRenderCustomDepth(bHighlight);
         VisualComp->SetCustomDepthStencilValue(bHighlight ? SelectionStencilValue : 0);
@@ -204,9 +188,7 @@ void ASoldierRts::CommandMove_Implementation(FCommandData CommandData)
     ISelectable::CommandMove_Implementation(CommandData);
 
     if (CommandComp)
-    {
         CommandComp->CommandMoveToLocation(CommandData);
-    }
 }
 
 FCommandData ASoldierRts::GetCurrentCommand_Implementation()
@@ -217,9 +199,7 @@ FCommandData ASoldierRts::GetCurrentCommand_Implementation()
 void ASoldierRts::OnStartAttack(AActor* Target)
 {
     if (!bCanAttack || !Target || Target == this)
-    {
         return;
-    }
 
     if (UWeaponMaster* Weapon = GetCurrentWeapon())
     {
@@ -228,7 +208,7 @@ void ASoldierRts::OnStartAttack(AActor* Target)
 
     if (Target->Implements<UDamageable>())
     {
-        IDamageable::Execute_TakeDamage(Target, this);
+        Execute_TakeDamage(Target, this);
         NetMulticast_Unreliable_CallOnStartAttack();
     }
 }
@@ -238,9 +218,7 @@ void ASoldierRts::TakeDamage_Implementation(AActor* DamageOwner)
     IDamageable::TakeDamage_Implementation(DamageOwner);
 
     if (!bCanAttack || !DamageOwner || DamageOwner == this)
-    {
         return;
-    }
 
     UE_LOG(LogTemp, Log, TEXT("[%s] Took damage from [%s] | Behavior=%s"),
         *GetName(),
@@ -291,9 +269,7 @@ void ASoldierRts::SetBehavior_Implementation(const ECombatBehavior NewBehavior)
     CombatBehavior = NewBehavior;
 
     if (!AIController)
-    {
         return;
-    }
 
     AIController->SetupVariables();
 
@@ -362,6 +338,8 @@ bool ASoldierRts::IsEnemyActor(AActor* Actor) const
 
 void ASoldierRts::ProcessDetectionResults(TArray<AActor*> NewEnemies, TArray<AActor*> NewAllies)
 {
+    GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Red, "ProcessDetectionResults");
+    
     if (DetectionSettings.bDebugDrawDetection)
     {
         DrawAttackDebug(NewEnemies, NewAllies);
@@ -369,37 +347,31 @@ void ASoldierRts::ProcessDetectionResults(TArray<AActor*> NewEnemies, TArray<AAc
 
     TSet<AActor*> PreviousEnemies;
     PreviousEnemies.Reserve(ActorsInRange.Num());
+    
     for (AActor* PrevEnemy : ActorsInRange)
     {
         if (PrevEnemy)
-        {
             PreviousEnemies.Add(PrevEnemy);
-        }
     }
 
     TSet<AActor*> CurrentEnemies;
     CurrentEnemies.Reserve(NewEnemies.Num());
+    
     for (AActor* Enemy : NewEnemies)
     {
         if (!Enemy)
-        {
             continue;
-        }
 
         CurrentEnemies.Add(Enemy);
 
         if (!PreviousEnemies.Contains(Enemy))
-        {
             HandleAutoEngage(Enemy);
-        }
     }
 
     for (AActor* PrevEnemy : ActorsInRange)
     {
         if (PrevEnemy && !CurrentEnemies.Contains(PrevEnemy))
-        {
             HandleTargetRemoval(PrevEnemy);
-        }
     }
 
     ActorsInRange = MoveTemp(NewEnemies);
@@ -409,9 +381,7 @@ void ASoldierRts::ProcessDetectionResults(TArray<AActor*> NewEnemies, TArray<AAc
 void ASoldierRts::DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const TArray<AActor*>& DetectedAllies) const
 {
     if (!GetWorld())
-    {
         return;
-    }
 
     const FColor DebugColor = DetectionSettings.DebugColor.ToFColor(true);
     DrawDebugSphere(GetWorld(), GetActorLocation(), AttackRange, 16, DebugColor, false, DetectionSettings.DebugDuration);
@@ -422,18 +392,14 @@ void ASoldierRts::DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const 
     }
 
     if (!DetectionSettings.bDrawTargetLines)
-    {
         return;
-    }
 
     const FVector StartLocation = GetActorLocation();
 
     for (AActor* Enemy : DetectedEnemies)
     {
         if (!Enemy)
-        {
             continue;
-        }
 
         DrawDebugLine(GetWorld(), StartLocation, Enemy->GetActorLocation(), DebugColor, false, DetectionSettings.DebugDuration, 0, DetectionSettings.DebugLineThickness);
     }
@@ -441,9 +407,7 @@ void ASoldierRts::DrawAttackDebug(const TArray<AActor*>& DetectedEnemies, const 
     for (AActor* Ally : DetectedAllies)
     {
         if (!Ally)
-        {
             continue;
-        }
 
         DrawDebugLine(GetWorld(), StartLocation, Ally->GetActorLocation(), FColor::Green, false, DetectionSettings.DebugDuration, 0, DetectionSettings.DebugLineThickness);
     }
@@ -457,7 +421,7 @@ bool ASoldierRts::ShouldAutoEngage() const
 FCommandData ASoldierRts::MakeAttackCommand(AActor* Target) const
 {
     FCommandData CommandData;
-    CommandData.Type = ECommandType::CommandAttack;
+    CommandData.Type = CommandAttack;
     CommandData.Target = Target;
     CommandData.Location = Target ? Target->GetActorLocation() : GetActorLocation();
     CommandData.SourceLocation = GetActorLocation();
@@ -469,9 +433,7 @@ FCommandData ASoldierRts::MakeAttackCommand(AActor* Target) const
 void ASoldierRts::IssueAttackOrder(const FCommandData& CommandData)
 {
     if (!CommandComp || !CommandData.Target || !IsValid(CommandData.Target))
-    {
         return;
-    }
 
     CommandComp->CommandMoveToLocation(CommandData);
 }
@@ -479,9 +441,7 @@ void ASoldierRts::IssueAttackOrder(const FCommandData& CommandData)
 void ASoldierRts::HandleAutoEngage(AActor* Target)
 {
     if (!ShouldAutoEngage() || !IsEnemyActor(Target) || !AIController)
-    {
         return;
-    }
 
     if (!AIController->HasAttackTarget())
     {
@@ -492,9 +452,7 @@ void ASoldierRts::HandleAutoEngage(AActor* Target)
 void ASoldierRts::HandleTargetRemoval(AActor* OtherActor)
 {
     if (!AIController)
-    {
         return;
-    }
 
     UpdateActorsInArea();
 
@@ -513,17 +471,13 @@ void ASoldierRts::HandleTargetRemoval(AActor* OtherActor)
     }
 
     if (ActorsInRange.IsEmpty() && bControllerAggressive)
-    {
         AIController->ResetAttack();
-    }
 }
 
 void ASoldierRts::NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData)
 {
     if (!Threat || !IsEnemyActor(Threat))
-    {
         return;
-    }
 
     for (int32 Index = AllyInRange.Num() - 1; Index >= 0; --Index)
     {
@@ -535,9 +489,7 @@ void ASoldierRts::NotifyAlliesOfThreat(AActor* Threat, const FCommandData& Comma
         }
 
         if (!Execute_GetCanAttack(Ally))
-        {
             continue;
-        }
 
         const ECombatBehavior AllyBehavior = Execute_GetBehavior(Ally);
         if ((AllyBehavior == ECombatBehavior::Neutral || AllyBehavior == ECombatBehavior::Aggressive) && !ISelectable::Execute_GetIsInAttack(Ally))

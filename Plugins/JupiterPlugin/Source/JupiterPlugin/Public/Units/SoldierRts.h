@@ -183,7 +183,7 @@ private:
     void NotifyAlliesOfThreat(AActor* Threat, const FCommandData& CommandData);
 
     // Components and references
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UCommandComponent> CommandComp;
 
     UPROPERTY()
@@ -193,7 +193,7 @@ private:
     TObjectPtr<USoldierManagerComponent> SoldierManager = nullptr;
 
     // Selection state
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection", meta = (ClampMin = "0", ClampMax = "255", AllowPrivateAccess = "true"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings", meta = (ClampMin = "0", ClampMax = "255", AllowPrivateAccess = "true"))
     int32 SelectionStencilValue = 1;
 
     UPROPERTY()
@@ -228,10 +228,12 @@ private:
 
     UPROPERTY(EditAnywhere, Category = "Settings|Attack")
     FAttackDetectionSettings DetectionSettings;
-
+    
+public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Attack", ReplicatedUsing = OnRep_CombatBehavior)
     ECombatBehavior CombatBehavior = ECombatBehavior::Passive;
 
+private:
     UPROPERTY()
     TArray<AActor*> ActorsInRange;
 

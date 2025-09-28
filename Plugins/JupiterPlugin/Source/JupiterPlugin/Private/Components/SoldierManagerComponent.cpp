@@ -5,7 +5,7 @@
 
 USoldierManagerComponent::USoldierManagerComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
 }
 
 void USoldierManagerComponent::BeginPlay()
@@ -30,10 +30,7 @@ void USoldierManagerComponent::RegisterSoldier(ASoldierRts* Soldier)
 void USoldierManagerComponent::Server_RegisterSoldier_Implementation(ASoldierRts* Soldier)
 {
 	if (AddSoldierInternal(Soldier) && Soldiers.Num() > 0)
-	{
 		SetComponentTickEnabled(true);
-		UpdateSoldierDetections();
-	}
 }
 
 void USoldierManagerComponent::UnregisterSoldier(ASoldierRts* Soldier)
@@ -54,15 +51,16 @@ void USoldierManagerComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	if (Mode == NM_Client)
 		return;
 
-	if (!Soldiers.Num() == 0)
+	if (Soldiers.Num() == 0)
 	{
 		SetComponentTickEnabled(false);
 		return;
 	}
-
+	
 	if (DetectionInterval <= 0.f)
 	{
-		UpdateSoldierDetections();
+		UpdateSoldierDetections(CurrentBucketIndex);
+		CurrentBucketIndex = (CurrentBucketIndex + 1) % NumBuckets;
 		return;
 	}
 
@@ -70,49 +68,58 @@ void USoldierManagerComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	if (ElapsedTime >= DetectionInterval)
 	{
 		ElapsedTime = 0.f;
-		UpdateSoldierDetections();
+		UpdateSoldierDetections(CurrentBucketIndex);
 	}
+
+	CurrentBucketIndex = (CurrentBucketIndex + 1) % NumBuckets;
 }
 
-void USoldierManagerComponent::UpdateSoldierDetections()
+void USoldierManagerComponent::UpdateSoldierDetections(int32 BucketIndex)
 {
-	TArray<ASoldierRts*> CurrentSoldiers = Soldiers;
+	if (NumBuckets <= 0)
+		NumBuckets = 1;
+	
+	const int32 BucketSize = FMath::CeilToInt(static_cast<float>(Soldiers.Num()) / NumBuckets);
 
-	for (ASoldierRts* Soldier : CurrentSoldiers)
-	{
-		if (!IsValid(Soldier))
-		{
-			Soldiers.Remove(Soldier);
-			continue;
-		}
+    const int32 StartIndex = BucketIndex * BucketSize;
+    const int32 EndIndex   = FMath::Min(StartIndex + BucketSize, Soldiers.Num());
 
-		// Préparer résultats
-		TArray<AActor*> NewEnemies;
-		TArray<AActor*> NewAllies;
+    for (int32 i = StartIndex; i < EndIndex; ++i)
+    {
+        ASoldierRts* Soldier = Soldiers[i];
+        if (!IsValid(Soldier))
+        {
+            Soldiers.RemoveAt(i);
+            --i;
+            continue;
+        }
 
-		const FVector SelfLoc = Soldier->GetActorLocation();
-		const float EnemyRangeSq = FMath::Square(Soldier->GetAttackRange());
-		const float AllyRangeSq  = FMath::Square(Soldier->GetAllyDetectionRange());
+        TArray<AActor*> NewEnemies;
+        TArray<AActor*> NewAllies;
 
-		for (ASoldierRts* Other : CurrentSoldiers)
-		{
-			if (!IsValid(Other) || Other == Soldier)
-				continue;
+        const FVector SelfLoc = Soldier->GetActorLocation();
+        const float EnemyRangeSq = FMath::Square(Soldier->GetAttackRange());
+        const float AllyRangeSq  = FMath::Square(Soldier->GetAllyDetectionRange());
 
-			const float DistSq = FVector::DistSquared(SelfLoc, Other->GetActorLocation());
+        for (ASoldierRts* Other : Soldiers)
+        {
+            if (!IsValid(Other) || Other == Soldier)
+                continue;
 
-			if (Soldier->IsEnemyActor(Other) && DistSq <= EnemyRangeSq)
-			{
-				NewEnemies.Add(Other);
-			}
-			else if (Soldier->IsFriendlyActor(Other) && DistSq <= AllyRangeSq)
-			{
-				NewAllies.Add(Other);
-			}
-		}
+            const float DistSq = FVector::DistSquared(SelfLoc, Other->GetActorLocation());
 
-		Soldier->ProcessDetectionResults(NewEnemies,NewAllies);
-	}
+            if (Soldier->IsEnemyActor(Other) && DistSq <= EnemyRangeSq)
+            {
+                NewEnemies.Add(Other);
+            }
+            else if (Soldier->IsFriendlyActor(Other) && DistSq <= AllyRangeSq)
+            {
+                NewAllies.Add(Other);
+            }
+        }
+
+        Soldier->ProcessDetectionResults(NewEnemies, NewAllies);
+    }
 }
 
 
