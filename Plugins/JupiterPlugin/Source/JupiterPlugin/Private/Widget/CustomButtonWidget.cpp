@@ -9,13 +9,15 @@
 
 namespace
 {
-	FSlateBrush CreateUpdatedBrush(const FSlateBrush& InBrush, const FLinearColor& TintColor, const FLinearColor& OutlineColor)
-	{
-		FSlateBrush Result = InBrush;
-		Result.TintColor = FSlateColor(TintColor);
-		Result.OutlineSettings.Color = OutlineColor;
-		return Result;
-	}
+        FSlateBrush CreateUpdatedBrush(const FSlateBrush& InBrush, const FLinearColor& TintColor, const FLinearColor& OutlineColor, const FMargin& CornerRadius)
+        {
+                FSlateBrush Result = InBrush;
+                Result.TintColor = FSlateColor(TintColor);
+                Result.OutlineSettings.Color = OutlineColor;
+                Result.OutlineSettings.CornerRadius = CornerRadius;
+                Result.DrawAs = CornerRadius != FMargin(0.f) ? ESlateBrushDrawType::RoundedBox : InBrush.DrawAs;
+                return Result;
+        }
 }
 
 void UCustomButtonWidget::NativePreConstruct()
@@ -110,47 +112,64 @@ void UCustomButtonWidget::SetButtonSettings()
 	bUseTexture = bEnableTexture && ButtonTexture != nullptr;
 	bUseFill = bEnableFill && (!bUseTexture || bAllowFillWhenTextureIsSet);
 
-	CachedFillColor = bOverride_FillColor ? FillColor : ButtonBorder->GetBrushColor();
-	CachedFillHoverColor = bOverride_FillHoverColor ? FillHoverColor : CachedFillColor;
-	
-	CachedBorderColor = bOverride_BorderColor ? BorderColor : CachedFillColor;
-	CachedBorderHoverColor = bOverride_BorderHoverColor ? BorderHoverColor : CachedBorderColor;
+        CachedFillColor = bOverride_FillColor ? FillColor : ButtonBorder->GetBrushColor();
+        CachedFillHoverColor = bOverride_FillHoverColor ? FillHoverColor : CachedFillColor;
 
-	CachedTextureAlpha = bOverride_Texture_Alpha ? TextureAlpha : 1.f;
-	CachedTextureHoverAlpha = bOverride_Texture_Alpha ? TextureHoverAlpha : CachedTextureAlpha;
-	
-	CachedTextureScale = bOverride_Texture_Scale ? TextureScale : 1.f;
+        CachedBorderColor = bOverride_BorderColor ? BorderColor : CachedFillColor;
+        CachedBorderHoverColor = bOverride_BorderHoverColor ? BorderHoverColor : CachedBorderColor;
+
+        const FMargin DefaultBorderCornerRadius = ButtonBorder->Background.OutlineSettings.CornerRadius;
+        const FMargin DefaultTextureCornerRadius = ButtonImage ? ButtonImage->GetBrush().OutlineSettings.CornerRadius : DefaultBorderCornerRadius;
+
+        CachedBorderCornerRadius = bOverride_BorderCornerRadius ? BorderCornerRadius : DefaultBorderCornerRadius;
+        CachedBorderHoverCornerRadius = bOverride_BorderCornerRadius ? BorderHoverCornerRadius : CachedBorderCornerRadius;
+
+        CachedTextureCornerRadius = bOverride_TextureCornerRadius ? TextureCornerRadius : DefaultTextureCornerRadius;
+        CachedTextureHoverCornerRadius = bOverride_TextureCornerRadius ? TextureHoverCornerRadius : CachedTextureCornerRadius;
+
+        CachedTextureAlpha = bOverride_Texture_Alpha ? TextureAlpha : 1.f;
+        CachedTextureHoverAlpha = bOverride_Texture_Alpha ? TextureHoverAlpha : CachedTextureAlpha;
+
+        CachedTextureScale = bOverride_Texture_Scale ? TextureScale : 1.f;
 	CachedTextureHoverScale = bOverride_Texture_Scale ? TextureHoverScale : CachedTextureScale;
 	
 	CachedTextureShift.X = bOverride_Texture_Shift ? TextureShiftX : 0.f;
 	CachedTextureShift.Y = bOverride_Texture_Shift ? TextureShiftY : 0.f;
 
-	if (ButtonImage)
-	{
-		if (bUseTexture && ButtonTexture)
-		{
-			FSlateBrush Brush;
-			Brush.SetResourceObject(ButtonTexture);
-			Brush.ImageSize = FVector2D(ButtonTexture->GetSizeX(), ButtonTexture->GetSizeY());
-			Brush.DrawAs = ESlateBrushDrawType::Image;
-			
-			ButtonImage->SetBrushFromTexture(ButtonTexture);
-			ButtonImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		}
-		else
-		{
-			ButtonImage->SetBrush(FSlateBrush());
+        const bool bRoundedTexture = CachedTextureCornerRadius != FMargin(0.f) || CachedTextureHoverCornerRadius != FMargin(0.f);
+
+        if (ButtonImage)
+        {
+                if (bUseTexture && ButtonTexture)
+                {
+                        FSlateBrush Brush;
+                        Brush.SetResourceObject(ButtonTexture);
+                        Brush.ImageSize = FVector2D(ButtonTexture->GetSizeX(), ButtonTexture->GetSizeY());
+                        Brush.DrawAs = bRoundedTexture ? ESlateBrushDrawType::RoundedBox : ESlateBrushDrawType::Image;
+                        Brush.OutlineSettings.CornerRadius = CachedTextureCornerRadius;
+
+                        ButtonImage->SetBrush(Brush);
+                        ButtonImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+                }
+                else
+                {
+                        ButtonImage->SetBrush(FSlateBrush());
 			ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
-	else if (bUseTexture && ButtonTexture)
-	{
-		ButtonBorder->SetBrushFromTexture(ButtonTexture);
-	}
-	else
-	{
-		FSlateBrush BrushCopy = ButtonBorder->Background;
-		BrushCopy.SetResourceObject(nullptr);
+        else if (bUseTexture && ButtonTexture)
+        {
+                FSlateBrush BrushCopy = ButtonBorder->Background;
+                BrushCopy.SetResourceObject(ButtonTexture);
+                BrushCopy.ImageSize = FVector2D(ButtonTexture->GetSizeX(), ButtonTexture->GetSizeY());
+                BrushCopy.DrawAs = bRoundedTexture ? ESlateBrushDrawType::RoundedBox : BrushCopy.DrawAs;
+                BrushCopy.OutlineSettings.CornerRadius = CachedTextureCornerRadius;
+                ButtonBorder->SetBrush(BrushCopy);
+        }
+        else
+        {
+                FSlateBrush BrushCopy = ButtonBorder->Background;
+                BrushCopy.SetResourceObject(nullptr);
 		ButtonBorder->SetBrush(BrushCopy);
 	}
 
@@ -184,15 +203,18 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
 			FillColorToApply = bShouldUseHoverState ? CachedFillHoverColor : CachedFillColor;
 		}
 
-		const FLinearColor BorderColorToApply = bShouldUseHoverState ? CachedBorderHoverColor : CachedBorderColor;
-		
-		FSlateBrush BrushCopy = ButtonBorder->Background;
-		const FSlateBrush UpdatedBrush = CreateUpdatedBrush(BrushCopy, FillColorToApply, BorderColorToApply);
-		ButtonBorder->SetBrush(UpdatedBrush);
+                const FLinearColor BorderColorToApply = bShouldUseHoverState ? CachedBorderHoverColor : CachedBorderColor;
+                const FMargin& CornerRadiusToApply = bDisplayTextureOnBorder
+                                                               ? (bShouldUseHoverState ? CachedTextureHoverCornerRadius : CachedTextureCornerRadius)
+                                                               : (bShouldUseHoverState ? CachedBorderHoverCornerRadius : CachedBorderCornerRadius);
 
-		if (!ButtonImage || !bUseTexture)
-		{
-			const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
+                FSlateBrush BrushCopy = ButtonBorder->Background;
+                const FSlateBrush UpdatedBrush = CreateUpdatedBrush(BrushCopy, FillColorToApply, BorderColorToApply, CornerRadiusToApply);
+                ButtonBorder->SetBrush(UpdatedBrush);
+
+                if (!ButtonImage || !bUseTexture)
+                {
+                        const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
 			ButtonBorder->SetRenderScale(FVector2D(TargetScale, TargetScale));
 			ButtonBorder->SetRenderTranslation(CachedTextureShift);
 		}
@@ -200,22 +222,33 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
 
 	if (ButtonImage)
 	{
-		if (bUseTexture && ButtonTexture)
-		{
-			const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
-			const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
+                if (bUseTexture && ButtonTexture)
+                {
+                        const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
+                        const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
+                        const FMargin& CornerRadiusToApply = bShouldUseHoverState ? CachedTextureHoverCornerRadius : CachedTextureCornerRadius;
 
-			FLinearColor CurrentColor = ButtonImage->GetColorAndOpacity();
-			CurrentColor.A = TargetAlpha;
-			ButtonImage->SetColorAndOpacity(CurrentColor);
+                        FLinearColor CurrentColor = ButtonImage->GetColorAndOpacity();
+                        CurrentColor.A = TargetAlpha;
+                        ButtonImage->SetColorAndOpacity(CurrentColor);
 
-			ButtonImage->SetRenderScale(FVector2D(TargetScale, TargetScale));
-			ButtonImage->SetRenderTranslation(CachedTextureShift);
-		}
-		else if (bForceStateUpdate)
-		{
-			ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
-		}
+                        ButtonImage->SetRenderScale(FVector2D(TargetScale, TargetScale));
+                        ButtonImage->SetRenderTranslation(CachedTextureShift);
+
+                        FSlateBrush BrushCopy = ButtonImage->GetBrush();
+                        const bool bUseRoundedCorners = CornerRadiusToApply != FMargin(0.f);
+                        const ESlateBrushDrawType::Type DesiredDrawType = bUseRoundedCorners ? ESlateBrushDrawType::RoundedBox : ESlateBrushDrawType::Image;
+                        if (BrushCopy.DrawAs != DesiredDrawType || BrushCopy.OutlineSettings.CornerRadius != CornerRadiusToApply)
+                        {
+                                BrushCopy.DrawAs = DesiredDrawType;
+                                BrushCopy.OutlineSettings.CornerRadius = CornerRadiusToApply;
+                                ButtonImage->SetBrush(BrushCopy);
+                        }
+                }
+                else if (bForceStateUpdate)
+                {
+                        ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
+                }
 	}
 }
 

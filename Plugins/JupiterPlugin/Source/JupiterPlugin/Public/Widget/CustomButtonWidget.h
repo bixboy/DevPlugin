@@ -123,6 +123,12 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (InlineEditConditionToggle))
     uint8 bOverride_BorderHoverColor : 1;
 
+    UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (InlineEditConditionToggle))
+    uint8 bOverride_BorderCornerRadius : 1;
+
+    UPROPERTY(EditAnywhere, Category = "Button|Texture", meta = (InlineEditConditionToggle))
+    uint8 bOverride_TextureCornerRadius : 1;
+
     // Texture Alpha
     UPROPERTY(EditAnywhere, Category = Button, meta = (EditCondition = "bOverride_Texture_Alpha"))
     float TextureAlpha = 1.f;
@@ -155,6 +161,18 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (EditCondition = "bOverride_BorderHoverColor"))
     FLinearColor BorderHoverColor = FLinearColor::White;
+
+    UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (EditCondition = "bOverride_BorderCornerRadius"))
+    FMargin BorderCornerRadius = FMargin(0.f);
+
+    UPROPERTY(EditAnywhere, Category = "Button|Appearance", meta = (EditCondition = "bOverride_BorderCornerRadius"))
+    FMargin BorderHoverCornerRadius = FMargin(0.f);
+
+    UPROPERTY(EditAnywhere, Category = "Button|Texture", meta = (EditCondition = "bOverride_TextureCornerRadius"))
+    FMargin TextureCornerRadius = FMargin(0.f);
+
+    UPROPERTY(EditAnywhere, Category = "Button|Texture", meta = (EditCondition = "bOverride_TextureCornerRadius"))
+    FMargin TextureHoverCornerRadius = FMargin(0.f);
 
     UPROPERTY(EditAnywhere, Category = "Button|Appearance")
     bool bEnableFill = true;
@@ -200,6 +218,18 @@ protected:
 
     UPROPERTY(Transient)
     FVector2D CachedTextureShift = FVector2D::ZeroVector;
+
+    UPROPERTY(Transient)
+    FMargin CachedBorderCornerRadius = FMargin(0.f);
+
+    UPROPERTY(Transient)
+    FMargin CachedBorderHoverCornerRadius = FMargin(0.f);
+
+    UPROPERTY(Transient)
+    FMargin CachedTextureCornerRadius = FMargin(0.f);
+
+    UPROPERTY(Transient)
+    FMargin CachedTextureHoverCornerRadius = FMargin(0.f);
 
 #pragma endregion
 };
