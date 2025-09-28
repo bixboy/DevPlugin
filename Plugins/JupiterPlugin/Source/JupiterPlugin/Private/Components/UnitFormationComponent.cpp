@@ -58,6 +58,16 @@ void UUnitFormationComponent::SetFormationSpacing(float NewSpacing)
     }
 }
 
+EFormation UUnitFormationComponent::GetFormation() const
+{
+    return CurrentFormation;
+}
+
+float UUnitFormationComponent::GetFormationSpacing() const
+{
+    return FormationSpacing;
+}
+
 const FCommandData* UUnitFormationComponent::GetCachedFormationCommand() const
 {
     return bHasCachedCommand ? &CachedFormationCommand : nullptr;

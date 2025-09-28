@@ -29,6 +29,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS|Formation")
     void SetFormationSpacing(float NewSpacing);
 
+    /** Returns the currently active formation type. */
+    UFUNCTION(BlueprintPure, Category = "RTS|Formation")
+    EFormation GetFormation() const;
+
+    /** Returns the spacing currently applied to the active formation. */
+    UFUNCTION(BlueprintPure, Category = "RTS|Formation")
+    float GetFormationSpacing() const;
+
     /** Returns the cached command used for the previous formation order (nullptr if none). */
     const FCommandData* GetCachedFormationCommand() const;
 
