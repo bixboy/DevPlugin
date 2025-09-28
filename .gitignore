@@ -96,3 +96,5 @@ Build/*/PakBlacklist*.txt
 
 # 🔹 Garde les fichiers `.Target.cs` pour éviter les erreurs de compilation
 !Source/*.Target.cs
+
+Plugins/JupiterPlugin/Content/Xenon/

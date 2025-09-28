@@ -338,8 +338,6 @@ bool ASoldierRts::IsEnemyActor(AActor* Actor) const
 
 void ASoldierRts::ProcessDetectionResults(TArray<AActor*> NewEnemies, TArray<AActor*> NewAllies)
 {
-    GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Red, "ProcessDetectionResults");
-    
     if (DetectionSettings.bDebugDrawDetection)
     {
         DrawAttackDebug(NewEnemies, NewAllies);

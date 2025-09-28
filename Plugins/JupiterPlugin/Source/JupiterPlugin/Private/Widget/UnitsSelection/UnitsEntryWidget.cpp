@@ -15,9 +15,7 @@ void UUnitsEntryWidget::NativeOnInitialized()
 	Super::NativeOnInitialized();
 
     if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
-    {
-        SpawnComponent = OwnerPawn->FindComponentByClass<UUnitSpawnComponent>();
-    }
+		SpawnComponent = OwnerPawn->FindComponentByClass<UUnitSpawnComponent>();
 
 	if (UnitButton)
 		UnitButton->OnButtonClicked.AddDynamic(this, &UUnitsEntryWidget::OnUnitSelected);
@@ -25,22 +23,18 @@ void UUnitsEntryWidget::NativeOnInitialized()
 
 void UUnitsEntryWidget::InitEntry(UUnitsSelectionDataAsset* DataAsset)
 {
-		FUnitsSelectionData UnitData = DataAsset->UnitSelectionData;
-		
-		UnitButton->SetButtonTexture(UnitData.UnitImage);
-		UnitButton->SetButtonText(UnitData.UnitName);
-		UnitClass = UnitData.UnitClass;
+	FUnitsSelectionData UnitData = DataAsset->UnitSelectionData;
+	
+	UnitButton->SetButtonTexture(UnitData.UnitImage);
+	UnitButton->SetButtonText(UnitData.UnitName);
+	UnitClass = UnitData.UnitClass;
 }
 
 void UUnitsEntryWidget::OnUnitSelected(UCustomButtonWidget* Button, int Index)
 {
     if (!UnitClass || !SpawnComponent)
-    {
-        return;
-    }
-
-    GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Green, TEXT("ON UNIT SELECTED"));
-
+		return;
+	
     SpawnComponent->SetUnitToSpawn(UnitClass);
 	GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Black, "Unit Selected : " + UnitClass->GetName());
 }
