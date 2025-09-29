@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/EngineTypes.h"
 #include "HAL/RWLock.h"
 #include "HAL/ThreadSafeBool.h"
 #include "GridNavigationComponent.generated.h"
@@ -35,6 +36,26 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
     FVector GridOrigin;
 
+    /** Automatically recenters the grid around the owning actor when play begins. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
+    bool bAutoCenterOnOwner;
+
+    /** Automatically samples the level and marks voxels intersecting static world geometry as blocked. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
+    bool bAutoBakeWorldObstacles;
+
+    /** Collision channel used for obstacle sampling. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
+    TEnumAsByte<ECollisionChannel> ObstacleTraceChannel;
+
+    /** Extra padding applied in the horizontal plane when testing for blocking geometry. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid", meta = (ClampMin = "0.0"))
+    float ObstacleSamplingPadding;
+
+    /** Vertical fraction of the voxel height used when checking for overhead obstacles. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ObstacleVerticalSamplingFactor;
+
     /** How far dirty regions expand when recomputing the flow field. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlowField")
     int32 DirtyPropagationDepth;
@@ -67,6 +88,10 @@ public:
 
     FORCEINLINE FVector GetTargetLocation() const { return TargetLocation; }
 
+    /** Rebuilds the voxel occupancy map by sampling static obstacles in the world. */
+    UFUNCTION(BlueprintCallable, Category = "Dynamic Pathfinding")
+    void RebuildStaticObstacles();
+
 protected:
     void InitializeGrid();
 
@@ -84,6 +109,10 @@ protected:
     void ExpandDirtyRegion(const FIntVector& Coordinates);
 
     void ClearDirtyRegion();
+
+    void AlignGridToOwner();
+    void BakeStaticWorldObstacles();
+    void MarkAllDirty();
 
 private:
     int32 NumVoxels;

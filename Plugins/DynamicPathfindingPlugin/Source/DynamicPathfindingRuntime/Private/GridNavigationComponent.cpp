@@ -2,6 +2,7 @@
 #include "DrawDebugHelpers.h"
 #include "Async/Async.h"
 #include "Containers/Queue.h"
+#include "CollisionQueryParams.h"
 #include "Engine/World.h"
 
 UGridNavigationComponent::UGridNavigationComponent()
@@ -11,6 +12,11 @@ UGridNavigationComponent::UGridNavigationComponent()
     GridSize = FIntVector(64, 64, 8);
     VoxelSize = 100.f;
     GridOrigin = FVector::ZeroVector;
+    bAutoCenterOnOwner = true;
+    bAutoBakeWorldObstacles = true;
+    ObstacleTraceChannel = ECC_WorldStatic;
+    ObstacleSamplingPadding = 10.f;
+    ObstacleVerticalSamplingFactor = 0.6f;
     DirtyPropagationDepth = 6;
     bDrawDebug = false;
     DebugDrawDuration = 0.1f;
@@ -27,7 +33,14 @@ void UGridNavigationComponent::BeginPlay()
 {
     Super::BeginPlay();
 
+    AlignGridToOwner();
     InitializeGrid();
+
+    if (bAutoBakeWorldObstacles)
+    {
+        BakeStaticWorldObstacles();
+    }
+
     RequestFlowFieldRebuild(true);
 }
 
@@ -43,6 +56,7 @@ void UGridNavigationComponent::InitializeGrid()
     WalkableFlags.Init(1, NumVoxels);
     FlowFieldDirections.Init(FVector::ZeroVector, NumVoxels);
     DistanceField.Init(TNumericLimits<int32>::Max(), NumVoxels);
+    ClearDirtyRegion();
 }
 
 void UGridNavigationComponent::SetTargetLocation(const FVector& InTargetLocation, bool bImmediate /*= false*/)
@@ -87,7 +101,14 @@ FVector UGridNavigationComponent::GetFlowDirectionAtLocation(const FVector& Worl
 
     if (!IsValidCoordinates(Coordinates))
     {
-        return FVector::ZeroVector;
+        Coordinates.X = FMath::Clamp(Coordinates.X, 0, GridSize.X - 1);
+        Coordinates.Y = FMath::Clamp(Coordinates.Y, 0, GridSize.Y - 1);
+        Coordinates.Z = FMath::Clamp(Coordinates.Z, 0, GridSize.Z - 1);
+
+        if (!IsValidCoordinates(Coordinates))
+        {
+            return FVector::ZeroVector;
+        }
     }
 
     const int32 Index = GetIndex(Coordinates);
@@ -127,6 +148,13 @@ void UGridNavigationComponent::DrawDebug()
     }
 
     DrawDebugInternal();
+}
+
+void UGridNavigationComponent::RebuildStaticObstacles()
+{
+    AlignGridToOwner();
+    BakeStaticWorldObstacles();
+    RequestFlowFieldRebuild(true);
 }
 
 void UGridNavigationComponent::RequestFlowFieldRebuild(bool bForceFullRebuild)
@@ -440,6 +468,84 @@ void UGridNavigationComponent::ExpandDirtyRegion(const FIntVector& Coordinates)
 void UGridNavigationComponent::ClearDirtyRegion()
 {
     bHasDirtyRegion = false;
+}
+
+void UGridNavigationComponent::AlignGridToOwner()
+{
+    if (!bAutoCenterOnOwner)
+    {
+        return;
+    }
+
+    const AActor* OwnerActor = GetOwner();
+    if (!OwnerActor)
+    {
+        return;
+    }
+
+    const FVector GridDimensions(
+        static_cast<float>(GridSize.X) * VoxelSize,
+        static_cast<float>(GridSize.Y) * VoxelSize,
+        static_cast<float>(GridSize.Z) * VoxelSize);
+    GridOrigin = OwnerActor->GetActorLocation() - (GridDimensions * 0.5f);
+}
+
+void UGridNavigationComponent::BakeStaticWorldObstacles()
+{
+    if (!GetWorld() || NumVoxels <= 0)
+    {
+        return;
+    }
+
+    const float HorizontalHalfExtent = FMath::Max(VoxelSize * 0.5f + ObstacleSamplingPadding, 0.f);
+    const float VerticalHalfExtent = FMath::Max(VoxelSize * 0.5f * ObstacleVerticalSamplingFactor, ObstacleSamplingPadding);
+    const FVector HalfExtents(HorizontalHalfExtent, HorizontalHalfExtent, VerticalHalfExtent);
+    const FCollisionShape CollisionShape = FCollisionShape::MakeBox(HalfExtents);
+
+    FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DynamicPath_GridBake), false);
+    if (AActor* OwnerActor = GetOwner())
+    {
+        QueryParams.AddIgnoredActor(OwnerActor);
+    }
+
+    TArray<uint8> NewWalkableFlags;
+    NewWalkableFlags.Init(1, NumVoxels);
+
+    for (int32 Index = 0; Index < NumVoxels; ++Index)
+    {
+        const FIntVector Coords = GetCoordinatesFromIndex(Index);
+        const FVector Center = GetVoxelCenter(Coords);
+
+        const bool bBlocked = GetWorld()->OverlapBlockingTestByChannel(
+            Center,
+            FQuat::Identity,
+            ObstacleTraceChannel,
+            CollisionShape,
+            QueryParams);
+
+        NewWalkableFlags[Index] = bBlocked ? 0 : 1;
+    }
+
+    {
+        FWriteScopeLock WriteLock(DataLock);
+        WalkableFlags = MoveTemp(NewWalkableFlags);
+    }
+
+    bHasValidFlowField = false;
+    MarkAllDirty();
+}
+
+void UGridNavigationComponent::MarkAllDirty()
+{
+    if (GridSize.X <= 0 || GridSize.Y <= 0 || GridSize.Z <= 0)
+    {
+        bHasDirtyRegion = false;
+        return;
+    }
+
+    DirtyMin = FIntVector::ZeroValue;
+    DirtyMax = GridSize - FIntVector(1, 1, 1);
+    bHasDirtyRegion = true;
 }
 
 void UGridNavigationComponent::DrawDebugInternal() const
