@@ -342,11 +342,11 @@ protected:
         TSubclassOf<APreviewPoseMesh> PreviewUnitsClass;
 
         UPROPERTY()
-        TArray<TObjectPtr<APreviewPoseMesh>> PreviewUnits;
+        TObjectPtr<APreviewPoseMesh> PreviewUnit;
 
-        void EnsurePreviewUnits(int32 DesiredCount);
+        void EnsurePreviewUnit();
         void UpdatePreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation);
-        bool HasPreviewUnits() const { return PreviewUnits.Num() > 0; }
+        bool HasPreviewUnits() const { return PreviewUnit != nullptr; }
 
 #pragma endregion
 

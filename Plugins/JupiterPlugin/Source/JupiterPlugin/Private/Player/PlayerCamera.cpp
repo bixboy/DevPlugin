@@ -8,10 +8,14 @@
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/UnitSelectionComponent.h"
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitFormationComponent.h"
 #include "Components/UnitSpawnComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/AssetManager.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -210,14 +214,11 @@ void APlayerCamera::UnPossessed()
 		}
 	}
 
-        for (APreviewPoseMesh* Preview : PreviewUnits)
+        if (PreviewUnit)
         {
-                if (Preview)
-                {
-                        Preview->Destroy();
-                }
+                PreviewUnit->Destroy();
+                PreviewUnit = nullptr;
         }
-        PreviewUnits.Empty();
 }
 
 void APlayerCamera::NotifyControllerChanged()
@@ -819,8 +820,7 @@ void APlayerCamera::CreatePreviewMesh()
                 return;
         }
 
-        const int32 DesiredCount = SpawnComponent ? FMath::Max(SpawnComponent->GetUnitsPerSpawn(), 1) : 1;
-        EnsurePreviewUnits(DesiredCount);
+        EnsurePreviewUnit();
 
         if (SpawnComponent)
         {
@@ -835,17 +835,7 @@ void APlayerCamera::Input_OnSpawnUnits()
                 return;
         }
 
-        bool bAllValid = true;
-        for (APreviewPoseMesh* Preview : PreviewUnits)
-        {
-                if (!Preview || !Preview->GetIsValidPlacement())
-                {
-                        bAllValid = false;
-                        break;
-                }
-        }
-
-        if (bAllValid && SpawnComponent)
+        if (PreviewUnit && PreviewUnit->GetIsValidPlacement() && SpawnComponent)
         {
                 SpawnComponent->SpawnUnits();
         }
@@ -862,18 +852,30 @@ void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
         {
                 if (ASoldierRts* DefaultSoldier = NewUnitClass->GetDefaultObject<ASoldierRts>())
                 {
+                        const int32 InstanceCount = SpawnComponent ? FMath::Max(SpawnComponent->GetUnitsPerSpawn(), 1) : 1;
+
                         if (USkeletalMeshComponent* MeshComponent = DefaultSoldier->GetMesh())
                         {
-                                if (MeshComponent->GetSkeletalMeshAsset())
+                                if (USkeletalMesh* SkeletalMesh = MeshComponent->GetSkeletalMeshAsset())
                                 {
                                         bIsInSpawnUnits = true;
-                                        for (APreviewPoseMesh* Preview : PreviewUnits)
+                                        PreviewUnit->ShowPreview(SkeletalMesh, DefaultSoldier->GetCapsuleComponent()->GetRelativeScale3D(), InstanceCount);
+                                        if (GetSelectionComponentChecked())
                                         {
-                                                if (Preview)
-                                                {
-                                                        Preview->ShowPreview(MeshComponent->GetSkeletalMeshAsset(), DefaultSoldier->GetCapsuleComponent()->GetRelativeScale3D());
-                                                }
+                                                PreviewFollowMouse();
+                                                return;
                                         }
+                                        HidePreview();
+                                        return;
+                                }
+                        }
+
+                        if (UStaticMeshComponent* StaticMeshComponent = DefaultSoldier->FindComponentByClass<UStaticMeshComponent>())
+                        {
+                                if (UStaticMesh* StaticMesh = StaticMeshComponent->GetStaticMesh())
+                                {
+                                        bIsInSpawnUnits = true;
+                                        PreviewUnit->ShowPreview(StaticMesh, StaticMeshComponent->GetRelativeScale3D(), InstanceCount);
                                         if (GetSelectionComponentChecked())
                                         {
                                                 PreviewFollowMouse();
@@ -891,12 +893,9 @@ void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
 
 void APlayerCamera::HidePreview()
 {
-        for (APreviewPoseMesh* Preview : PreviewUnits)
+        if (PreviewUnit)
         {
-                if (Preview)
-                {
-                        Preview->HidePreview();
-                }
+                PreviewUnit->HidePreview();
         }
         bIsInSpawnUnits = false;
 }
@@ -927,7 +926,7 @@ void APlayerCamera::PreviewFollowMouse()
 
 void APlayerCamera::HandleSpawnCountChanged(int32 NewSpawnCount)
 {
-        EnsurePreviewUnits(NewSpawnCount);
+        EnsurePreviewUnit();
 
         if (bIsInSpawnUnits && SpawnComponent)
         {
@@ -936,25 +935,11 @@ void APlayerCamera::HandleSpawnCountChanged(int32 NewSpawnCount)
         }
 }
 
-void APlayerCamera::EnsurePreviewUnits(int32 DesiredCount)
+void APlayerCamera::EnsurePreviewUnit()
 {
-        DesiredCount = FMath::Max(1, DesiredCount);
-
-        if (!Player || !Player->IsLocalController())
+        if (!Player || !Player->IsLocalController() || PreviewUnit)
         {
                 return;
-        }
-
-        if (PreviewUnits.Num() > DesiredCount)
-        {
-                for (int32 Index = PreviewUnits.Num() - 1; Index >= DesiredCount; --Index)
-                {
-                        if (APreviewPoseMesh* Preview = PreviewUnits[Index])
-                        {
-                                Preview->Destroy();
-                        }
-                        PreviewUnits.RemoveAt(Index);
-                }
         }
 
         if (!PreviewUnitsClass)
@@ -964,35 +949,28 @@ void APlayerCamera::EnsurePreviewUnits(int32 DesiredCount)
 
         if (UWorld* World = GetWorld())
         {
-                while (PreviewUnits.Num() < DesiredCount)
-                {
-                        FActorSpawnParameters SpawnParams;
-                        SpawnParams.Instigator = this;
-                        SpawnParams.Owner = this;
+                FActorSpawnParameters SpawnParams;
+                SpawnParams.Instigator = this;
+                SpawnParams.Owner = this;
 
-                        if (APreviewPoseMesh* Preview = World->SpawnActor<APreviewPoseMesh>(PreviewUnitsClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams))
-                        {
-                                Preview->SetReplicates(false);
-                                Preview->SetOwner(this);
-                                Preview->SetActorHiddenInGame(true);
-                                PreviewUnits.Add(Preview);
-                        }
-                        else
-                        {
-                                break;
-                        }
+                if (APreviewPoseMesh* Preview = World->SpawnActor<APreviewPoseMesh>(PreviewUnitsClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams))
+                {
+                        Preview->SetReplicates(false);
+                        Preview->SetOwner(this);
+                        Preview->SetActorHiddenInGame(true);
+                        PreviewUnit = Preview;
                 }
         }
 }
 
 void APlayerCamera::UpdatePreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation)
 {
-        if (!HasPreviewUnits())
+        if (!HasPreviewUnits() || !PreviewUnit)
         {
                 return;
         }
 
-        const int32 SpawnCount = SpawnComponent ? FMath::Max(SpawnComponent->GetUnitsPerSpawn(), 1) : PreviewUnits.Num();
+        const int32 SpawnCount = SpawnComponent ? FMath::Max(SpawnComponent->GetUnitsPerSpawn(), 1) : 1;
         const float Spacing = SpawnComponent ? FMath::Max(SpawnComponent->GetFormationSpacing(), 0.f) : 0.f;
 
         const int32 Columns = FMath::Max(1, FMath::CeilToInt(FMath::Sqrt(static_cast<float>(SpawnCount))));
@@ -1000,24 +978,24 @@ void APlayerCamera::UpdatePreviewTransforms(const FVector& CenterLocation, const
         const float HalfWidth = (Columns - 1) * 0.5f * Spacing;
         const float HalfHeight = (Rows - 1) * 0.5f * Spacing;
 
-        for (int32 Index = 0; Index < PreviewUnits.Num(); ++Index)
+        TArray<FTransform> InstanceTransforms;
+        InstanceTransforms.Reserve(SpawnCount);
+
+        for (int32 Index = 0; Index < SpawnCount; ++Index)
         {
-                if (APreviewPoseMesh* Preview = PreviewUnits[Index])
-                {
-                        const int32 Row = Index / Columns;
-                        const int32 Column = Index % Columns;
+                const int32 Row = Index / Columns;
+                const int32 Column = Index % Columns;
 
-                        const float OffsetX = (Column * Spacing) - HalfWidth;
-                        const float OffsetY = (Row * Spacing) - HalfHeight;
+                const float OffsetX = (Column * Spacing) - HalfWidth;
+                const float OffsetY = (Row * Spacing) - HalfHeight;
 
-                        const FVector FormationOffset(OffsetX, OffsetY, 0.f);
-                        const FVector FormationLocation = CenterLocation + FormationOffset;
+                const FVector FormationOffset(OffsetX, OffsetY, 0.f);
+                const FVector FormationLocation = CenterLocation + FormationOffset;
 
-                        Preview->SetActorLocation(FormationLocation);
-                        Preview->SetActorRotation(FacingRotation);
-                        Preview->CheckIsValidPlacement();
-                }
+                InstanceTransforms.Add(FTransform(FacingRotation, FormationLocation));
         }
+
+        PreviewUnit->UpdateInstances(InstanceTransforms);
 }
 
 #pragma endregion 
