@@ -7,10 +7,10 @@
 #include "JupiterGameState.h"
 #include "Net/UnrealNetwork.h"
 #include "Units/AI/AiControllerRts.h"
-#include "UObject/UnrealType.h"
 #include "Containers/Set.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+
 
 ASoldierRts::ASoldierRts(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
