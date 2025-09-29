@@ -45,4 +45,7 @@ private:
     FVector CurrentVelocity;
 
     void ApplyMovement(const FVector& Velocity, float DeltaTime);
+
+public:
+    FORCEINLINE ADynamicPathManager* GetManager() const { return Manager.Get(); }
 };

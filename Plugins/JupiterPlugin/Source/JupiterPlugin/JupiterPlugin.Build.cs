@@ -32,10 +32,11 @@ public class JupiterPlugin : ModuleRules
 				"NavigationSystem", 
 				"AIModule", 
 				"Niagara", 
-				"EnhancedInput", 
-				"UMG",
-			}
-			);
+                                "EnhancedInput",
+                                "UMG",
+                                "DynamicPathfindingRuntime",
+                        }
+                        );
 			
 		
 		PrivateDependencyModuleNames.AddRange(
