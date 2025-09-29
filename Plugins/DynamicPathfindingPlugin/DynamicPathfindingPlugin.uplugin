@@ -1,0 +1,19 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "1.0.0",
+    "FriendlyName": "Dynamic Pathfinding Plugin",
+    "Description": "Scalable dynamic voxel-based pathfinding and avoidance for large unit counts.",
+    "Category": "AI",
+    "CreatedBy": "OpenAI Assistant",
+    "Modules": [
+        {
+            "Name": "DynamicPathfindingRuntime",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ],
+    "CanContainContent": false,
+    "IsBetaVersion": true,
+    "SupportURL": "https://example.com"
+}
