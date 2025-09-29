@@ -4,7 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "SphereRadius.generated.h"
 
-class USelectionComponent;
+class UUnitSelectionComponent;
 class USphereComponent;
 
 UCLASS()
@@ -47,6 +47,6 @@ private:
 	UPROPERTY()
 	float CurrentRadius;
 
-	UPROPERTY()
-	USelectionComponent* SelectionComponent;
+        UPROPERTY()
+        UUnitSelectionComponent* SelectionComponent;
 };

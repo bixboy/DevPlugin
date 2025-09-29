@@ -3,9 +3,13 @@
 #include "Blueprint/UserWidget.h"
 #include "SelectBehaviorWidget.generated.h"
 
-class UCustomButtonWidget;
-class UBehaviorButtonWidget;
-class USelectionComponent;
+class UComboBoxString;
+namespace ESelectInfo
+{
+        enum Type;
+}
+class UUnitSelectionComponent;
+class UUnitOrderComponent;
 
 UCLASS()
 class JUPITERPLUGIN_API USelectBehaviorWidget : public UUserWidget
@@ -15,25 +19,32 @@ class JUPITERPLUGIN_API USelectBehaviorWidget : public UUserWidget
 public:
 	virtual void NativeOnInitialized() override;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	UBehaviorButtonWidget* NeutralButton;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	UBehaviorButtonWidget* PassiveButton;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	UBehaviorButtonWidget* AggressiveButton;
+        UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+        UComboBoxString* BehaviorDropdown;
 
 protected:
-	UFUNCTION()
-	void OnBehaviorButtonClicked(UCustomButtonWidget* Button, int Index);
+        UFUNCTION()
+        void OnBehaviorSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
-	UFUNCTION()
-	void UpdateSelectedButton(UCustomButtonWidget* Button, bool IsSelected);
+        UFUNCTION()
+        void OnNewUnitSelected();
 
-	UFUNCTION()
-	void OnNewUnitSelected();
+        void InitializeBehaviorOptions();
+        void ApplyBehaviorSelection(const FString& SelectedOption);
+        void UpdateSelectedBehavior(ECombatBehavior Behavior);
 
-	UPROPERTY()
-	USelectionComponent* SelectionComponent;
+        UPROPERTY()
+        UUnitSelectionComponent* SelectionComponent;
+
+        UPROPERTY()
+        UUnitOrderComponent* OrderComponent;
+
+        /** Mapping between dropdown labels and combat behavior values. */
+        TMap<FString, ECombatBehavior> OptionToBehavior;
+
+        /** Reverse mapping to quickly update the dropdown selection. */
+        TMap<ECombatBehavior, FString> BehaviorToOption;
+
+        /** Avoids propagating behavior updates when changing the selection programmatically. */
+        bool bIsUpdatingSelection = false;
 };

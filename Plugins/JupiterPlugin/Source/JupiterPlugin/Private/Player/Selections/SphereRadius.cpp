@@ -1,7 +1,7 @@
 ﻿#include "Player/Selections/SphereRadius.h"
 #include "Player/PlayerControllerRts.h"
 #include "Components/DecalComponent.h"
-#include "Components/SlectionComponent.h"
+#include "Components/UnitSelectionComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -9,7 +9,6 @@
 ASphereRadius::ASphereRadius()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
 	
 	SphereComponent = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComponent"));
 	SphereComponent->SetSphereRadius(1.f);
@@ -28,10 +27,14 @@ void ASphereRadius::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	if(Decal) Decal->SetVisibility(false);
+	if(Decal)
+		Decal->SetVisibility(false);
 	
 	SetActorEnableCollision(false);
-	verify((SelectionComponent = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn()->GetComponentByClass<USelectionComponent>()) != nullptr);
+    if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
+    {
+        SelectionComponent = OwnerPawn->FindComponentByClass<UUnitSelectionComponent>();
+    }
 }
 
 void ASphereRadius::Tick(float DeltaTime)

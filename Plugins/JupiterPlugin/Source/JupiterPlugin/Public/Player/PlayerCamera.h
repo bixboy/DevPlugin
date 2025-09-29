@@ -16,7 +16,10 @@ class ASphereRadius;
 class ASelectionBox;
 class UCameraComponent;
 class USpringArmComponent;
-class USelectionComponent;
+class UUnitSelectionComponent;
+class UUnitOrderComponent;
+class UUnitFormationComponent;
+class UUnitSpawnComponent;
 UCLASS()
 class JUPITERPLUGIN_API APlayerCamera : public APawn
 {
@@ -38,8 +41,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UFloatingPawnMovement> PawnMovementComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	USelectionComponent* SelectionComponent;
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitSelectionComponent* SelectionComponent;
+
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitOrderComponent* OrderComponent;
+
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitFormationComponent* FormationComponent;
+
+        UPROPERTY(EditAnywhere, BlueprintReadOnly)
+        UUnitSpawnComponent* SpawnComponent;
 protected:
 //------------------------------------ Inputs ------------------------------------
 #pragma region Inputs
@@ -302,7 +314,7 @@ protected:
 #pragma endregion
 
 #pragma region Spawn Units
-	
+
 protected:
 
 	UFUNCTION()
@@ -326,10 +338,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Settings|Spawn Units")
 	TSubclassOf<APreviewPoseMesh> PreviewUnitsClass;
 
-	UPROPERTY()
-	APreviewPoseMesh* PreviewUnits;
-	
-#pragma endregion	
+        UPROPERTY()
+        APreviewPoseMesh* PreviewUnits;
+
+#pragma endregion
+
+private:
+        /** Lazily resolves the selection component, logging a warning if missing. */
+        UUnitSelectionComponent* GetSelectionComponentChecked() const;
 };
 
 template <typename T>

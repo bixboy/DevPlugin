@@ -2,7 +2,7 @@
 #include "Player/PlayerControllerRts.h"
 #include "Components/BoxComponent.h"
 #include "Components/DecalComponent.h"
-#include "Components/SlectionComponent.h"
+#include "Components/UnitSelectionComponent.h"
 #include "Interfaces/Selectable.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -31,12 +31,12 @@ void ASelectionBox::BeginPlay()
 	Super::BeginPlay();
 
 	SetActorEnableCollision(false);
+	
 	if(Decal)
-	{
 		Decal->SetVisibility(false);
-	}
 
-	verify((SelectionComponent = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn()->GetComponentByClass<USelectionComponent>()) != nullptr);
+    if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
+		SelectionComponent = OwnerPawn->FindComponentByClass<UUnitSelectionComponent>();
 }
 
 void ASelectionBox::Tick(float DeltaTime)
@@ -113,9 +113,7 @@ void ASelectionBox::Adjust() const
 void ASelectionBox::Manage()
 {
 	if (!BoxComponent)
-	{
 		return;
-	}
 
 	const FVector BoxExtent = BoxComponent->GetScaledBoxExtent();
 	const FVector BoxCenter = BoxComponent->GetComponentLocation(); 
@@ -124,14 +122,12 @@ void ASelectionBox::Manage()
 	{
 		FVector ActorCenter = InBox[i]->GetActorLocation();
 
-		// Vérifier si l'acteur est dans la box en utilisant les limites de la box
 		FVector LocalActorCenter = BoxComponent->GetComponentTransform().InverseTransformPosition(ActorCenter);
 		bool bInsideBox = FMath::Abs(LocalActorCenter.X) <= BoxExtent.X && FMath::Abs(LocalActorCenter.Y) <= BoxExtent.Y;
 		
 		if (bInsideBox)
 		{
 
-			// add object to CenterBox is in selection box list
 			if (!CenterInBox.Contains(InBox[i]))
 			{
 				CenterInBox.Add(InBox[i]);
@@ -151,9 +147,7 @@ void ASelectionBox::Manage()
 void ASelectionBox::HandleHighlight(AActor* ActorInBox, const bool Highlight) const
 {
 	if(ISelectable* Selectable = Cast<ISelectable>(ActorInBox))
-	{
 		Selectable->Highlight(Highlight);
-	}
 }
 
 void ASelectionBox::OnBoxCollisionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

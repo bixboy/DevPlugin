@@ -1,135 +1,156 @@
-﻿// #include "Widget/Formations/FormationSelectorWidget.h"
-// #include "Player/PlayerControllerRts.h"
-// #include "Components/SlectionComponent.h"
-// #include "Components/Slider.h"
-// #include "Kismet/GameplayStatics.h"
-// #include "Widget/Formations/FormationButtonWidget.h"
-//
-// void UFormationSelectorWidget::NativeOnInitialized()
-// {
-// 	Super::NativeOnInitialized();
-//
-// 	verify((SelectionComponent = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn()->GetComponentByClass<USelectionComponent>()) != nullptr);
-//
-// 	if(!SelectionComponent)
-// 	{
-// 		GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("SELECTION COMPONENT NULL"));
-// 	}
-// 	
-// 	if (LineButton && ColumnButton && WedgeButton && BlobButton && SquareButton)
-// 	{
-// 		OnFormationButtonClicked(SquareButton->Button, 0);
-// 		LineButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-// 		ColumnButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-// 		WedgeButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-// 		BlobButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-// 		SquareButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-// 	}
-//
-// 	if (SpacingSlider)
-// 	{
-// 		SpacingSlider->OnValueChanged.AddDynamic(this, &UFormationSelectorWidget::OnSpacingSliderValueChanged);
-// 		OnSpacingSliderValueChanged(SpacingSlider->GetValue());
-// 	}
-// }
-//
-// void UFormationSelectorWidget::OnFormationButtonClicked(UCustomButtonWidget* Button, int Index)
-// {
-// 	if (SelectionComponent)
-// 	{
-// 		SelectionComponent->UpdateFormation(static_cast<EFormation>(Index));
-//
-// 		LineButton->Button->ToggleButtonIsSelected(false);
-// 		ColumnButton->Button->ToggleButtonIsSelected(false);
-// 		WedgeButton->Button->ToggleButtonIsSelected(false);
-// 		BlobButton->Button->ToggleButtonIsSelected(false);
-// 		SquareButton->Button->ToggleButtonIsSelected(false);
-//
-// 		Button->ToggleButtonIsSelected(true);
-// 	}else
-// 	{
-// 		GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("NO SELECTION COMPONENT"));
-// 	}
-// }
-//
-// void UFormationSelectorWidget::OnSpacingSliderValueChanged(const float Value)
-// {
-// 	GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Green, TEXT( "SpacingSliderValueChanged"));
-//
-// 	if (SelectionComponent)
-// 	{
-// 		GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Green, FString::Printf(TEXT("Spacing Value: %f"), Value));
-//
-// 		SelectionComponent->UpdateSpacing(Value);
-// 	}else
-// 	{
-// 		GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("NO SELECTION COMPONENT"));
-// 	}
-// }
-
-
-
 #include "Widget/Formations/FormationSelectorWidget.h"
-#include "Components/SlectionComponent.h"
+
+#include "Components/ComboBoxString.h"
 #include "Components/Slider.h"
+#include "Components/UnitFormationComponent.h"
+#include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
-#include "Widget/Formations/FormationButtonWidget.h"
 
 void UFormationSelectorWidget::NativeOnInitialized()
 {
-	Super::NativeOnInitialized();
+        Super::NativeOnInitialized();
 
-	verify((SelectionComponent = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn()->GetComponentByClass<USelectionComponent>()) != nullptr);
+        if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
+        {
+                FormationComponent = OwnerPawn->FindComponentByClass<UUnitFormationComponent>();
+        }
 
-	if(!SelectionComponent)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("SELECTION COMPONENT NULL"));
-	}
-	
-	if (LineButton && ColumnButton && WedgeButton && BlobButton && SquareButton)
-	{
-		OnFormationButtonClicked(SquareButton->Button, 0);
-		LineButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-		ColumnButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-		WedgeButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-		BlobButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-		SquareButton->Button->OnButtonClicked.AddDynamic(this, &UFormationSelectorWidget::OnFormationButtonClicked);
-	}
+        if (!FormationComponent)
+        {
+                GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("FORMATION COMPONENT NULL"));
+        }
+        else
+        {
+                FormationComponent->OnFormationStateChanged.AddDynamic(this, &UFormationSelectorWidget::OnFormationStateChanged);
+        }
 
-	if (SpacingSlider)
-	{
-		SpacingSlider->OnValueChanged.AddDynamic(this, &UFormationSelectorWidget::OnSpacingSliderValueChanged);
-		OnSpacingSliderValueChanged(SpacingSlider->GetValue());
-	}
+        InitializeFormationOptions();
+        UpdateSpacingFromComponent();
+
+        if (SpacingSlider)
+        {
+                SpacingSlider->OnValueChanged.AddDynamic(this, &UFormationSelectorWidget::OnSpacingSliderValueChanged);
+        }
 }
 
-void UFormationSelectorWidget::OnFormationButtonClicked(UCustomButtonWidget* Button, int Index)
+void UFormationSelectorWidget::OnFormationSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
 {
-	if (SelectionComponent)
-	{
-		SelectionComponent->UpdateFormation(static_cast<EFormation>(Index));
+        if (bIsUpdatingSelection)
+                return;
 
-		LineButton->Button->ToggleButtonIsSelected(false);
-		ColumnButton->Button->ToggleButtonIsSelected(false);
-		WedgeButton->Button->ToggleButtonIsSelected(false);
-		BlobButton->Button->ToggleButtonIsSelected(false);
-		SquareButton->Button->ToggleButtonIsSelected(false);
-
-		Button->ToggleButtonIsSelected(true);
-	}
-	else
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("NO SELECTION COMPONENT"));
-	}
+        ApplyFormationSelection(SelectedItem);
 }
 
 void UFormationSelectorWidget::OnSpacingSliderValueChanged(const float Value)
 {
-	if (SelectionComponent)
-	{
-		SelectionComponent->UpdateSpacing(Value);
-	}else
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("NO SELECTION COMPONENT"));
-	}
+        if (bIsUpdatingSpacing)
+        {
+                return;
+        }
+
+        if (FormationComponent)
+        {
+                FormationComponent->SetFormationSpacing(Value);
+        }
+        else
+        {
+                GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("NO FORMATION COMPONENT"));
+        }
+}
+
+void UFormationSelectorWidget::OnFormationStateChanged()
+{
+        UpdateSelectedFormation(FormationComponent ? FormationComponent->GetFormation() : EFormation::Line);
+        UpdateSpacingFromComponent();
+}
+
+void UFormationSelectorWidget::InitializeFormationOptions()
+{
+        if (!FormationDropdown)
+        {
+                return;
+        }
+
+        FormationDropdown->ClearOptions();
+        OptionToFormation.Reset();
+        FormationToOption.Reset();
+
+        if (const UEnum* EnumPtr = StaticEnum<EFormation>())
+        {
+                for (int32 EnumIndex = 0; EnumIndex < EnumPtr->NumEnums(); ++EnumIndex)
+                {
+                        if (EnumPtr->HasMetaData(TEXT("Hidden"), EnumIndex))
+                        {
+                                continue;
+                        }
+
+                        const FString EnumName = EnumPtr->GetNameStringByIndex(EnumIndex);
+                        if (EnumName.Contains(TEXT("MAX")))
+                        {
+                                continue;
+                        }
+
+                        const EFormation Formation = static_cast<EFormation>(EnumPtr->GetValueByIndex(EnumIndex));
+                        const FString DisplayName = EnumPtr->GetDisplayNameTextByIndex(EnumIndex).ToString();
+
+                        FormationDropdown->AddOption(DisplayName);
+                        OptionToFormation.Add(DisplayName, Formation);
+                        FormationToOption.Add(Formation, DisplayName);
+                }
+        }
+
+        FormationDropdown->OnSelectionChanged.AddDynamic(this, &UFormationSelectorWidget::OnFormationSelectionChanged);
+
+        if (FormationComponent)
+        {
+                UpdateSelectedFormation(FormationComponent->GetFormation());
+        }
+        else if (FormationDropdown->GetOptionCount() > 0)
+        {
+                const FString& DefaultOption = FormationDropdown->GetOptionAtIndex(0);
+                bIsUpdatingSelection = true;
+                FormationDropdown->SetSelectedOption(DefaultOption);
+                bIsUpdatingSelection = false;
+
+                ApplyFormationSelection(DefaultOption);
+        }
+}
+
+void UFormationSelectorWidget::ApplyFormationSelection(const FString& SelectedOption)
+{
+        if (!FormationComponent)
+        {
+                GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("NO FORMATION COMPONENT"));
+                return;
+        }
+
+        if (const EFormation* Formation = OptionToFormation.Find(SelectedOption))
+                FormationComponent->SetFormation(*Formation);
+}
+
+void UFormationSelectorWidget::UpdateSelectedFormation(EFormation Formation)
+{
+        if (!FormationDropdown)
+                return;
+
+        if (const FString* Option = FormationToOption.Find(Formation))
+        {
+                bIsUpdatingSelection = true;
+                FormationDropdown->SetSelectedOption(*Option);
+                bIsUpdatingSelection = false;
+        }
+}
+
+void UFormationSelectorWidget::UpdateSpacingFromComponent()
+{
+        if (!SpacingSlider || !FormationComponent)
+                return;
+
+        const float ComponentSpacing = FormationComponent->GetFormationSpacing();
+        if (!FMath::IsNearlyEqual(ComponentSpacing, SpacingSlider->GetValue()))
+        {
+                bIsUpdatingSpacing = true;
+                SpacingSlider->SetValue(ComponentSpacing);
+                bIsUpdatingSpacing = false;
+        }
 }
