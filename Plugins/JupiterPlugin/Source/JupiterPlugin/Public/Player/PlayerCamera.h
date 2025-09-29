@@ -320,26 +320,33 @@ protected:
 	UFUNCTION()
 	void CreatePreviewMesh();
 	
-	UFUNCTION()
-	void Input_OnSpawnUnits();
+        UFUNCTION()
+        void Input_OnSpawnUnits();
 
-	UFUNCTION()
-	void ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass);
+        UFUNCTION()
+        void ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass);
 
-	UFUNCTION()
-	void HidePreview();
+        UFUNCTION()
+        void HidePreview();
 
-	UFUNCTION()
-	void PreviewFollowMouse();
+        UFUNCTION()
+        void PreviewFollowMouse();
 
-	UPROPERTY()
-	bool bIsInSpawnUnits = false;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Spawn Units")
-	TSubclassOf<APreviewPoseMesh> PreviewUnitsClass;
+        UFUNCTION()
+        void HandleSpawnCountChanged(int32 NewSpawnCount);
 
         UPROPERTY()
-        APreviewPoseMesh* PreviewUnits;
+        bool bIsInSpawnUnits = false;
+
+        UPROPERTY(EditAnywhere, Category = "Settings|Spawn Units")
+        TSubclassOf<APreviewPoseMesh> PreviewUnitsClass;
+
+        UPROPERTY()
+        TArray<TObjectPtr<APreviewPoseMesh>> PreviewUnits;
+
+        void EnsurePreviewUnits(int32 DesiredCount);
+        void UpdatePreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation);
+        bool HasPreviewUnits() const { return PreviewUnits.Num() > 0; }
 
 #pragma endregion
 

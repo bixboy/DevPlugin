@@ -39,6 +39,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
     TSubclassOf<ASoldierRts> GetUnitToSpawn() const { return UnitToSpawn; }
 
+    UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
+    float GetFormationSpacing() const { return FormationSpacing; }
+
     /** Delegate fired whenever the unit class changes (useful for UI preview). */
     UPROPERTY(BlueprintAssignable, Category = "RTS|Spawn")
     FOnSpawnUnitClassChangedSignature OnUnitClassChanged;

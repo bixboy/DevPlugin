@@ -66,7 +66,7 @@ UUnitSelectionComponent* APlayerCamera::GetSelectionComponentChecked() const
 
 void APlayerCamera::BeginPlay()
 {
-	Super::BeginPlay();
+        Super::BeginPlay();
 
     Player = Cast<APlayerController>(GetInstigatorController());
 	
@@ -96,8 +96,10 @@ void APlayerCamera::BeginPlay()
 
     if (SpawnComponent)
     {
-    	SpawnComponent->OnUnitClassChanged.RemoveDynamic(this, &APlayerCamera::ShowUnitPreview);
+        SpawnComponent->OnUnitClassChanged.RemoveDynamic(this, &APlayerCamera::ShowUnitPreview);
         SpawnComponent->OnUnitClassChanged.AddDynamic(this, &APlayerCamera::ShowUnitPreview);
+        SpawnComponent->OnSpawnCountChanged.RemoveDynamic(this, &APlayerCamera::HandleSpawnCountChanged);
+        SpawnComponent->OnSpawnCountChanged.AddDynamic(this, &APlayerCamera::HandleSpawnCountChanged);
     }
 
     CreatePreviewMesh();
@@ -208,8 +210,14 @@ void APlayerCamera::UnPossessed()
 		}
 	}
 
-	if(PreviewUnits)
-		PreviewUnits->Destroy();
+        for (APreviewPoseMesh* Preview : PreviewUnits)
+        {
+                if (Preview)
+                {
+                        Preview->Destroy();
+                }
+        }
+        PreviewUnits.Empty();
 }
 
 void APlayerCamera::NotifyControllerChanged()
@@ -806,49 +814,38 @@ FCommandData APlayerCamera::CreateCommandData(const ECommandType Type, AActor* E
 
 void APlayerCamera::CreatePreviewMesh()
 {
-	if(PreviewUnits) return;
+        if (!Player || !Player->IsLocalController() || !PreviewUnitsClass)
+        {
+                return;
+        }
 
-	if (Player && Player->IsLocalController())
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Green, TEXT("PLAYER VALID"));
+        const int32 DesiredCount = SpawnComponent ? FMath::Max(SpawnComponent->GetUnitsPerSpawn(), 1) : 1;
+        EnsurePreviewUnits(DesiredCount);
 
-		if(UWorld* World = GetWorld())
-		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.Instigator = this;
-			SpawnParams.Owner = this;
-		
-			PreviewUnits = World->SpawnActor<APreviewPoseMesh>(PreviewUnitsClass,FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-
-                        if (PreviewUnits)
-                        {
-                                PreviewUnits->SetReplicates(false);
-                                PreviewUnits->SetOwner(this);
-
-                                if (SpawnComponent)
-                                {
-                                        ShowUnitPreview(SpawnComponent->GetUnitToSpawn());
-                                }
-                        }
-		}	
-	}else
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Red, TEXT("NO PLAYER"));
-	}
+        if (SpawnComponent)
+        {
+                ShowUnitPreview(SpawnComponent->GetUnitToSpawn());
+        }
 }
 
 void APlayerCamera::Input_OnSpawnUnits()
 {
+        if (!bIsInSpawnUnits || !HasPreviewUnits())
+        {
+                return;
+        }
 
-	UE_LOG(LogTemp, Warning, TEXT("Inside OnSpawnUnits"));
+        bool bAllValid = true;
+        for (APreviewPoseMesh* Preview : PreviewUnits)
+        {
+                if (!Preview || !Preview->GetIsValidPlacement())
+                {
+                        bAllValid = false;
+                        break;
+                }
+        }
 
-	GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Red, TEXT("Input SpawnUnits"));
-
-	
-	if (!bIsInSpawnUnits && !PreviewUnits) return;
-
-
-        if (PreviewUnits->GetIsValidPlacement() && SpawnComponent)
+        if (bAllValid && SpawnComponent)
         {
                 SpawnComponent->SpawnUnits();
         }
@@ -856,7 +853,7 @@ void APlayerCamera::Input_OnSpawnUnits()
 
 void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
 {
-        if (!PreviewUnits)
+        if (!HasPreviewUnits())
         {
                 return;
         }
@@ -870,10 +867,16 @@ void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
                                 if (MeshComponent->GetSkeletalMeshAsset())
                                 {
                                         bIsInSpawnUnits = true;
-                                        PreviewUnits->ShowPreview(MeshComponent->GetSkeletalMeshAsset(), DefaultSoldier->GetCapsuleComponent()->GetRelativeScale3D());
-                                        if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+                                        for (APreviewPoseMesh* Preview : PreviewUnits)
                                         {
-                                                PreviewUnits->SetActorLocation(Selection->GetMousePositionOnTerrain().Location);
+                                                if (Preview)
+                                                {
+                                                        Preview->ShowPreview(MeshComponent->GetSkeletalMeshAsset(), DefaultSoldier->GetCapsuleComponent()->GetRelativeScale3D());
+                                                }
+                                        }
+                                        if (GetSelectionComponentChecked())
+                                        {
+                                                PreviewFollowMouse();
                                                 return;
                                         }
                                         HidePreview();
@@ -888,9 +891,12 @@ void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
 
 void APlayerCamera::HidePreview()
 {
-        if (PreviewUnits)
+        for (APreviewPoseMesh* Preview : PreviewUnits)
         {
-                PreviewUnits->HidePreview();
+                if (Preview)
+                {
+                        Preview->HidePreview();
+                }
         }
         bIsInSpawnUnits = false;
 }
@@ -898,7 +904,7 @@ void APlayerCamera::HidePreview()
 void APlayerCamera::PreviewFollowMouse()
 {
 
-        if (bIsInSpawnUnits && PreviewUnits && Player)
+        if (bIsInSpawnUnits && HasPreviewUnits() && Player)
         {
 
                 FHitResult MouseHit;
@@ -910,16 +916,108 @@ void APlayerCamera::PreviewFollowMouse()
                 {
                         return;
                 }
-                FRotator MouseRotation = FRotator(0,  CameraComponent->GetComponentRotation().Yaw, CameraComponent->GetComponentRotation().Roll);
+                const FRotator MouseRotation(0.f, CameraComponent->GetComponentRotation().Yaw, CameraComponent->GetComponentRotation().Roll);
 
                 if (MouseHit.Location != FVector::ZeroVector)
                 {
-			PreviewUnits->SetActorLocation(MouseHit.Location);
-			PreviewUnits->SetActorRotation(MouseRotation);
+                        UpdatePreviewTransforms(MouseHit.Location, MouseRotation);
+                }
+        }
+}
 
-			PreviewUnits->CheckIsValidPlacement();
-		}
-	}
+void APlayerCamera::HandleSpawnCountChanged(int32 NewSpawnCount)
+{
+        EnsurePreviewUnits(NewSpawnCount);
+
+        if (bIsInSpawnUnits && SpawnComponent)
+        {
+                ShowUnitPreview(SpawnComponent->GetUnitToSpawn());
+                PreviewFollowMouse();
+        }
+}
+
+void APlayerCamera::EnsurePreviewUnits(int32 DesiredCount)
+{
+        DesiredCount = FMath::Max(1, DesiredCount);
+
+        if (!Player || !Player->IsLocalController())
+        {
+                return;
+        }
+
+        if (PreviewUnits.Num() > DesiredCount)
+        {
+                for (int32 Index = PreviewUnits.Num() - 1; Index >= DesiredCount; --Index)
+                {
+                        if (APreviewPoseMesh* Preview = PreviewUnits[Index])
+                        {
+                                Preview->Destroy();
+                        }
+                        PreviewUnits.RemoveAt(Index);
+                }
+        }
+
+        if (!PreviewUnitsClass)
+        {
+                return;
+        }
+
+        if (UWorld* World = GetWorld())
+        {
+                while (PreviewUnits.Num() < DesiredCount)
+                {
+                        FActorSpawnParameters SpawnParams;
+                        SpawnParams.Instigator = this;
+                        SpawnParams.Owner = this;
+
+                        if (APreviewPoseMesh* Preview = World->SpawnActor<APreviewPoseMesh>(PreviewUnitsClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams))
+                        {
+                                Preview->SetReplicates(false);
+                                Preview->SetOwner(this);
+                                Preview->SetActorHiddenInGame(true);
+                                PreviewUnits.Add(Preview);
+                        }
+                        else
+                        {
+                                break;
+                        }
+                }
+        }
+}
+
+void APlayerCamera::UpdatePreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation)
+{
+        if (!HasPreviewUnits())
+        {
+                return;
+        }
+
+        const int32 SpawnCount = SpawnComponent ? FMath::Max(SpawnComponent->GetUnitsPerSpawn(), 1) : PreviewUnits.Num();
+        const float Spacing = SpawnComponent ? FMath::Max(SpawnComponent->GetFormationSpacing(), 0.f) : 0.f;
+
+        const int32 Columns = FMath::Max(1, FMath::CeilToInt(FMath::Sqrt(static_cast<float>(SpawnCount))));
+        const int32 Rows = FMath::Max(1, FMath::CeilToInt(static_cast<float>(SpawnCount) / static_cast<float>(Columns)));
+        const float HalfWidth = (Columns - 1) * 0.5f * Spacing;
+        const float HalfHeight = (Rows - 1) * 0.5f * Spacing;
+
+        for (int32 Index = 0; Index < PreviewUnits.Num(); ++Index)
+        {
+                if (APreviewPoseMesh* Preview = PreviewUnits[Index])
+                {
+                        const int32 Row = Index / Columns;
+                        const int32 Column = Index % Columns;
+
+                        const float OffsetX = (Column * Spacing) - HalfWidth;
+                        const float OffsetY = (Row * Spacing) - HalfHeight;
+
+                        const FVector FormationOffset(OffsetX, OffsetY, 0.f);
+                        const FVector FormationLocation = CenterLocation + FormationOffset;
+
+                        Preview->SetActorLocation(FormationLocation);
+                        Preview->SetActorRotation(FacingRotation);
+                        Preview->CheckIsValidPlacement();
+                }
+        }
 }
 
 #pragma endregion 
