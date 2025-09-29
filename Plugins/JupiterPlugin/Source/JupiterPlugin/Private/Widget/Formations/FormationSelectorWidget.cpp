@@ -36,9 +36,7 @@ void UFormationSelectorWidget::NativeOnInitialized()
 void UFormationSelectorWidget::OnFormationSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
 {
         if (bIsUpdatingSelection)
-        {
                 return;
-        }
 
         ApplyFormationSelection(SelectedItem);
 }
@@ -127,17 +125,13 @@ void UFormationSelectorWidget::ApplyFormationSelection(const FString& SelectedOp
         }
 
         if (const EFormation* Formation = OptionToFormation.Find(SelectedOption))
-        {
                 FormationComponent->SetFormation(*Formation);
-        }
 }
 
 void UFormationSelectorWidget::UpdateSelectedFormation(EFormation Formation)
 {
         if (!FormationDropdown)
-        {
                 return;
-        }
 
         if (const FString* Option = FormationToOption.Find(Formation))
         {
@@ -150,9 +144,7 @@ void UFormationSelectorWidget::UpdateSelectedFormation(EFormation Formation)
 void UFormationSelectorWidget::UpdateSpacingFromComponent()
 {
         if (!SpacingSlider || !FormationComponent)
-        {
                 return;
-        }
 
         const float ComponentSpacing = FormationComponent->GetFormationSpacing();
         if (!FMath::IsNearlyEqual(ComponentSpacing, SpacingSlider->GetValue()))

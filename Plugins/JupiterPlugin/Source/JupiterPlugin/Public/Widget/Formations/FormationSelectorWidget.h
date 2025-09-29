@@ -2,15 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Data/AiData.h"
 #include "FormationSelectorWidget.generated.h"
 
 class USlider;
 class UComboBoxString;
-namespace ESelectInfo
-{
-        enum Type;
-}
 class UUnitFormationComponent;
+namespace ESelectInfo { enum Type; }
 
 UCLASS()
 class JUPITERPLUGIN_API UFormationSelectorWidget : public UUserWidget
@@ -20,39 +18,37 @@ class JUPITERPLUGIN_API UFormationSelectorWidget : public UUserWidget
 public:
 	virtual void NativeOnInitialized() override;
 
-        UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-        UComboBoxString* FormationDropdown;
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    UComboBoxString* FormationDropdown;
 
-        UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-        USlider* SpacingSlider;
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    USlider* SpacingSlider;
 
 protected:
-        UFUNCTION()
-        void OnFormationSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+	UFUNCTION()
+	void OnFormationSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
-        UFUNCTION()
-        void OnSpacingSliderValueChanged(const float Value);
+	UFUNCTION()
+	void OnSpacingSliderValueChanged(const float Value);
 
-        UFUNCTION()
-        void OnFormationStateChanged();
+	UFUNCTION()
+	void OnFormationStateChanged();
 
-        void InitializeFormationOptions();
-        void ApplyFormationSelection(const FString& SelectedOption);
-        void UpdateSelectedFormation(EFormation Formation);
-        void UpdateSpacingFromComponent();
+	void InitializeFormationOptions();
+	void ApplyFormationSelection(const FString& SelectedOption);
+	void UpdateSelectedFormation(EFormation Formation);
+	void UpdateSpacingFromComponent();
 
-        UPROPERTY()
-        UUnitFormationComponent* FormationComponent;
+	UPROPERTY()
+	UUnitFormationComponent* FormationComponent;
 
-        /** Keeps the dropdown labels associated with their enum values. */
-        TMap<FString, EFormation> OptionToFormation;
+	TMap<FString, EFormation> OptionToFormation;
 
-        /** Reverse lookup to quickly select the appropriate option. */
-        TMap<EFormation, FString> FormationToOption;
+	TMap<EFormation, FString> FormationToOption;
 
-        /** Prevents recursive updates while synchronizing with the component. */
-        bool bIsUpdatingSelection = false;
+	UPROPERTY()
+	bool bIsUpdatingSelection = false;
 
-        /** Prevents feedback loops when updating the spacing slider programmatically. */
-        bool bIsUpdatingSpacing = false;
+	UPROPERTY()
+	bool bIsUpdatingSpacing = false;
 };
