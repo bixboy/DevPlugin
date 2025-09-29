@@ -88,13 +88,15 @@ void APlayerCamera::BeginPlay()
         Selection->CreateHud();
     }
 
-    if (FormationComponent && OrderComponent)
-    {
-        FormationComponent->OnFormationStateChanged.AddDynamic(OrderComponent, &UUnitOrderComponent::ReapplyCachedFormation);
-    }
+	if (FormationComponent && OrderComponent)
+	{
+		FormationComponent->OnFormationStateChanged.RemoveDynamic(OrderComponent, &UUnitOrderComponent::ReapplyCachedFormation);
+		FormationComponent->OnFormationStateChanged.AddDynamic(OrderComponent, &UUnitOrderComponent::ReapplyCachedFormation);
+	}
 
     if (SpawnComponent)
     {
+    	SpawnComponent->OnUnitClassChanged.RemoveDynamic(this, &APlayerCamera::ShowUnitPreview);
         SpawnComponent->OnUnitClassChanged.AddDynamic(this, &APlayerCamera::ShowUnitPreview);
     }
 
