@@ -1,9 +1,7 @@
 ﻿#include "Widget/UnitsSelection/UnitsSelectionWidget.h"
-
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
-#include "Components/ListView.h"
 #include "Components/UnitSpawnComponent.h"
 #include "Components/WrapBox.h"
 #include "Data/UnitsSelectionDataAsset.h"
@@ -19,9 +17,7 @@ void UUnitsSelectionWidget::NativeOnInitialized()
         if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0))
         {
                 if (APawn* PlayerPawn = PlayerController->GetPawn())
-                {
                         SpawnComponent = PlayerPawn->FindComponentByClass<UUnitSpawnComponent>();
-                }
         }
 
         if (SpawnComponent)
@@ -138,12 +134,10 @@ void UUnitsSelectionWidget::OnUnitSelected(UCustomButtonWidget* Button, int Inde
 void UUnitsSelectionWidget::OnSpawnCountTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
         int32 ParsedValue = CachedSpawnCount;
-
         const FString TextString = Text.ToString();
+        
         if (!TextString.IsEmpty())
-        {
                 ParsedValue = FCString::Atoi(*TextString);
-        }
 
         ApplySpawnCount(ParsedValue);
 }
@@ -169,9 +163,7 @@ void UUnitsSelectionWidget::ApplySpawnCount(int32 NewCount)
         const int32 ClampedCount = FMath::Clamp(NewCount, 1, MaxSpawnCount);
 
         if (SpawnComponent)
-        {
                 SpawnComponent->SetUnitsPerSpawn(ClampedCount);
-        }
 
         CachedSpawnCount = ClampedCount;
         RefreshSpawnCountDisplay();
@@ -180,7 +172,5 @@ void UUnitsSelectionWidget::ApplySpawnCount(int32 NewCount)
 void UUnitsSelectionWidget::RefreshSpawnCountDisplay() const
 {
         if (SpawnCountTextBox)
-        {
                 SpawnCountTextBox->SetText(FText::AsNumber(CachedSpawnCount));
-        }
 }

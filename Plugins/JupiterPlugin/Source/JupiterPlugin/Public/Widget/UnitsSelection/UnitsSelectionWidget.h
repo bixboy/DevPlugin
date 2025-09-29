@@ -20,8 +20,8 @@ class JUPITERPLUGIN_API UUnitsSelectionWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-        virtual void NativeOnInitialized() override;
-        virtual void NativeDestruct() override;
+    virtual void NativeOnInitialized() override;
+    virtual void NativeDestruct() override;
 	
 	UFUNCTION()
 	void SetupUnitsList();
@@ -31,23 +31,23 @@ protected:
 	UFUNCTION()
 	void OnShowUnitSelectionPressed();
 
-        UFUNCTION()
-        void OnUnitSelected(UCustomButtonWidget* Button, int Index);
+    UFUNCTION()
+    void OnUnitSelected(UCustomButtonWidget* Button, int Index);
 
-        UFUNCTION()
-        void OnSpawnCountTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+    UFUNCTION()
+    void OnSpawnCountTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
-        UFUNCTION()
-        void OnIncreaseSpawnCount(UCustomButtonWidget* Button, int Index);
+    UFUNCTION()
+    void OnIncreaseSpawnCount(UCustomButtonWidget* Button, int Index);
 
-        UFUNCTION()
-        void OnDecreaseSpawnCount(UCustomButtonWidget* Button, int Index);
+    UFUNCTION()
+    void OnDecreaseSpawnCount(UCustomButtonWidget* Button, int Index);
 
-        UFUNCTION()
-        void HandleSpawnCountChanged(int32 NewCount);
+    UFUNCTION()
+    void HandleSpawnCountChanged(int32 NewCount);
 
-        void ApplySpawnCount(int32 NewCount);
-        void RefreshSpawnCountDisplay() const;
+    void ApplySpawnCount(int32 NewCount);
+    void RefreshSpawnCountDisplay() const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
 	TSubclassOf<UUnitsEntryWidget> UnitsEntryClass;
@@ -55,34 +55,34 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UButton* Btn_ShowUnitsSelection;
 	
-        UPROPERTY(EditAnywhere, Category = "Settings")
-        TArray<UUnitsSelectionDataAsset*> UnitsSelectionDataAssets;
+    UPROPERTY(EditAnywhere, Category = "Settings")
+    TArray<UUnitsSelectionDataAsset*> UnitsSelectionDataAssets;
 
-        UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-        UWrapBox* WrapBox;
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    UWrapBox* WrapBox;
 
-        UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-        UBorder* ListBorder;
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    UBorder* ListBorder;
 
-        UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-        UEditableTextBox* SpawnCountTextBox;
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UEditableTextBox* SpawnCountTextBox;
 
-        UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-        UCustomButtonWidget* Btn_IncreaseSpawnCount;
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UCustomButtonWidget* Btn_IncreaseSpawnCount;
 
-        UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-        UCustomButtonWidget* Btn_DecreaseSpawnCount;
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UCustomButtonWidget* Btn_DecreaseSpawnCount;
 
-        UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings", meta = (ClampMin = "1"))
-        int32 MaxSpawnCount = 50;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings", meta = (ClampMin = "1"))
+    int32 MaxSpawnCount = 50;
 
-        UPROPERTY()
-        TArray<UUnitsEntryWidget*> EntryList;
+    UPROPERTY()
+    TArray<UUnitsEntryWidget*> EntryList;
 
-        UPROPERTY()
-        UUnitSpawnComponent* SpawnComponent = nullptr;
+    UPROPERTY()
+    UUnitSpawnComponent* SpawnComponent = nullptr;
 
-        UPROPERTY(Transient)
-        int32 CachedSpawnCount = 1;
+    UPROPERTY(Transient)
+    int32 CachedSpawnCount = 1;
 
 };

@@ -17,9 +17,7 @@ void UUnitSpawnComponent::BeginPlay()
     SelectionComponent = GetOwner() ? GetOwner()->FindComponentByClass<UUnitSelectionComponent>() : nullptr;
 
     if (UnitsPerSpawn <= 0)
-    {
         UnitsPerSpawn = 1;
-    }
 
     if (GetOwner() && GetOwner()->HasAuthority() && !UnitToSpawn && DefaultUnitClass)
     {
