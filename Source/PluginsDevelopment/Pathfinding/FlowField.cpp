@@ -1,5 +1,7 @@
 #include "FlowField.h"
 
+#include "Algo/Heap.h"
+
 namespace
 {
         constexpr float InvalidCost = TNumericLimits<float>::Max();
