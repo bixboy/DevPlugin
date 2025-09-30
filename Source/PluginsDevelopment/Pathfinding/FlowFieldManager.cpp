@@ -141,7 +141,19 @@ void AFlowFieldManager::UpdateTraversalWeights()
 
                         FHitResult Hit;
                         const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, TerrainCollisionChannel, QueryParams);
-                        TraversalWeights[Index] = bHit ? WeightValue : 0;
+                        if (bHit)
+                        {
+                                const FVector HitNormal = Hit.ImpactNormal.GetSafeNormal();
+                                const float Dot = FVector::DotProduct(HitNormal, FVector::UpVector);
+                                const float ClampedDot = FMath::Clamp(Dot, -1.0f, 1.0f);
+                                const float SlopeAngleDegrees = FMath::RadiansToDegrees(FMath::Acos(ClampedDot));
+                                const bool bWithinSlopeLimit = SlopeAngleDegrees <= MaxWalkableSlopeAngle;
+                                TraversalWeights[Index] = bWithinSlopeLimit ? WeightValue : 0;
+                        }
+                        else
+                        {
+                                TraversalWeights[Index] = 0;
+                        }
                 }
         }
         else

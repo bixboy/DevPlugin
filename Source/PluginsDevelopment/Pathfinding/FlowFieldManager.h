@@ -82,6 +82,10 @@ private:
         UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (EditCondition = "bAutoSizeToTerrain"))
         TEnumAsByte<ECollisionChannel> TerrainCollisionChannel = ECC_WorldStatic;
 
+        /** Maximum slope angle (in degrees) that is considered walkable. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (ClampMin = "0.0", ClampMax = "90.0"))
+        float MaxWalkableSlopeAngle = 45.0f;
+
         /** Size of the flow field grid. */
         UPROPERTY(EditAnywhere, Category = "Flow Field")
         FIntPoint GridSize = FIntPoint(32, 32);
