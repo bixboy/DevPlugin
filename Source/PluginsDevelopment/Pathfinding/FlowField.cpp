@@ -1,6 +1,6 @@
 #include "FlowField.h"
 
-#include "Algo/Heap.h"
+#include "Algo/Sort.h"
 
 namespace
 {
@@ -8,16 +8,15 @@ namespace
 
         struct FOpenCell
         {
+                FOpenCell() = default;
+                FOpenCell(int32 InIndex, float InCost)
+                        : Index(InIndex)
+                        , Cost(InCost)
+                {
+                }
+
                 int32 Index = INDEX_NONE;
                 float Cost = InvalidCost;
-        };
-
-        struct FOpenCellPredicate
-        {
-                bool operator()(const FOpenCell& A, const FOpenCell& B) const
-                {
-                        return A.Cost > B.Cost;
-                }
         };
 
         const TArray<FIntPoint>& GetNeighborOffsets(bool bAllowDiagonal)
@@ -101,12 +100,17 @@ bool FFlowField::Build(const FIntPoint& DestinationCell)
 
         TArray<FOpenCell> OpenSet;
         OpenSet.Reserve(IntegrationField.Num());
-        Algo::HeapPush(OpenSet, FOpenCell{DestinationIndex, 0.0f}, FOpenCellPredicate());
+        OpenSet.Emplace(DestinationIndex, 0.0f);
 
         while (OpenSet.Num() > 0)
         {
-                FOpenCell Current;
-                Algo::HeapPop(OpenSet, Current, FOpenCellPredicate());
+                OpenSet.Sort([](const FOpenCell& A, const FOpenCell& B)
+                {
+                        return A.Cost < B.Cost;
+                });
+
+                const FOpenCell Current = OpenSet[0];
+                OpenSet.RemoveAt(0);
 
                 if (!IntegrationField.IsValidIndex(Current.Index))
                 {
@@ -146,7 +150,7 @@ bool FFlowField::Build(const FIntPoint& DestinationCell)
                         if (NewCost + KINDA_SMALL_NUMBER < IntegrationField[NeighborIndex])
                         {
                                 IntegrationField[NeighborIndex] = NewCost;
-                                Algo::HeapPush(OpenSet, FOpenCell{NeighborIndex, NewCost}, FOpenCellPredicate());
+                                OpenSet.Emplace(NeighborIndex, NewCost);
                         }
                 }
         }
