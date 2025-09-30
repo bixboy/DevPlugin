@@ -1,5 +1,4 @@
 #include "FlowField.h"
-
 #include "Algo/Sort.h"
 
 namespace
