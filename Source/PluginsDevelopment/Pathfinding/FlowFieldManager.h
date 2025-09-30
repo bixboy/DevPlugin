@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Engine/EngineTypes.h"
+#include "UObject/ObjectPtr.h"
 
 #include "FlowField.h"
 
@@ -56,6 +58,30 @@ protected:
         void DrawDebug() const;
 
 private:
+        /** Automatically resize the flow field to fit the terrain bounds. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field")
+        bool bAutoSizeToTerrain = true;
+
+        /** Actors that describe the terrain to fit. When empty, landscapes in the level will be used. */
+        UPROPERTY(EditInstanceOnly, Category = "Flow Field", meta = (EditCondition = "bAutoSizeToTerrain"))
+        TArray<TObjectPtr<AActor>> TerrainActors;
+
+        /** Additional padding (in world units) applied around the detected terrain bounds. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (EditCondition = "bAutoSizeToTerrain"))
+        float TerrainBoundsPadding = 0.0f;
+
+        /** Height above the terrain used to start downward traces when evaluating walkable cells. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (EditCondition = "bAutoSizeToTerrain", ClampMin = "0.0"))
+        float TerrainTraceHeight = 5000.0f;
+
+        /** Depth below the terrain used when tracing for walkable cells. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (EditCondition = "bAutoSizeToTerrain", ClampMin = "0.0"))
+        float TerrainTraceDepth = 2000.0f;
+
+        /** Collision channel used when tracing against the terrain. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (EditCondition = "bAutoSizeToTerrain"))
+        TEnumAsByte<ECollisionChannel> TerrainCollisionChannel = ECC_WorldStatic;
+
         /** Size of the flow field grid. */
         UPROPERTY(EditAnywhere, Category = "Flow Field")
         FIntPoint GridSize = FIntPoint(32, 32);
@@ -164,5 +190,8 @@ private:
         bool bHasBuiltField = false;
         bool bHasDebugSnapshot = false;
         FVector CachedDestinationWorld = FVector::ZeroVector;
+        FBox CachedTerrainBounds = FBox(ForceInit);
+
+        void RecalculateTerrainBounds();
 };
 

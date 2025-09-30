@@ -1,6 +1,10 @@
 #include "FlowFieldManager.h"
 
 #include "DrawDebugHelpers.h"
+#include "CollisionQueryParams.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "LandscapeProxy.h"
 
 AFlowFieldManager::AFlowFieldManager()
 {
@@ -62,13 +66,32 @@ FVector AFlowFieldManager::GetDirectionForWorldPosition(const FVector& WorldPosi
 
 void AFlowFieldManager::UpdateFlowFieldSettings()
 {
-        FlowFieldSettings.GridSize = GridSize;
+        RecalculateTerrainBounds();
+
+        FIntPoint DesiredGridSize = GridSize;
+        FVector DesiredOrigin = GetActorLocation();
+
+        if (bAutoSizeToTerrain && CachedTerrainBounds.IsValid)
+        {
+                const FVector BoundsSize = CachedTerrainBounds.GetSize();
+                DesiredGridSize.X = FMath::Max(1, FMath::CeilToInt(BoundsSize.X / CellSize));
+                DesiredGridSize.Y = FMath::Max(1, FMath::CeilToInt(BoundsSize.Y / CellSize));
+                DesiredOrigin = CachedTerrainBounds.Min;
+        }
+        else
+        {
+                const FVector GridHalfExtent = FVector(GridSize.X * CellSize * 0.5f, GridSize.Y * CellSize * 0.5f, 0.0f);
+                DesiredOrigin = GetActorLocation() - GridHalfExtent;
+        }
+
+        GridSize = DesiredGridSize;
+
+        FlowFieldSettings.GridSize = DesiredGridSize;
         FlowFieldSettings.CellSize = CellSize;
 
-        const FVector ActorLocation = GetActorLocation();
-        const FVector GridHalfExtent = FVector(GridSize.X * CellSize * 0.5f, GridSize.Y * CellSize * 0.5f, 0.0f);
-        FlowFieldSettings.Origin = ActorLocation - GridHalfExtent + AdditionalOriginOffset;
-        FlowFieldSettings.Origin.Z = ActorLocation.Z + AdditionalOriginOffset.Z;
+        FVector FinalOrigin = DesiredOrigin + AdditionalOriginOffset;
+        FinalOrigin.Z = DesiredOrigin.Z + AdditionalOriginOffset.Z;
+        FlowFieldSettings.Origin = FinalOrigin;
 
         FlowFieldSettings.bAllowDiagonal = bAllowDiagonal;
         FlowFieldSettings.DiagonalCostMultiplier = DiagonalCostMultiplier;
@@ -98,9 +121,35 @@ void AFlowFieldManager::UpdateTraversalWeights()
         }
 
         const uint8 WeightValue = static_cast<uint8>(FMath::Clamp(DefaultTraversalWeight, 0, 255));
-        for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+
+        UWorld* World = GetWorld();
+        const bool bShouldTraceTerrain = bAutoSizeToTerrain && CachedTerrainBounds.IsValid && World;
+
+        if (bShouldTraceTerrain)
         {
-                TraversalWeights[Index] = WeightValue;
+                const float TraceStartZ = CachedTerrainBounds.Max.Z + TerrainTraceHeight;
+                const float TraceEndZ = CachedTerrainBounds.Min.Z - TerrainTraceDepth;
+                FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(FlowFieldTerrainTrace), false, this);
+
+                for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+                {
+                        const int32 CellX = Index % FlowFieldSettings.GridSize.X;
+                        const int32 CellY = Index / FlowFieldSettings.GridSize.X;
+                        const FVector CellWorld = FlowField.CellToWorld(FIntPoint(CellX, CellY));
+                        const FVector TraceStart(CellWorld.X, CellWorld.Y, TraceStartZ);
+                        const FVector TraceEnd(CellWorld.X, CellWorld.Y, TraceEndZ);
+
+                        FHitResult Hit;
+                        const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, TerrainCollisionChannel, QueryParams);
+                        TraversalWeights[Index] = bHit ? WeightValue : 0;
+                }
+        }
+        else
+        {
+                for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+                {
+                        TraversalWeights[Index] = WeightValue;
+                }
         }
 
         FlowField.SetTraversalWeights(TraversalWeights);
@@ -227,6 +276,60 @@ void AFlowFieldManager::DrawDebug() const
         {
                 const FVector DestinationLocation = CachedDestinationWorld + UpOffset;
                 DrawDebugSphere(World, DestinationLocation, DestinationMarkerRadius, 16, DirectionColor, false, 0.0f, 0, DebugLineThickness);
+        }
+}
+
+void AFlowFieldManager::RecalculateTerrainBounds()
+{
+        CachedTerrainBounds = FBox(ForceInit);
+
+        if (!bAutoSizeToTerrain)
+        {
+                return;
+        }
+
+        FBox DetectedBounds(ForceInit);
+
+        auto AddActorBounds = [&DetectedBounds](AActor* Actor)
+        {
+                if (!IsValid(Actor))
+                {
+                        return;
+                }
+
+                const FBox ActorBounds = Actor->GetComponentsBoundingBox(true);
+                if (ActorBounds.IsValid)
+                {
+                        DetectedBounds += ActorBounds;
+                }
+        };
+
+        for (TObjectPtr<AActor> ActorPtr : TerrainActors)
+        {
+                AddActorBounds(ActorPtr.Get());
+        }
+
+        UWorld* World = GetWorld();
+
+        if (!DetectedBounds.IsValid && World)
+        {
+                for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+                {
+                        AddActorBounds(*It);
+                }
+        }
+
+        if (!DetectedBounds.IsValid)
+        {
+                if (AActor* Parent = GetAttachParentActor())
+                {
+                        AddActorBounds(Parent);
+                }
+        }
+
+        if (DetectedBounds.IsValid)
+        {
+                CachedTerrainBounds = DetectedBounds.ExpandBy(TerrainBoundsPadding);
         }
 }
 
