@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PluginsDevelopment.h"
 
 /**
  * Settings used to build a flow field.

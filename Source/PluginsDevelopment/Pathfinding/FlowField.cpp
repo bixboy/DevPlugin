@@ -1,6 +1,4 @@
-#include "Pathfinding/FlowField.h"
-
-#include "Algo/Heap.h"
+#include "FlowField.h"
 
 namespace
 {

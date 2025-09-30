@@ -1,7 +1,6 @@
-#include "Pathfinding/FlowField.h"
-
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "FlowField.h"
 #include "Misc/AutomationTest.h"
 
 namespace
