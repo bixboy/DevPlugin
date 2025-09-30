@@ -15,7 +15,8 @@ public class PluginsDevelopment : ModuleRules
                         "Engine",
                         "InputCore",
                         "EnhancedInput",
-                        "SmartLog"
+                        "SmartLog",
+                        "Landscape"
                 });
-	}
+        }
 }
