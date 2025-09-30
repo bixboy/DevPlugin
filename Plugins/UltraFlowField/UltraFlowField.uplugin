@@ -1,0 +1,22 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0.0",
+  "FriendlyName": "Ultra Flow Field",
+  "Description": "Production-grade Flow Field navigation for large dynamic worlds.",
+  "Category": "AI",
+  "CreatedBy": "OpenAI",
+  "CreatedByURL": "https://openai.com",
+  "DocsURL": "",
+  "MarketplaceURL": "",
+  "SupportURL": "",
+  "EngineVersion": "5.6.0",
+  "CanContainContent": true,
+  "Modules": [
+    {
+      "Name": "UltraFlowFieldRuntime",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}
