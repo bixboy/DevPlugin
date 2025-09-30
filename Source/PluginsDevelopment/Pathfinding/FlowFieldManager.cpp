@@ -2,9 +2,173 @@
 
 #include "DrawDebugHelpers.h"
 #include "CollisionQueryParams.h"
+#include "CollisionShape.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "LandscapeProxy.h"
+#include "Containers/ArrayView.h"
+#include "Misc/ScopeLock.h"
+#include "HAL/IConsoleManager.h"
+#include "Async/AsyncWork.h"
+#include "Stats/Stats.h"
+
+namespace FlowField
+{
+        struct FTraversalEvaluationContext
+        {
+                TWeakObjectPtr<UWorld> World;
+                TWeakObjectPtr<const AActor> ManagerActor;
+                FIntPoint GridSize = FIntPoint::ZeroValue;
+                float CellSize = 100.0f;
+                FVector Origin = FVector::ZeroVector;
+                uint8 DefaultWeight = 255;
+                bool bTraceTerrain = false;
+                float TraceStartZ = 0.0f;
+                float TraceEndZ = 0.0f;
+                float MaxSlopeAngleDegrees = 45.0f;
+                TEnumAsByte<ECollisionChannel> TerrainChannel = ECC_WorldStatic;
+                TEnumAsByte<ECollisionChannel> ObstacleChannel = ECC_GameTraceChannel2;
+                float ObstacleHalfHeight = 100.0f;
+                float ObstacleInflation = 0.0f;
+                float ObstacleOffsetZ = 0.0f;
+                TConstArrayView<uint8> ManualObstacleMask;
+                TArray<uint8> ManualObstacleMaskStorage;
+        };
+
+        static uint8 EvaluateCell(const FTraversalEvaluationContext& Context, int32 CellIndex, bool& bOutBlockedByObstacle)
+        {
+                bOutBlockedByObstacle = false;
+
+                if (!Context.GridSize.X || !Context.GridSize.Y)
+                {
+                        return 0;
+                }
+
+                if (Context.ManualObstacleMask.IsValidIndex(CellIndex) && Context.ManualObstacleMask[CellIndex] != 0)
+                {
+                        bOutBlockedByObstacle = true;
+                        return 0;
+                }
+
+                const int32 CellX = CellIndex % Context.GridSize.X;
+                const int32 CellY = CellIndex / Context.GridSize.X;
+                const FVector CellCenter = Context.Origin + FVector((CellX + 0.5f) * Context.CellSize, (CellY + 0.5f) * Context.CellSize, 0.0f);
+
+                bool bWalkableTerrain = true;
+                UWorld* World = Context.World.Get();
+
+                if (Context.bTraceTerrain && World)
+                {
+                        const FVector TraceStart(CellCenter.X, CellCenter.Y, Context.TraceStartZ);
+                        const FVector TraceEnd(CellCenter.X, CellCenter.Y, Context.TraceEndZ);
+                        FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(FlowFieldTerrainTrace), false, Context.ManagerActor.Get());
+
+                        FHitResult Hit;
+                        if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, Context.TerrainChannel, QueryParams))
+                        {
+                                const FVector Normal = Hit.ImpactNormal.GetSafeNormal();
+                                const float Dot = FMath::Clamp(FVector::DotProduct(Normal, FVector::UpVector), -1.0f, 1.0f);
+                                const float SlopeDegrees = FMath::RadiansToDegrees(FMath::Acos(Dot));
+                                bWalkableTerrain = SlopeDegrees <= Context.MaxSlopeAngleDegrees;
+                        }
+                        else
+                        {
+                                bWalkableTerrain = false;
+                        }
+                }
+
+                if (!bWalkableTerrain)
+                {
+                        return 0;
+                }
+
+                if (World)
+                {
+                        const FVector ObstacleCenter = CellCenter + FVector(0.0f, 0.0f, Context.ObstacleOffsetZ);
+                        const FVector Extents(Context.CellSize * 0.5f + Context.ObstacleInflation, Context.CellSize * 0.5f + Context.ObstacleInflation, Context.ObstacleHalfHeight);
+                        const FCollisionShape Shape = FCollisionShape::MakeBox(Extents);
+                        FCollisionQueryParams ObstacleParams(SCENE_QUERY_STAT(FlowFieldObstacleOverlap), false, Context.ManagerActor.Get());
+
+                        if (World->OverlapBlockingTestByChannel(ObstacleCenter, FQuat::Identity, Context.ObstacleChannel, Shape, ObstacleParams))
+                        {
+                                bOutBlockedByObstacle = true;
+                                return 0;
+                        }
+                }
+
+                return Context.DefaultWeight;
+        }
+}
+
+namespace
+{
+        static int32 GFlowUpdateMaxCells = 2048;
+        static FAutoConsoleVariableRef CVarFlowUpdateMaxCells(TEXT("flow.update.maxcells"), GFlowUpdateMaxCells, TEXT("Maximum number of flow field cells processed per frame."));
+
+        static int32 GFlowUpdateAsync = 1;
+        static FAutoConsoleVariableRef CVarFlowUpdateAsync(TEXT("flow.update.async"), GFlowUpdateAsync, TEXT("When set to 1 traversal weights are computed on background threads."));
+
+        static int32 GFlowDebugGrid = -1;
+        static FAutoConsoleVariableRef CVarFlowDebugGrid(TEXT("flow.debug.grid"), GFlowDebugGrid, TEXT("Toggle grid debug drawing."));
+
+        static int32 GFlowDebugDirections = -1;
+        static FAutoConsoleVariableRef CVarFlowDebugDirections(TEXT("flow.debug.directions"), GFlowDebugDirections, TEXT("Toggle flow direction debug drawing."));
+
+        static int32 GFlowDebugCosts = -1;
+        static FAutoConsoleVariableRef CVarFlowDebugCosts(TEXT("flow.debug.costs"), GFlowDebugCosts, TEXT("Toggle integration cost debug drawing."));
+}
+
+class FTraversalWeightBuildTask : public FNonAbandonableTask
+{
+public:
+        FTraversalWeightBuildTask(FlowField::FTraversalEvaluationContext&& InContext, TArray<int32>&& InIndices)
+                : Context(MoveTemp(InContext))
+                , Indices(MoveTemp(InIndices))
+        {
+        }
+
+        void DoWork()
+        {
+                const int32 Count = Indices.Num();
+                Weights.SetNum(Count);
+                ObstacleMask.SetNum(Count);
+
+                for (int32 Index = 0; Index < Count; ++Index)
+                {
+                        bool bBlocked = false;
+                        const uint8 Weight = FlowField::EvaluateCell(Context, Indices[Index], bBlocked);
+                        Weights[Index] = Weight;
+                        ObstacleMask[Index] = bBlocked ? 1 : 0;
+                }
+        }
+
+        FORCEINLINE TStatId GetStatId() const
+        {
+                RETURN_QUICK_DECLARE_CYCLE_STAT(FTraversalWeightBuildTask, STATGROUP_ThreadPoolAsyncTasks);
+        }
+
+        struct FResult
+        {
+                TArray<int32> Indices;
+                TArray<uint8> Weights;
+                TArray<uint8> ObstacleMask;
+        };
+
+        FResult ConsumeResult()
+        {
+                FResult Result;
+                Result.Indices = MoveTemp(Indices);
+                Result.Weights = MoveTemp(Weights);
+                Result.ObstacleMask = MoveTemp(ObstacleMask);
+                return Result;
+        }
+
+private:
+        FlowField::FTraversalEvaluationContext Context;
+        TArray<int32> Indices;
+        TArray<uint8> Weights;
+        TArray<uint8> ObstacleMask;
+};
 
 AFlowFieldManager::AFlowFieldManager()
 {
@@ -15,6 +179,7 @@ AFlowFieldManager::AFlowFieldManager()
 void AFlowFieldManager::Tick(float DeltaSeconds)
 {
         Super::Tick(DeltaSeconds);
+        ServiceTraversalWeightUpdates(DeltaSeconds);
         DrawDebug();
 }
 
@@ -34,6 +199,8 @@ void AFlowFieldManager::BeginPlay()
 
 bool AFlowFieldManager::BuildFlowFieldToCell(const FIntPoint& DestinationCell)
 {
+        EnsureTraversalWeightsUpToDate(true);
+
         if (FlowField.Build(DestinationCell))
         {
                 bHasBuiltField = true;
@@ -54,6 +221,11 @@ bool AFlowFieldManager::BuildFlowFieldToWorldLocation(const FVector& Destination
         return BuildFlowFieldToCell(Cell);
 }
 
+bool AFlowFieldManager::RebuildFlowFieldTo(const FVector& DestinationWorld)
+{
+        return BuildFlowFieldToWorldLocation(DestinationWorld);
+}
+
 FVector AFlowFieldManager::GetDirectionForWorldPosition(const FVector& WorldPosition) const
 {
         if (!bHasBuiltField)
@@ -64,8 +236,57 @@ FVector AFlowFieldManager::GetDirectionForWorldPosition(const FVector& WorldPosi
         return FlowField.GetDirectionForWorldPosition(WorldPosition);
 }
 
+void AFlowFieldManager::MarkObstacleBox(const FVector& Center, const FVector& Extents, bool bBlocked)
+{
+        if (!bTraversalInitialised)
+        {
+                return;
+        }
+
+        const int32 GridX = FlowFieldSettings.GridSize.X;
+        const int32 GridY = FlowFieldSettings.GridSize.Y;
+        if (GridX <= 0 || GridY <= 0)
+        {
+                return;
+        }
+
+        const FVector Min = Center - Extents;
+        const FVector Max = Center + Extents;
+        const FVector MaxAdjusted(Max.X - KINDA_SMALL_NUMBER, Max.Y - KINDA_SMALL_NUMBER, Max.Z);
+
+        FIntPoint MinCell = FlowField.WorldToCell(Min);
+        FIntPoint MaxCell = FlowField.WorldToCell(MaxAdjusted);
+        MinCell = ClampCellToGrid(MinCell);
+        MaxCell = ClampCellToGrid(MaxCell);
+
+        if (MaxCell.X < MinCell.X || MaxCell.Y < MinCell.Y)
+        {
+                return;
+        }
+
+        {
+                FScopeLock Lock(&TraversalDataLock);
+                if (ManualObstacleMask.Num() != GridX * GridY)
+                {
+                        ManualObstacleMask.SetNumZeroed(GridX * GridY);
+                }
+
+                for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
+                {
+                        for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
+                        {
+                                const int32 Index = Y * GridX + X;
+                                ManualObstacleMask[Index] = bBlocked ? 1 : 0;
+                        }
+                }
+        }
+
+        MarkRegionDirty(MinCell, MaxCell);
+}
+
 void AFlowFieldManager::UpdateFlowFieldSettings()
 {
+        CancelPendingAsyncTask();
         RecalculateTerrainBounds();
 
         FIntPoint DesiredGridSize = GridSize;
@@ -103,70 +324,383 @@ void AFlowFieldManager::UpdateFlowFieldSettings()
         FlowField.ApplySettings(FlowFieldSettings);
         bHasBuiltField = false;
         bHasDebugSnapshot = false;
+        bTraversalInitialised = false;
 }
 
 void AFlowFieldManager::UpdateTraversalWeights()
 {
+        CancelPendingAsyncTask();
+
         const int32 NumCells = FlowFieldSettings.GridSize.X * FlowFieldSettings.GridSize.Y;
         if (NumCells <= 0)
         {
                 TraversalWeights.Reset();
+                ObstacleDebugMask.Reset();
+                {
+                        FScopeLock Lock(&TraversalDataLock);
+                        ManualObstacleMask.Reset();
+                }
+                DirtyCellMask.Empty();
+                TQueue<int32> EmptyQueue;
+                Swap(DirtyCellQueue, EmptyQueue);
+                bTraversalInitialised = false;
                 FlowField.SetTraversalWeights(TraversalWeights);
                 return;
         }
 
-        if (TraversalWeights.Num() != NumCells)
+        const uint8 DefaultWeightValue = static_cast<uint8>(FMath::Clamp(DefaultTraversalWeight, 0, 255));
+        TraversalWeights.Init(DefaultWeightValue, NumCells);
+        ObstacleDebugMask.Init(0, NumCells);
         {
-                TraversalWeights.SetNum(NumCells);
+                FScopeLock Lock(&TraversalDataLock);
+                if (ManualObstacleMask.Num() != NumCells)
+                {
+                        ManualObstacleMask.SetNumZeroed(NumCells);
+                }
         }
 
-        const uint8 WeightValue = static_cast<uint8>(FMath::Clamp(DefaultTraversalWeight, 0, 255));
+        DirtyCellMask.Init(false, NumCells);
+        TQueue<int32> EmptyQueue;
+        Swap(DirtyCellQueue, EmptyQueue);
 
-        UWorld* World = GetWorld();
-        const bool bShouldTraceTerrain = bAutoSizeToTerrain && CachedTerrainBounds.IsValid && World;
+        FlowField.SetTraversalWeights(TraversalWeights);
+        bHasBuiltField = false;
+        bHasDebugSnapshot = false;
+        bTraversalInitialised = true;
+        bTraversalWeightsDirtyForField = false;
 
-        if (bShouldTraceTerrain)
+        MarkAllCellsDirty();
+
+        if (GFlowUpdateAsync == 0)
         {
-                const float TraceStartZ = CachedTerrainBounds.Max.Z + TerrainTraceHeight;
-                const float TraceEndZ = CachedTerrainBounds.Min.Z - TerrainTraceDepth;
-                FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(FlowFieldTerrainTrace), false, this);
+                EnsureTraversalWeightsUpToDate(true);
+        }
+}
 
-                for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+void AFlowFieldManager::ServiceTraversalWeightUpdates(float DeltaSeconds)
+{
+        UE_UNUSED(DeltaSeconds);
+        ConsumeTraversalTask();
+
+        if (!bTraversalInitialised)
+        {
+                return;
+        }
+
+        const int32 MaxCellsPerUpdate = FMath::Max(1, GFlowUpdateMaxCells);
+
+        if (GFlowUpdateAsync != 0)
+        {
+                if (!ActiveTraversalTask.IsValid() && !DirtyCellQueue.IsEmpty())
                 {
-                        const int32 CellX = Index % FlowFieldSettings.GridSize.X;
-                        const int32 CellY = Index / FlowFieldSettings.GridSize.X;
-                        const FVector CellWorld = FlowField.CellToWorld(FIntPoint(CellX, CellY));
-                        const FVector TraceStart(CellWorld.X, CellWorld.Y, TraceStartZ);
-                        const FVector TraceEnd(CellWorld.X, CellWorld.Y, TraceEndZ);
+                        TArray<int32> BatchIndices;
+                        BatchIndices.Reserve(MaxCellsPerUpdate);
 
-                        FHitResult Hit;
-                        const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, TerrainCollisionChannel, QueryParams);
-                        if (bHit)
+                        int32 CellIndex = INDEX_NONE;
+                        while (BatchIndices.Num() < MaxCellsPerUpdate && DirtyCellQueue.Dequeue(CellIndex))
                         {
-                                const FVector HitNormal = Hit.ImpactNormal.GetSafeNormal();
-                                const float Dot = FVector::DotProduct(HitNormal, FVector::UpVector);
-                                const float ClampedDot = FMath::Clamp(Dot, -1.0f, 1.0f);
-                                const float SlopeAngleDegrees = FMath::RadiansToDegrees(FMath::Acos(ClampedDot));
-                                const bool bWithinSlopeLimit = SlopeAngleDegrees <= MaxWalkableSlopeAngle;
-                                TraversalWeights[Index] = bWithinSlopeLimit ? WeightValue : 0;
+                                if (DirtyCellMask.IsValidIndex(CellIndex))
+                                {
+                                        DirtyCellMask[CellIndex] = false;
+                                }
+
+                                if (!IsCellIndexValid(CellIndex))
+                                {
+                                        continue;
+                                }
+
+                                BatchIndices.Add(CellIndex);
                         }
-                        else
+
+                        if (BatchIndices.Num() > 0)
                         {
-                                TraversalWeights[Index] = 0;
+                                FlowField::FTraversalEvaluationContext Context = BuildTraversalContext(true);
+                                ActiveTraversalTask = MakeUnique<FAsyncTask<FTraversalWeightBuildTask>>(MoveTemp(Context), MoveTemp(BatchIndices));
+                                ActiveTraversalTask->StartBackgroundTask();
+                        }
+                }
+        }
+        else if (!DirtyCellQueue.IsEmpty())
+        {
+                ProcessDirtyCells(MaxCellsPerUpdate);
+        }
+
+        ConsumeTraversalTask();
+
+        if (bTraversalWeightsDirtyForField)
+        {
+                FlushTraversalWeightsToField();
+        }
+}
+
+void AFlowFieldManager::MarkAllCellsDirty()
+{
+        if (!bTraversalInitialised)
+        {
+                return;
+        }
+
+        const int32 NumCells = FlowFieldSettings.GridSize.X * FlowFieldSettings.GridSize.Y;
+        DirtyCellMask.Init(false, NumCells);
+
+        TQueue<int32> EmptyQueue;
+        Swap(DirtyCellQueue, EmptyQueue);
+
+        for (int32 Index = 0; Index < NumCells; ++Index)
+        {
+                DirtyCellMask[Index] = true;
+                DirtyCellQueue.Enqueue(Index);
+        }
+}
+
+void AFlowFieldManager::MarkRegionDirty(const FIntPoint& MinCell, const FIntPoint& MaxCell)
+{
+        if (!bTraversalInitialised)
+        {
+                return;
+        }
+
+        for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
+        {
+                if (Y < 0 || Y >= FlowFieldSettings.GridSize.Y)
+                {
+                        continue;
+                }
+
+                for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
+                {
+                        if (X < 0 || X >= FlowFieldSettings.GridSize.X)
+                        {
+                                continue;
+                        }
+
+                        const int32 Index = Y * FlowFieldSettings.GridSize.X + X;
+                        MarkCellDirty(Index);
+                }
+        }
+}
+
+void AFlowFieldManager::MarkCellDirty(int32 LinearIndex)
+{
+        if (!IsCellIndexValid(LinearIndex))
+        {
+                return;
+        }
+
+        if (!DirtyCellMask.IsValidIndex(LinearIndex))
+        {
+                DirtyCellMask.Init(false, TraversalWeights.Num());
+        }
+
+        if (DirtyCellMask[LinearIndex])
+        {
+                return;
+        }
+
+        DirtyCellMask[LinearIndex] = true;
+        DirtyCellQueue.Enqueue(LinearIndex);
+}
+
+int32 AFlowFieldManager::ProcessDirtyCells(int32 MaxCellsToProcess)
+{
+        if (!bTraversalInitialised || MaxCellsToProcess <= 0)
+        {
+                return 0;
+        }
+
+        FlowField::FTraversalEvaluationContext Context = BuildTraversalContext(false);
+
+        int32 Processed = 0;
+        int32 CellIndex = INDEX_NONE;
+        while (Processed < MaxCellsToProcess && DirtyCellQueue.Dequeue(CellIndex))
+        {
+                if (DirtyCellMask.IsValidIndex(CellIndex))
+                {
+                        DirtyCellMask[CellIndex] = false;
+                }
+
+                if (!IsCellIndexValid(CellIndex))
+                {
+                        continue;
+                }
+
+                bool bBlockedByObstacle = false;
+                const uint8 Weight = FlowField::EvaluateCell(Context, CellIndex, bBlockedByObstacle);
+                ApplyTraversalWeight(CellIndex, Weight, bBlockedByObstacle);
+                ++Processed;
+        }
+
+        if (Processed > 0)
+        {
+                FlushTraversalWeightsToField();
+        }
+
+        return Processed;
+}
+
+void AFlowFieldManager::FlushTraversalWeightsToField()
+{
+        FlowField.SetTraversalWeights(TraversalWeights);
+        bTraversalWeightsDirtyForField = false;
+        bHasBuiltField = false;
+        bHasDebugSnapshot = false;
+}
+
+void AFlowFieldManager::CancelPendingAsyncTask()
+{
+        if (ActiveTraversalTask.IsValid())
+        {
+                        ActiveTraversalTask->EnsureCompletion();
+                        ConsumeTraversalTask();
+                        ActiveTraversalTask.Reset();
+        }
+}
+
+void AFlowFieldManager::ConsumeTraversalTask()
+{
+        if (!ActiveTraversalTask.IsValid() || !ActiveTraversalTask->IsDone())
+        {
+                return;
+        }
+
+        FTraversalWeightBuildTask::FResult Result = ActiveTraversalTask->GetTask().ConsumeResult();
+        ActiveTraversalTask.Reset();
+
+        const int32 Count = Result.Indices.Num();
+        for (int32 Index = 0; Index < Count; ++Index)
+        {
+                const int32 CellIndex = Result.Indices[Index];
+                const uint8 Weight = Result.Weights.IsValidIndex(Index) ? Result.Weights[Index] : 0;
+                const bool bBlocked = Result.ObstacleMask.IsValidIndex(Index) && Result.ObstacleMask[Index] != 0;
+                ApplyTraversalWeight(CellIndex, Weight, bBlocked);
+        }
+}
+
+bool AFlowFieldManager::HasPendingTraversalUpdates() const
+{
+        if (!DirtyCellQueue.IsEmpty())
+        {
+                return true;
+        }
+
+        if (ActiveTraversalTask.IsValid() && !ActiveTraversalTask->IsDone())
+        {
+                return true;
+        }
+
+        return false;
+}
+
+void AFlowFieldManager::EnsureTraversalWeightsUpToDate(bool bForceSync)
+{
+        if (!bTraversalInitialised)
+        {
+                return;
+        }
+
+        if (bForceSync)
+        {
+                if (ActiveTraversalTask.IsValid())
+                {
+                        ActiveTraversalTask->EnsureCompletion();
+                        ConsumeTraversalTask();
+                }
+
+                const int32 NumCells = FlowFieldSettings.GridSize.X * FlowFieldSettings.GridSize.Y;
+                while (!DirtyCellQueue.IsEmpty())
+                {
+                        ProcessDirtyCells(NumCells);
+
+                        if (ActiveTraversalTask.IsValid())
+                        {
+                                ActiveTraversalTask->EnsureCompletion();
+                                ConsumeTraversalTask();
                         }
                 }
         }
         else
         {
-                for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+                ConsumeTraversalTask();
+        }
+
+        if (bTraversalWeightsDirtyForField)
+        {
+                FlushTraversalWeightsToField();
+        }
+}
+
+bool AFlowFieldManager::IsCellIndexValid(int32 Index) const
+{
+        return Index >= 0 && TraversalWeights.IsValidIndex(Index);
+}
+
+FIntPoint AFlowFieldManager::ClampCellToGrid(const FIntPoint& Cell) const
+{
+        const int32 MaxX = FlowFieldSettings.GridSize.X - 1;
+        const int32 MaxY = FlowFieldSettings.GridSize.Y - 1;
+        return FIntPoint(FMath::Clamp(Cell.X, 0, MaxX), FMath::Clamp(Cell.Y, 0, MaxY));
+}
+
+uint8 AFlowFieldManager::SampleTraversalWeightForCell(int32 CellIndex, bool& bOutBlockedByObstacle) const
+{
+        FlowField::FTraversalEvaluationContext Context = BuildTraversalContext(true);
+        return FlowField::EvaluateCell(Context, CellIndex, bOutBlockedByObstacle);
+}
+
+void AFlowFieldManager::ApplyTraversalWeight(int32 CellIndex, uint8 Weight, bool bBlockedByObstacle)
+{
+        if (!TraversalWeights.IsValidIndex(CellIndex))
+        {
+                return;
+        }
+
+        TraversalWeights[CellIndex] = Weight;
+        if (ObstacleDebugMask.IsValidIndex(CellIndex))
+        {
+                ObstacleDebugMask[CellIndex] = bBlockedByObstacle ? 1 : 0;
+        }
+
+        bTraversalWeightsDirtyForField = true;
+        bHasBuiltField = false;
+        bHasDebugSnapshot = false;
+}
+
+FlowField::FTraversalEvaluationContext AFlowFieldManager::BuildTraversalContext(bool bCopyManualObstacles) const
+{
+        FlowField::FTraversalEvaluationContext Context;
+        Context.World = GetWorld();
+        Context.ManagerActor = this;
+        Context.GridSize = FlowFieldSettings.GridSize;
+        Context.CellSize = FlowFieldSettings.CellSize;
+        Context.Origin = FlowFieldSettings.Origin;
+        Context.DefaultWeight = static_cast<uint8>(FMath::Clamp(DefaultTraversalWeight, 0, 255));
+        Context.bTraceTerrain = bAutoSizeToTerrain && CachedTerrainBounds.IsValid;
+        if (Context.bTraceTerrain)
+        {
+                Context.TraceStartZ = CachedTerrainBounds.Max.Z + TerrainTraceHeight;
+                Context.TraceEndZ = CachedTerrainBounds.Min.Z - TerrainTraceDepth;
+        }
+        Context.MaxSlopeAngleDegrees = MaxWalkableSlopeAngle;
+        Context.TerrainChannel = TerrainCollisionChannel;
+        Context.ObstacleChannel = ObstacleCollisionChannel;
+        Context.ObstacleHalfHeight = ObstacleQueryHalfHeight;
+        Context.ObstacleInflation = ObstacleQueryInflation;
+        Context.ObstacleOffsetZ = ObstacleQueryOffsetZ;
+
+        {
+                FScopeLock Lock(&TraversalDataLock);
+                if (bCopyManualObstacles)
                 {
-                        TraversalWeights[Index] = WeightValue;
+                        Context.ManualObstacleMaskStorage = ManualObstacleMask;
+                        Context.ManualObstacleMask = Context.ManualObstacleMaskStorage;
+                }
+                else
+                {
+                        Context.ManualObstacleMask = MakeArrayView(ManualObstacleMask);
                 }
         }
 
-        FlowField.SetTraversalWeights(TraversalWeights);
-        bHasBuiltField = false;
-        bHasDebugSnapshot = false;
+        return Context;
 }
 
 void AFlowFieldManager::RefreshDebugSnapshot()
@@ -205,7 +739,16 @@ void AFlowFieldManager::DrawDebug() const
         const float ArrowLength = CellSizeLocal * DirectionArrowScale;
         const FVector UpOffset(0.0f, 0.0f, DebugHeightOffset);
 
-        if (bDrawGrid)
+        auto ResolveDebugToggle = [](bool bDefault, int32 CVarValue)
+        {
+                return (CVarValue < 0) ? bDefault : (CVarValue != 0);
+        };
+
+        const bool bShouldDrawGrid = ResolveDebugToggle(bDrawGrid, GFlowDebugGrid);
+        const bool bShouldDrawDirections = ResolveDebugToggle(bDrawDirections, GFlowDebugDirections);
+        const bool bShouldDrawCosts = ResolveDebugToggle(bDrawIntegrationValues, GFlowDebugCosts);
+
+        if (bShouldDrawGrid)
         {
                 const FVector Base = Origin + UpOffset;
                 for (int32 X = 0; X <= Size.X; ++X)
@@ -239,8 +782,9 @@ void AFlowFieldManager::DrawDebug() const
                 const FVector CellCenter = Origin + FVector((CellX + 0.5f) * CellSizeLocal, (CellY + 0.5f) * CellSizeLocal, 0.0f) + UpOffset;
 
                 const bool bIsWalkable = DebugSnapshot.WalkableField.IsValidIndex(Index) && DebugSnapshot.WalkableField[Index] > 0;
+                const bool bIsObstacle = ObstacleDebugMask.IsValidIndex(Index) && ObstacleDebugMask[Index] != 0;
 
-                if (bDrawDirections)
+                if (bShouldDrawDirections)
                 {
                         if (DebugSnapshot.DirectionField.IsValidIndex(Index))
                         {
@@ -254,7 +798,7 @@ void AFlowFieldManager::DrawDebug() const
                         }
                 }
 
-                if (bDrawIntegrationValues)
+                if (bShouldDrawCosts)
                 {
                         FString Label;
                         if (bIsWalkable && DebugSnapshot.IntegrationField.IsValidIndex(Index))
@@ -276,11 +820,18 @@ void AFlowFieldManager::DrawDebug() const
 
                         const FColor TextColor = bIsWalkable ? IntegrationTextColor : BlockedCellColor;
                         DrawDebugString(World, CellCenter, Label, nullptr, TextColor, 0.0f, true, DebugTextScale);
+
+                        if (bIsObstacle)
+                        {
+                                const FVector Extent(CellSizeLocal * 0.5f, CellSizeLocal * 0.5f, 10.0f);
+                                DrawDebugSolidBox(World, CellCenter, Extent, ObstacleDebugColor, false, 0.0f, 0);
+                        }
                 }
-                else if (bHighlightBlockedCells && !bIsWalkable)
+                else if (bIsObstacle || (bHighlightBlockedCells && !bIsWalkable))
                 {
                         const FVector Extent(CellSizeLocal * 0.5f, CellSizeLocal * 0.5f, 10.0f);
-                        DrawDebugSolidBox(World, CellCenter, Extent, BlockedCellColor, false, 0.0f, 0);
+                        const FColor Color = bIsObstacle ? ObstacleDebugColor : BlockedCellColor;
+                        DrawDebugSolidBox(World, CellCenter, Extent, Color, false, 0.0f, 0);
                 }
         }
 

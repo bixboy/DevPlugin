@@ -4,10 +4,22 @@
 #include "GameFramework/Actor.h"
 #include "Engine/EngineTypes.h"
 #include "UObject/ObjectPtr.h"
+#include "Containers/BitArray.h"
+#include "Containers/Queue.h"
+#include "HAL/CriticalSection.h"
 
 #include "FlowField.h"
 
 #include "FlowFieldManager.generated.h"
+
+namespace FlowField
+{
+        struct FTraversalEvaluationContext;
+}
+
+class FTraversalWeightBuildTask;
+template <typename TaskType>
+class FAsyncTask;
 
 /**
  * Centralised manager that owns a flow field and exposes debug utilities to visualise it in the level.
@@ -31,6 +43,14 @@ public:
         /** Rebuilds the flow field using the supplied world destination. */
         UFUNCTION(BlueprintCallable, Category = "Flow Field")
         bool BuildFlowFieldToWorldLocation(const FVector& DestinationLocation);
+
+        /** Rebuilds the flow field using the supplied world destination, ensuring traversal data is up to date. */
+        UFUNCTION(BlueprintCallable, Category = "Flow Field")
+        bool RebuildFlowFieldTo(const FVector& DestinationWorld);
+
+        /** Marks or clears an obstacle inside the flow field grid. */
+        UFUNCTION(BlueprintCallable, Category = "Flow Field")
+        void MarkObstacleBox(const FVector& Center, const FVector& Extents, bool bBlocked);
 
         /** Samples the flow direction for a given world position. */
         UFUNCTION(BlueprintCallable, Category = "Flow Field")
@@ -85,6 +105,22 @@ private:
         /** Maximum slope angle (in degrees) that is considered walkable. */
         UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (ClampMin = "0.0", ClampMax = "90.0"))
         float MaxWalkableSlopeAngle = 45.0f;
+
+        /** Collision channel used when querying for blocking obstacles. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field|Obstacles")
+        TEnumAsByte<ECollisionChannel> ObstacleCollisionChannel = ECC_GameTraceChannel2;
+
+        /** Half height of the obstacle overlap volume. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field|Obstacles", meta = (ClampMin = "0.0"))
+        float ObstacleQueryHalfHeight = 120.0f;
+
+        /** Additional padding applied to the XY size of the obstacle query. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field|Obstacles", meta = (ClampMin = "0.0"))
+        float ObstacleQueryInflation = 15.0f;
+
+        /** Vertical offset applied to the obstacle overlap volume origin. */
+        UPROPERTY(EditAnywhere, Category = "Flow Field|Obstacles")
+        float ObstacleQueryOffsetZ = 50.0f;
 
         /** Size of the flow field grid. */
         UPROPERTY(EditAnywhere, Category = "Flow Field")
@@ -186,16 +222,47 @@ private:
         UPROPERTY(EditAnywhere, Category = "Debug", meta = (ClampMin = "0.0"))
         float DestinationMarkerRadius = 75.0f;
 
+        /** Colour used when rendering blocked obstacles. */
+        UPROPERTY(EditAnywhere, Category = "Debug")
+        FColor ObstacleDebugColor = FColor::Red;
+
 private:
         FFlowField FlowField;
         FFlowFieldSettings FlowFieldSettings;
         TArray<uint8> TraversalWeights;
+        TArray<uint8> ManualObstacleMask;
+        TArray<uint8> ObstacleDebugMask;
         FFlowFieldDebugSnapshot DebugSnapshot;
         bool bHasBuiltField = false;
         bool bHasDebugSnapshot = false;
         FVector CachedDestinationWorld = FVector::ZeroVector;
         FBox CachedTerrainBounds = FBox(ForceInit);
 
+        TBitArray<> DirtyCellMask;
+        TQueue<int32> DirtyCellQueue;
+        mutable FCriticalSection TraversalDataLock;
+        bool bTraversalInitialised = false;
+        bool bTraversalWeightsDirtyForField = false;
+
+        TUniquePtr<FAsyncTask<FTraversalWeightBuildTask>> ActiveTraversalTask;
+
         void RecalculateTerrainBounds();
+
+        void ServiceTraversalWeightUpdates(float DeltaSeconds);
+        void MarkAllCellsDirty();
+        void MarkRegionDirty(const FIntPoint& MinCell, const FIntPoint& MaxCell);
+        void MarkCellDirty(int32 LinearIndex);
+        int32 ProcessDirtyCells(int32 MaxCellsToProcess);
+        void FlushTraversalWeightsToField();
+        void CancelPendingAsyncTask();
+        void ConsumeTraversalTask();
+        bool HasPendingTraversalUpdates() const;
+        void EnsureTraversalWeightsUpToDate(bool bForceSync);
+        bool IsCellIndexValid(int32 Index) const;
+        FIntPoint ClampCellToGrid(const FIntPoint& Cell) const;
+
+        uint8 SampleTraversalWeightForCell(int32 CellIndex, bool& bOutBlockedByObstacle) const;
+        void ApplyTraversalWeight(int32 CellIndex, uint8 Weight, bool bBlockedByObstacle);
+        FlowField::FTraversalEvaluationContext BuildTraversalContext(bool bCopyManualObstacles) const;
 };
 
