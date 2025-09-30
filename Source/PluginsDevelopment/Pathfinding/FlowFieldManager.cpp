@@ -12,30 +12,7 @@
 #include "Async/AsyncWork.h"
 #include "Stats/Stats.h"
 
-namespace FlowField
-{
-        struct FTraversalEvaluationContext
-        {
-                TWeakObjectPtr<UWorld> World;
-                TWeakObjectPtr<const AActor> ManagerActor;
-                FIntPoint GridSize = FIntPoint::ZeroValue;
-                float CellSize = 100.0f;
-                FVector Origin = FVector::ZeroVector;
-                uint8 DefaultWeight = 255;
-                bool bTraceTerrain = false;
-                float TraceStartZ = 0.0f;
-                float TraceEndZ = 0.0f;
-                float MaxSlopeAngleDegrees = 45.0f;
-                TEnumAsByte<ECollisionChannel> TerrainChannel = ECC_WorldStatic;
-                TEnumAsByte<ECollisionChannel> ObstacleChannel = ECC_GameTraceChannel2;
-                float ObstacleHalfHeight = 100.0f;
-                float ObstacleInflation = 0.0f;
-                float ObstacleOffsetZ = 0.0f;
-                TConstArrayView<uint8> ManualObstacleMask;
-                TArray<uint8> ManualObstacleMaskStorage;
-        };
-
-        static uint8 EvaluateCell(const FTraversalEvaluationContext& Context, int32 CellIndex, bool& bOutBlockedByObstacle)
+static uint8 EvaluateCell(const FTraversalEvaluationContext& Context, int32 CellIndex, bool& bOutBlockedByObstacle)
         {
                 bOutBlockedByObstacle = false;
 
@@ -118,57 +95,35 @@ namespace
         static FAutoConsoleVariableRef CVarFlowDebugCosts(TEXT("flow.debug.costs"), GFlowDebugCosts, TEXT("Toggle integration cost debug drawing."));
 }
 
-class FTraversalWeightBuildTask : public FNonAbandonableTask
+FTraversalWeightBuildTask::FTraversalWeightBuildTask(FlowField::FTraversalEvaluationContext&& InContext, TArray<int32>&& InIndices)
+        : Context(MoveTemp(InContext))
+        , Indices(MoveTemp(InIndices))
 {
-public:
-        FTraversalWeightBuildTask(FlowField::FTraversalEvaluationContext&& InContext, TArray<int32>&& InIndices)
-                : Context(MoveTemp(InContext))
-                , Indices(MoveTemp(InIndices))
+}
+
+void FTraversalWeightBuildTask::DoWork()
+{
+        const int32 Count = Indices.Num();
+        Weights.SetNum(Count);
+        ObstacleMask.SetNum(Count);
+
+        for (int32 Index = 0; Index < Count; ++Index)
         {
+                bool bBlocked = false;
+                const uint8 Weight = FlowField::EvaluateCell(Context, Indices[Index], bBlocked);
+                Weights[Index] = Weight;
+                ObstacleMask[Index] = bBlocked ? 1 : 0;
         }
+}
 
-        void DoWork()
-        {
-                const int32 Count = Indices.Num();
-                Weights.SetNum(Count);
-                ObstacleMask.SetNum(Count);
-
-                for (int32 Index = 0; Index < Count; ++Index)
-                {
-                        bool bBlocked = false;
-                        const uint8 Weight = FlowField::EvaluateCell(Context, Indices[Index], bBlocked);
-                        Weights[Index] = Weight;
-                        ObstacleMask[Index] = bBlocked ? 1 : 0;
-                }
-        }
-
-        FORCEINLINE TStatId GetStatId() const
-        {
-                RETURN_QUICK_DECLARE_CYCLE_STAT(FTraversalWeightBuildTask, STATGROUP_ThreadPoolAsyncTasks);
-        }
-
-        struct FResult
-        {
-                TArray<int32> Indices;
-                TArray<uint8> Weights;
-                TArray<uint8> ObstacleMask;
-        };
-
-        FResult ConsumeResult()
-        {
-                FResult Result;
-                Result.Indices = MoveTemp(Indices);
-                Result.Weights = MoveTemp(Weights);
-                Result.ObstacleMask = MoveTemp(ObstacleMask);
-                return Result;
-        }
-
-private:
-        FlowField::FTraversalEvaluationContext Context;
-        TArray<int32> Indices;
-        TArray<uint8> Weights;
-        TArray<uint8> ObstacleMask;
-};
+FTraversalWeightBuildTask::FResult FTraversalWeightBuildTask::ConsumeResult()
+{
+        FResult Result;
+        Result.Indices = MoveTemp(Indices);
+        Result.Weights = MoveTemp(Weights);
+        Result.ObstacleMask = MoveTemp(ObstacleMask);
+        return Result;
+}
 
 AFlowFieldManager::AFlowFieldManager()
 {
@@ -341,8 +296,7 @@ void AFlowFieldManager::UpdateTraversalWeights()
                         ManualObstacleMask.Reset();
                 }
                 DirtyCellMask.Empty();
-                TQueue<int32> EmptyQueue;
-                Swap(DirtyCellQueue, EmptyQueue);
+                ClearDirtyCellQueue();
                 bTraversalInitialised = false;
                 FlowField.SetTraversalWeights(TraversalWeights);
                 return;
@@ -360,8 +314,7 @@ void AFlowFieldManager::UpdateTraversalWeights()
         }
 
         DirtyCellMask.Init(false, NumCells);
-        TQueue<int32> EmptyQueue;
-        Swap(DirtyCellQueue, EmptyQueue);
+        ClearDirtyCellQueue();
 
         FlowField.SetTraversalWeights(TraversalWeights);
         bHasBuiltField = false;
@@ -443,8 +396,7 @@ void AFlowFieldManager::MarkAllCellsDirty()
         const int32 NumCells = FlowFieldSettings.GridSize.X * FlowFieldSettings.GridSize.Y;
         DirtyCellMask.Init(false, NumCells);
 
-        TQueue<int32> EmptyQueue;
-        Swap(DirtyCellQueue, EmptyQueue);
+        ClearDirtyCellQueue();
 
         for (int32 Index = 0; Index < NumCells; ++Index)
         {
@@ -550,9 +502,17 @@ void AFlowFieldManager::CancelPendingAsyncTask()
 {
         if (ActiveTraversalTask.IsValid())
         {
-                        ActiveTraversalTask->EnsureCompletion();
-                        ConsumeTraversalTask();
-                        ActiveTraversalTask.Reset();
+                ActiveTraversalTask->EnsureCompletion();
+                ConsumeTraversalTask();
+                ActiveTraversalTask.Reset();
+        }
+}
+
+void AFlowFieldManager::ClearDirtyCellQueue()
+{
+        int32 DiscardedIndex = INDEX_NONE;
+        while (DirtyCellQueue.Dequeue(DiscardedIndex))
+        {
         }
 }
 

@@ -6,7 +6,10 @@
 #include "UObject/ObjectPtr.h"
 #include "Containers/BitArray.h"
 #include "Containers/Queue.h"
+#include "Containers/ArrayView.h"
 #include "HAL/CriticalSection.h"
+#include "Async/AsyncWork.h"
+#include "Stats/Stats.h"
 
 #include "FlowField.h"
 
@@ -14,12 +17,55 @@
 
 namespace FlowField
 {
-        struct FTraversalEvaluationContext;
+        struct FTraversalEvaluationContext
+        {
+                TWeakObjectPtr<UWorld> World;
+                TWeakObjectPtr<const AActor> ManagerActor;
+                FIntPoint GridSize = FIntPoint::ZeroValue;
+                float CellSize = 100.0f;
+                FVector Origin = FVector::ZeroVector;
+                uint8 DefaultWeight = 255;
+                bool bTraceTerrain = false;
+                float TraceStartZ = 0.0f;
+                float TraceEndZ = 0.0f;
+                float MaxSlopeAngleDegrees = 45.0f;
+                TEnumAsByte<ECollisionChannel> TerrainChannel = ECC_WorldStatic;
+                TEnumAsByte<ECollisionChannel> ObstacleChannel = ECC_GameTraceChannel2;
+                float ObstacleHalfHeight = 100.0f;
+                float ObstacleInflation = 0.0f;
+                float ObstacleOffsetZ = 0.0f;
+                TConstArrayView<uint8> ManualObstacleMask;
+                TArray<uint8> ManualObstacleMaskStorage;
+        };
 }
 
-class FTraversalWeightBuildTask;
-template <typename TaskType>
-class FAsyncTask;
+class FTraversalWeightBuildTask : public FNonAbandonableTask
+{
+public:
+        FTraversalWeightBuildTask(FlowField::FTraversalEvaluationContext&& InContext, TArray<int32>&& InIndices);
+
+        void DoWork();
+
+        FORCEINLINE TStatId GetStatId() const
+        {
+                RETURN_QUICK_DECLARE_CYCLE_STAT(FTraversalWeightBuildTask, STATGROUP_ThreadPoolAsyncTasks);
+        }
+
+        struct FResult
+        {
+                TArray<int32> Indices;
+                TArray<uint8> Weights;
+                TArray<uint8> ObstacleMask;
+        };
+
+        FResult ConsumeResult();
+
+private:
+        FlowField::FTraversalEvaluationContext Context;
+        TArray<int32> Indices;
+        TArray<uint8> Weights;
+        TArray<uint8> ObstacleMask;
+};
 
 /**
  * Centralised manager that owns a flow field and exposes debug utilities to visualise it in the level.
@@ -260,6 +306,7 @@ private:
         void EnsureTraversalWeightsUpToDate(bool bForceSync);
         bool IsCellIndexValid(int32 Index) const;
         FIntPoint ClampCellToGrid(const FIntPoint& Cell) const;
+        void ClearDirtyCellQueue();
 
         uint8 SampleTraversalWeightForCell(int32 CellIndex, bool& bOutBlockedByObstacle) const;
         void ApplyTraversalWeight(int32 CellIndex, uint8 Weight, bool bBlockedByObstacle);
