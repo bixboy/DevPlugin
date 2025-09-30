@@ -8,6 +8,14 @@ public class PluginsDevelopment : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "SmartLog" });
+                PublicDependencyModuleNames.AddRange(new string[]
+                {
+                        "Core",
+                        "CoreUObject",
+                        "Engine",
+                        "InputCore",
+                        "EnhancedInput",
+                        "SmartLog"
+                });
 	}
 }
