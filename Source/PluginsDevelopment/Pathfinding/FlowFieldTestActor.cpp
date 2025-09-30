@@ -1,5 +1,9 @@
 #include "FlowFieldTestActor.h"
 
+#include "FlowFieldManager.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+
 AFlowFieldTestActor::AFlowFieldTestActor()
 {
         PrimaryActorTick.bCanEverTick = true;
@@ -8,15 +12,28 @@ AFlowFieldTestActor::AFlowFieldTestActor()
 void AFlowFieldTestActor::OnConstruction(const FTransform& Transform)
 {
         Super::OnConstruction(Transform);
-        AnchorLocation = Transform.GetLocation();
-        UpdateFlowFieldSettings();
+
+        if (!FlowFieldManager && bAutoFindManager)
+        {
+                FlowFieldManager = ResolveFlowFieldManager();
+        }
 }
 
 void AFlowFieldTestActor::BeginPlay()
 {
         Super::BeginPlay();
-        AnchorLocation = GetActorLocation();
-        UpdateFlowFieldSettings();
+
+        if (!FlowFieldManager && bAutoFindManager)
+        {
+                FlowFieldManager = ResolveFlowFieldManager();
+        }
+
+        if (!FlowFieldManager)
+        {
+                UE_LOG(LogTemp, Warning, TEXT("FlowFieldTestActor %s could not find a FlowFieldManager."), *GetName());
+                return;
+        }
+
         bHasDestination = TryAssignNewDestination();
 }
 
@@ -24,15 +41,23 @@ void AFlowFieldTestActor::Tick(float DeltaSeconds)
 {
         Super::Tick(DeltaSeconds);
 
+        if (!FlowFieldManager)
+        {
+                if (bAutoFindManager)
+                {
+                        FlowFieldManager = ResolveFlowFieldManager();
+                }
+
+                return;
+        }
+
         if (!bHasDestination)
         {
-                AnchorLocation = GetActorLocation();
-                UpdateFlowFieldSettings();
                 bHasDestination = TryAssignNewDestination();
                 return;
         }
 
-        const FVector FlowDirection = FlowField.GetDirectionForWorldPosition(GetActorLocation());
+        const FVector FlowDirection = FlowFieldManager->GetDirectionForWorldPosition(GetActorLocation());
         if (!FlowDirection.IsNearlyZero())
         {
                 const FVector NewLocation = GetActorLocation() + (FlowDirection * MovementSpeed * DeltaSeconds);
@@ -50,45 +75,21 @@ void AFlowFieldTestActor::Tick(float DeltaSeconds)
         }
 }
 
-void AFlowFieldTestActor::UpdateFlowFieldSettings()
-{
-        FlowFieldSettings.GridSize = GridSize;
-        FlowFieldSettings.CellSize = CellSize;
-        FlowFieldSettings.Origin = AnchorLocation - FVector(GridSize.X * CellSize * 0.5f, GridSize.Y * CellSize * 0.5f, 0.0f);
-        FlowFieldSettings.bAllowDiagonal = bAllowDiagonal;
-        FlowFieldSettings.DiagonalCostMultiplier = DiagonalCostMultiplier;
-        FlowFieldSettings.StepCost = StepCost;
-        FlowFieldSettings.CellTraversalWeightMultiplier = CellTraversalWeightMultiplier;
-        FlowFieldSettings.HeuristicWeight = HeuristicWeight;
-        FlowFieldSettings.bSmoothDirections = bSmoothDirections;
-
-        FlowField.ApplySettings(FlowFieldSettings);
-
-        const int32 ExpectedCells = GridSize.X * GridSize.Y;
-        if (ExpectedCells <= 0)
-        {
-                TraversalWeights.Reset();
-                return;
-        }
-
-        if (TraversalWeights.Num() != ExpectedCells)
-        {
-                TraversalWeights.Init(255, ExpectedCells);
-        }
-
-        FlowField.SetTraversalWeights(TraversalWeights);
-}
-
 bool AFlowFieldTestActor::TryAssignNewDestination()
 {
-        const FFlowFieldSettings& Settings = FlowField.GetSettings();
+        if (!FlowFieldManager)
+        {
+                return false;
+        }
+
+        const FFlowFieldSettings& Settings = FlowFieldManager->GetSettings();
         if (Settings.GridSize.X <= 0 || Settings.GridSize.Y <= 0)
         {
                 return false;
         }
 
         const int32 MaxAttempts = FMath::Max(1, MaxDestinationAttempts);
-        const FIntPoint CurrentCell = FlowField.WorldToCell(GetActorLocation());
+        const FIntPoint CurrentCell = FlowFieldManager->WorldToCell(GetActorLocation());
         const float CellSizeValue = FMath::Max(Settings.CellSize, KINDA_SMALL_NUMBER);
         const int32 RadiusInCells = FMath::Clamp(
                 FMath::RoundToInt(DestinationSearchRadius / CellSizeValue),
@@ -108,17 +109,17 @@ bool AFlowFieldTestActor::TryAssignNewDestination()
                         continue;
                 }
 
-                if (!FlowField.IsWalkable(Candidate))
+                if (!FlowFieldManager->IsWalkable(Candidate))
                 {
                         continue;
                 }
 
-                if (!FlowField.Build(Candidate))
+                if (!FlowFieldManager->BuildFlowFieldToCell(Candidate))
                 {
                         continue;
                 }
 
-                CurrentDestination = FlowField.CellToWorld(Candidate);
+                CurrentDestination = FlowFieldManager->CellToWorld(Candidate);
                 return true;
         }
 
@@ -130,4 +131,22 @@ bool AFlowFieldTestActor::HasReachedDestination() const
         const FVector CurrentLocation = GetActorLocation();
         const float DistanceSquared = FVector::DistSquared2D(CurrentLocation, CurrentDestination);
         return DistanceSquared <= FMath::Square(AcceptanceRadius);
+}
+
+AFlowFieldManager* AFlowFieldTestActor::ResolveFlowFieldManager()
+{
+        if (!GetWorld())
+        {
+                return nullptr;
+        }
+
+        for (TActorIterator<AFlowFieldManager> It(GetWorld()); It; ++It)
+        {
+                if (AFlowFieldManager* Manager = *It)
+                {
+                        return Manager;
+                }
+        }
+
+        return nullptr;
 }
