@@ -17,22 +17,33 @@ class JUPITERPLUGIN_API UUnitsEntryWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual void NativeOnInitialized() override;
+        virtual void NativeOnInitialized() override;
 
-	UFUNCTION()
-	void InitEntry(UUnitsSelectionDataAsset* DataAsset);
+        UFUNCTION()
+        void InitEntry(UUnitsSelectionDataAsset* DataAsset);
+
+        FText GetUnitDisplayName() const { return CachedUnitName; }
+        const TArray<FName>& GetUnitTags() const { return UnitTags; }
+        bool MatchesSearch(const FString& SearchLower) const;
+        bool HasTag(FName Tag) const;
 	
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UCustomButtonWidget* UnitButton;
 
 protected:
 
-	UFUNCTION()
-	void OnUnitSelected(UCustomButtonWidget* Button, int Index);
+        UFUNCTION()
+        void OnUnitSelected(UCustomButtonWidget* Button, int Index);
 
-	UPROPERTY()
-	TSubclassOf<ASoldierRts> UnitClass;
+        UPROPERTY()
+        TSubclassOf<ASoldierRts> UnitClass;
 
         UPROPERTY()
         UUnitSpawnComponent* SpawnComponent;
+
+        UPROPERTY()
+        FText CachedUnitName;
+
+        UPROPERTY()
+        TArray<FName> UnitTags;
 };

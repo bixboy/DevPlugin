@@ -35,6 +35,12 @@ protected:
     void OnUnitSelected(UCustomButtonWidget* Button, int Index);
 
     UFUNCTION()
+    void OnCategoryButtonClicked(UCustomButtonWidget* Button, int Index);
+
+    UFUNCTION()
+    void OnSearchTextChanged(const FText& Text);
+
+    UFUNCTION()
     void OnSpawnCountTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
     UFUNCTION()
@@ -48,9 +54,15 @@ protected:
 
     void ApplySpawnCount(int32 NewCount);
     void RefreshSpawnCountDisplay() const;
+    void SetupCategoryButtons();
+    void UpdateCategoryButtonSelection(UCustomButtonWidget* SelectedButton);
+    void ApplyFilters();
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
-	TSubclassOf<UUnitsEntryWidget> UnitsEntryClass;
+        UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
+        TSubclassOf<UUnitsEntryWidget> UnitsEntryClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
+    TSubclassOf<UCustomButtonWidget> CategoryButtonClass;
 	
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UButton* Btn_ShowUnitsSelection;
@@ -65,7 +77,13 @@ protected:
     UBorder* ListBorder;
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UWrapBox* CategoryWrapBox;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
     UEditableTextBox* SpawnCountTextBox;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UEditableTextBox* SearchTextBox;
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
     UCustomButtonWidget* Btn_IncreaseSpawnCount;
@@ -84,5 +102,20 @@ protected:
 
     UPROPERTY(Transient)
     int32 CachedSpawnCount = 1;
+
+    UPROPERTY(Transient)
+    FString CurrentSearchText;
+
+    UPROPERTY(Transient)
+    FName CurrentTagFilter = NAME_None;
+
+    UPROPERTY()
+    TArray<UCustomButtonWidget*> CategoryButtons;
+
+    UPROPERTY()
+    TMap<UCustomButtonWidget*, FName> CategoryButtonTagMap;
+
+    UPROPERTY()
+    TArray<FName> CachedCategoryTags;
 
 };
