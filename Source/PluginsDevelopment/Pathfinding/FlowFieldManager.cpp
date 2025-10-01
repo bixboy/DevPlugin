@@ -357,7 +357,7 @@ void AFlowFieldManager::RecalculateTerrainBounds()
         }
 
         UWorld* World = GetWorld();
-        if ((!bHasExplicitTerrain || !DetectedBounds.IsValid()) && World)
+        if ((!bHasExplicitTerrain || !DetectedBounds.IsValid) && World)
         {
                 for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
                 {
@@ -365,7 +365,7 @@ void AFlowFieldManager::RecalculateTerrainBounds()
                 }
         }
 
-        if (!DetectedBounds.IsValid())
+        if (!DetectedBounds.IsValid)
         {
                 const FBox ManagerBounds = GetComponentsBoundingBox(true);
                 if (ManagerBounds.IsValid)
@@ -380,7 +380,7 @@ void AFlowFieldManager::RecalculateTerrainBounds()
                 }
         }
 
-        if (DetectedBounds.IsValid())
+        if (DetectedBounds.IsValid)
         {
                 CachedTerrainBounds = DetectedBounds.ExpandBy(TerrainBoundsPadding);
         }
