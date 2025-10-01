@@ -79,8 +79,12 @@ private:
         float TerrainTraceDepth = 2000.0f;
 
         /** Collision channel used when tracing against the terrain. */
-        UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (EditCondition = "bAutoSizeToTerrain"))
+        UPROPERTY(EditAnywhere, Category = "FlowField|Collision", meta = (EditCondition = "bAutoSizeToTerrain"))
         TEnumAsByte<ECollisionChannel> TerrainCollisionChannel = ECC_WorldStatic;
+
+        /** Collision channel used to detect dynamic obstacles that block traversal. */
+        UPROPERTY(EditAnywhere, Category = "FlowField|Collision")
+        TEnumAsByte<ECollisionChannel> ObstacleCollisionChannel = ECC_GameTraceChannel2;
 
         /** Maximum slope angle (in degrees) that is considered walkable. */
         UPROPERTY(EditAnywhere, Category = "Flow Field", meta = (ClampMin = "0.0", ClampMax = "90.0"))

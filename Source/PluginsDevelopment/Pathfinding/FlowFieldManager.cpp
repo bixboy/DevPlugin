@@ -2,6 +2,7 @@
 
 #include "DrawDebugHelpers.h"
 #include "CollisionQueryParams.h"
+#include "CollisionShape.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "LandscapeProxy.h"
@@ -68,26 +69,30 @@ void AFlowFieldManager::UpdateFlowFieldSettings()
 {
         RecalculateTerrainBounds();
 
+        const float ClampedCellSize = FMath::Max(CellSize, KINDA_SMALL_NUMBER);
         FIntPoint DesiredGridSize = GridSize;
+        DesiredGridSize.X = FMath::Max(1, DesiredGridSize.X);
+        DesiredGridSize.Y = FMath::Max(1, DesiredGridSize.Y);
+
         FVector DesiredOrigin = GetActorLocation();
 
         if (bAutoSizeToTerrain && CachedTerrainBounds.IsValid)
         {
                 const FVector BoundsSize = CachedTerrainBounds.GetSize();
-                DesiredGridSize.X = FMath::Max(1, FMath::CeilToInt(BoundsSize.X / CellSize));
-                DesiredGridSize.Y = FMath::Max(1, FMath::CeilToInt(BoundsSize.Y / CellSize));
+                DesiredGridSize.X = FMath::Max(1, FMath::CeilToInt(BoundsSize.X / ClampedCellSize));
+                DesiredGridSize.Y = FMath::Max(1, FMath::CeilToInt(BoundsSize.Y / ClampedCellSize));
                 DesiredOrigin = CachedTerrainBounds.Min;
         }
         else
         {
-                const FVector GridHalfExtent = FVector(GridSize.X * CellSize * 0.5f, GridSize.Y * CellSize * 0.5f, 0.0f);
+                const FVector GridHalfExtent = FVector(DesiredGridSize.X * ClampedCellSize * 0.5f, DesiredGridSize.Y * ClampedCellSize * 0.5f, 0.0f);
                 DesiredOrigin = GetActorLocation() - GridHalfExtent;
         }
 
         GridSize = DesiredGridSize;
 
         FlowFieldSettings.GridSize = DesiredGridSize;
-        FlowFieldSettings.CellSize = CellSize;
+        FlowFieldSettings.CellSize = ClampedCellSize;
 
         FVector FinalOrigin = DesiredOrigin + AdditionalOriginOffset;
         FinalOrigin.Z = DesiredOrigin.Z + AdditionalOriginOffset.Z;
@@ -115,53 +120,83 @@ void AFlowFieldManager::UpdateTraversalWeights()
                 return;
         }
 
-        if (TraversalWeights.Num() != NumCells)
-        {
-                TraversalWeights.SetNum(NumCells);
-        }
-
         const uint8 WeightValue = static_cast<uint8>(FMath::Clamp(DefaultTraversalWeight, 0, 255));
+        TraversalWeights.Init(WeightValue, NumCells);
 
         UWorld* World = GetWorld();
-        const bool bShouldTraceTerrain = bAutoSizeToTerrain && CachedTerrainBounds.IsValid && World;
-
-        if (bShouldTraceTerrain)
+        if (!World)
         {
-                const float TraceStartZ = CachedTerrainBounds.Max.Z + TerrainTraceHeight;
-                const float TraceEndZ = CachedTerrainBounds.Min.Z - TerrainTraceDepth;
-                FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(FlowFieldTerrainTrace), false, this);
+                FlowField.SetTraversalWeights(TraversalWeights);
+                bHasBuiltField = false;
+                bHasDebugSnapshot = false;
+                return;
+        }
 
-                for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+        const bool bShouldTraceTerrain = bAutoSizeToTerrain && CachedTerrainBounds.IsValid;
+        const float TraceStartZ = bShouldTraceTerrain ? CachedTerrainBounds.Max.Z + TerrainTraceHeight : 0.0f;
+        const float TraceEndZ = bShouldTraceTerrain ? CachedTerrainBounds.Min.Z - TerrainTraceDepth : 0.0f;
+
+        FCollisionQueryParams TerrainQueryParams(SCENE_QUERY_STAT(FlowFieldTerrainTrace), false, this);
+        TerrainQueryParams.AddIgnoredActor(this);
+
+        FCollisionQueryParams ObstacleQueryParams(SCENE_QUERY_STAT(FlowFieldObstacleOverlap), false, this);
+        ObstacleQueryParams.AddIgnoredActor(this);
+
+        const float HalfCellSize = FlowFieldSettings.CellSize * 0.5f;
+        const FVector ObstacleExtents(HalfCellSize, HalfCellSize, HalfCellSize); // keep overlap tight to reduce cost
+        const FCollisionShape ObstacleShape = FCollisionShape::MakeBox(ObstacleExtents);
+
+        for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+        {
+                const int32 CellX = Index % FlowFieldSettings.GridSize.X;
+                const int32 CellY = Index / FlowFieldSettings.GridSize.X;
+                const FIntPoint Cell(CellX, CellY);
+                const FVector CellWorld = FlowField.CellToWorld(Cell);
+
+                bool bWalkable = true;
+                FVector SampleLocation = CellWorld;
+
+                if (bShouldTraceTerrain)
                 {
-                        const int32 CellX = Index % FlowFieldSettings.GridSize.X;
-                        const int32 CellY = Index / FlowFieldSettings.GridSize.X;
-                        const FVector CellWorld = FlowField.CellToWorld(FIntPoint(CellX, CellY));
                         const FVector TraceStart(CellWorld.X, CellWorld.Y, TraceStartZ);
                         const FVector TraceEnd(CellWorld.X, CellWorld.Y, TraceEndZ);
 
                         FHitResult Hit;
-                        const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, TerrainCollisionChannel, QueryParams);
+                        const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, TerrainCollisionChannel, TerrainQueryParams);
                         if (bHit)
                         {
                                 const FVector HitNormal = Hit.ImpactNormal.GetSafeNormal();
                                 const float Dot = FVector::DotProduct(HitNormal, FVector::UpVector);
                                 const float ClampedDot = FMath::Clamp(Dot, -1.0f, 1.0f);
                                 const float SlopeAngleDegrees = FMath::RadiansToDegrees(FMath::Acos(ClampedDot));
-                                const bool bWithinSlopeLimit = SlopeAngleDegrees <= MaxWalkableSlopeAngle;
-                                TraversalWeights[Index] = bWithinSlopeLimit ? WeightValue : 0;
+                                if (SlopeAngleDegrees <= MaxWalkableSlopeAngle)
+                                {
+                                        SampleLocation = Hit.Location;
+                                }
+                                else
+                                {
+                                        bWalkable = false;
+                                }
                         }
                         else
                         {
-                                TraversalWeights[Index] = 0;
+                                bWalkable = false;
                         }
                 }
-        }
-        else
-        {
-                for (int32 Index = 0; Index < TraversalWeights.Num(); ++Index)
+
+                if (bWalkable)
                 {
-                        TraversalWeights[Index] = WeightValue;
+                        FVector OverlapCenter = SampleLocation;
+                        OverlapCenter.Z += ObstacleExtents.Z;
+
+                        const bool bBlocked = World->OverlapAnyTestByChannel(OverlapCenter, FQuat::Identity, ObstacleCollisionChannel, ObstacleShape, ObstacleQueryParams);
+                        if (bBlocked)
+                        {
+                                bWalkable = false;
+                        }
                 }
+
+                TraversalWeights[Index] = bWalkable ? WeightValue : 0;
         }
 
         FlowField.SetTraversalWeights(TraversalWeights);
@@ -301,8 +336,7 @@ void AFlowFieldManager::RecalculateTerrainBounds()
         }
 
         FBox DetectedBounds(ForceInit);
-
-        auto AddActorBounds = [&DetectedBounds](AActor* Actor)
+        auto AddActorBounds = [&DetectedBounds](const AActor* Actor)
         {
                 if (!IsValid(Actor))
                 {
@@ -316,14 +350,14 @@ void AFlowFieldManager::RecalculateTerrainBounds()
                 }
         };
 
-        for (TObjectPtr<AActor> ActorPtr : TerrainActors)
+        const bool bHasExplicitTerrain = TerrainActors.Num() > 0;
+        for (const TObjectPtr<AActor>& ActorPtr : TerrainActors)
         {
                 AddActorBounds(ActorPtr.Get());
         }
 
         UWorld* World = GetWorld();
-
-        if (!DetectedBounds.IsValid && World)
+        if ((!bHasExplicitTerrain || !DetectedBounds.IsValid) && World)
         {
                 for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
                 {
@@ -333,9 +367,16 @@ void AFlowFieldManager::RecalculateTerrainBounds()
 
         if (!DetectedBounds.IsValid)
         {
-                if (AActor* Parent = GetAttachParentActor())
+                const FBox ManagerBounds = GetComponentsBoundingBox(true);
+                if (ManagerBounds.IsValid)
                 {
-                        AddActorBounds(Parent);
+                        DetectedBounds = ManagerBounds;
+                }
+                else
+                {
+                        const float HalfExtent = FMath::Max(CellSize * 0.5f, 1.0f);
+                        const FVector DefaultExtent(HalfExtent, HalfExtent, HalfExtent);
+                        DetectedBounds = FBox::BuildAABB(GetActorLocation(), DefaultExtent);
                 }
         }
 
