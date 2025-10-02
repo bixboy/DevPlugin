@@ -142,7 +142,7 @@ protected:
 
     /** Formation layout used when spawning batches of units. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_SpawnFormation, Category = "RTS|Spawn")
-    TEnumAsByte<ESpawnFormation> SpawnFormation = ESpawnFormation::Square;
+    ESpawnFormation SpawnFormation = ESpawnFormation::Square;
 
     /** Custom grid dimensions (X = columns, Y = rows) used when SpawnFormation is Custom. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_CustomFormationDimensions, Category = "RTS|Spawn", meta = (ClampMin = "1"))
