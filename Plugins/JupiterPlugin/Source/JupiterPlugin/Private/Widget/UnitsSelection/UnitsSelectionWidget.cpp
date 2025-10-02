@@ -1,19 +1,78 @@
-﻿#include "Widget/UnitsSelection/UnitsSelectionWidget.h"
+#include "Widget/UnitsSelection/UnitsSelectionWidget.h"
+
+#include "Algo/Sort.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/UnitSpawnComponent.h"
+#include "Components/Widget.h"
 #include "Components/WrapBox.h"
-#include "Types/SlateEnums.h"
 #include "Data/UnitsSelectionDataAsset.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/LexFromString.h"
+#include "Types/SlateEnums.h"
 #include "Widget/CustomButtonWidget.h"
 #include "Widget/UnitsSelection/UnitsEntryWidget.h"
-#include "Algo/Sort.h"
 
 #define LOCTEXT_NAMESPACE "UnitsSelectionWidget"
 
+namespace UnitsSelectionWidget::Private
+{
+template <typename DelegateType, typename UserObjectType, typename FuncType>
+void AddDynamicIfValid(DelegateType& Delegate, UserObjectType* UserObject, FuncType Func)
+{
+    if (UserObject)
+    {
+        Delegate.AddDynamic(UserObject, Func);
+    }
+}
+
+template <typename DelegateType, typename UserObjectType, typename FuncType>
+void RemoveDynamicIfValid(DelegateType& Delegate, UserObjectType* UserObject, FuncType Func)
+{
+    if (UserObject)
+    {
+        Delegate.RemoveDynamic(UserObject, Func);
+    }
+}
+
+template <typename WidgetType>
+void SetVisibilityIfChanged(WidgetType* Widget, ESlateVisibility NewVisibility)
+{
+    if (Widget && Widget->GetVisibility() != NewVisibility)
+    {
+        Widget->SetVisibility(NewVisibility);
+    }
+}
+
+template <typename WidgetType>
+void ToggleVisibility(WidgetType* Widget, ESlateVisibility VisibleState = ESlateVisibility::Visible, ESlateVisibility HiddenState = ESlateVisibility::Collapsed)
+{
+    if (!Widget)
+    {
+        return;
+    }
+
+    const ESlateVisibility CurrentVisibility = Widget->GetVisibility();
+    const ESlateVisibility TargetVisibility = (CurrentVisibility == VisibleState) ? HiddenState : VisibleState;
+    SetVisibilityIfChanged(Widget, TargetVisibility);
+}
+
+void ClearCategoryButtons(TArray<UCustomButtonWidget*>& Buttons, TMap<UCustomButtonWidget*, FName>& ButtonTagMap, UUnitsSelectionWidget* Widget)
+{
+    for (UCustomButtonWidget* CategoryButton : Buttons)
+    {
+        if (CategoryButton)
+        {
+            RemoveDynamicIfValid(CategoryButton->OnButtonClicked, Widget, &UUnitsSelectionWidget::OnCategoryButtonClicked);
+        }
+    }
+
+    Buttons.Reset();
+    ButtonTagMap.Reset();
+}
+}
 
 void UUnitsSelectionWidget::NativeOnInitialized()
 {
@@ -22,48 +81,61 @@ void UUnitsSelectionWidget::NativeOnInitialized()
     if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0))
     {
         if (APawn* PlayerPawn = PlayerController->GetPawn())
+        {
             SpawnComponent = PlayerPawn->FindComponentByClass<UUnitSpawnComponent>();
+        }
     }
 
     if (SpawnComponent)
     {
         CachedSpawnCount = FMath::Max(1, SpawnComponent->GetUnitsPerSpawn());
-        SpawnComponent->OnSpawnCountChanged.AddDynamic(this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
-        SpawnComponent->OnSpawnFormationChanged.AddDynamic(this, &UUnitsSelectionWidget::HandleSpawnFormationChanged);
-        SpawnComponent->OnCustomFormationDimensionsChanged.AddDynamic(this, &UUnitsSelectionWidget::HandleCustomFormationDimensionsChanged);
+        UnitsSelectionWidget::Private::AddDynamicIfValid(SpawnComponent->OnSpawnCountChanged, this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
+        UnitsSelectionWidget::Private::AddDynamicIfValid(SpawnComponent->OnSpawnFormationChanged, this, &UUnitsSelectionWidget::HandleSpawnFormationChanged);
+        UnitsSelectionWidget::Private::AddDynamicIfValid(SpawnComponent->OnCustomFormationDimensionsChanged, this, &UUnitsSelectionWidget::HandleCustomFormationDimensionsChanged);
     }
     else
+    {
         CachedSpawnCount = 1;
+    }
 
     if (SpawnCountTextBox)
-        SpawnCountTextBox->OnTextCommitted.AddDynamic(this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
+    {
+        UnitsSelectionWidget::Private::AddDynamicIfValid(SpawnCountTextBox->OnTextCommitted, this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
+    }
 
     if (SearchTextBox)
     {
-        SearchTextBox->OnTextChanged.AddDynamic(this, &UUnitsSelectionWidget::OnSearchTextChanged);
+        UnitsSelectionWidget::Private::AddDynamicIfValid(SearchTextBox->OnTextChanged, this, &UUnitsSelectionWidget::OnSearchTextChanged);
 
-        CurrentSearchText = SearchTextBox->GetText().ToString();
-        CurrentSearchText.TrimStartAndEndInline();
-        CurrentSearchText.ToLowerInline();
+        FString InitialSearch = SearchTextBox->GetText().ToString();
+        InitialSearch.TrimStartAndEndInline();
+        InitialSearch.ToLowerInline();
+        CurrentSearchText = MoveTemp(InitialSearch);
     }
 
     if (Btn_IncreaseSpawnCount)
-        Btn_IncreaseSpawnCount->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
+    {
+        UnitsSelectionWidget::Private::AddDynamicIfValid(Btn_IncreaseSpawnCount->OnButtonClicked, this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
+    }
 
     if (Btn_DecreaseSpawnCount)
-        Btn_DecreaseSpawnCount->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
+    {
+        UnitsSelectionWidget::Private::AddDynamicIfValid(Btn_DecreaseSpawnCount->OnButtonClicked, this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
+    }
 
     if (Btn_ShowUnitsSelection)
-            Btn_ShowUnitsSelection->OnPressed.AddDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
+    {
+        UnitsSelectionWidget::Private::AddDynamicIfValid(Btn_ShowUnitsSelection->OnPressed, this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
+    }
 
     if (CustomFormationXTextBox)
     {
-        CustomFormationXTextBox->OnTextCommitted.AddDynamic(this, &UUnitsSelectionWidget::OnCustomFormationXCommitted);
+        UnitsSelectionWidget::Private::AddDynamicIfValid(CustomFormationXTextBox->OnTextCommitted, this, &UUnitsSelectionWidget::OnCustomFormationXCommitted);
     }
 
     if (CustomFormationYTextBox)
     {
-        CustomFormationYTextBox->OnTextCommitted.AddDynamic(this, &UUnitsSelectionWidget::OnCustomFormationYCommitted);
+        UnitsSelectionWidget::Private::AddDynamicIfValid(CustomFormationYTextBox->OnTextCommitted, this, &UUnitsSelectionWidget::OnCustomFormationYCommitted);
     }
 
     RefreshSpawnCountDisplay();
@@ -78,49 +150,52 @@ void UUnitsSelectionWidget::NativeDestruct()
 {
     if (SpawnComponent)
     {
-        SpawnComponent->OnSpawnCountChanged.RemoveDynamic(this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
-        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitsSelectionWidget::HandleSpawnFormationChanged);
-        SpawnComponent->OnCustomFormationDimensionsChanged.RemoveDynamic(this, &UUnitsSelectionWidget::HandleCustomFormationDimensionsChanged);
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(SpawnComponent->OnSpawnCountChanged, this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(SpawnComponent->OnSpawnFormationChanged, this, &UUnitsSelectionWidget::HandleSpawnFormationChanged);
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(SpawnComponent->OnCustomFormationDimensionsChanged, this, &UUnitsSelectionWidget::HandleCustomFormationDimensionsChanged);
     }
 
     if (SpawnCountTextBox)
-        SpawnCountTextBox->OnTextCommitted.RemoveDynamic(this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
+    {
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(SpawnCountTextBox->OnTextCommitted, this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
+    }
 
     if (SearchTextBox)
-        SearchTextBox->OnTextChanged.RemoveDynamic(this, &UUnitsSelectionWidget::OnSearchTextChanged);
+    {
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(SearchTextBox->OnTextChanged, this, &UUnitsSelectionWidget::OnSearchTextChanged);
+    }
 
     if (Btn_IncreaseSpawnCount)
-        Btn_IncreaseSpawnCount->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
+    {
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(Btn_IncreaseSpawnCount->OnButtonClicked, this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
+    }
 
     if (Btn_DecreaseSpawnCount)
-        Btn_DecreaseSpawnCount->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
+    {
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(Btn_DecreaseSpawnCount->OnButtonClicked, this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
+    }
 
     if (Btn_ShowUnitsSelection)
-        Btn_ShowUnitsSelection->OnPressed.RemoveDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
+    {
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(Btn_ShowUnitsSelection->OnPressed, this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
+    }
 
     if (FormationDropdown)
     {
-        FormationDropdown->OnSelectionChanged.RemoveDynamic(this, &UUnitsSelectionWidget::OnFormationOptionChanged);
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(FormationDropdown->OnSelectionChanged, this, &UUnitsSelectionWidget::OnFormationOptionChanged);
     }
 
     if (CustomFormationXTextBox)
     {
-        CustomFormationXTextBox->OnTextCommitted.RemoveDynamic(this, &UUnitsSelectionWidget::OnCustomFormationXCommitted);
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(CustomFormationXTextBox->OnTextCommitted, this, &UUnitsSelectionWidget::OnCustomFormationXCommitted);
     }
 
     if (CustomFormationYTextBox)
     {
-        CustomFormationYTextBox->OnTextCommitted.RemoveDynamic(this, &UUnitsSelectionWidget::OnCustomFormationYCommitted);
+        UnitsSelectionWidget::Private::RemoveDynamicIfValid(CustomFormationYTextBox->OnTextCommitted, this, &UUnitsSelectionWidget::OnCustomFormationYCommitted);
     }
-    
-    for (UCustomButtonWidget* CategoryButton : CategoryButtons)
-    {
-        if (CategoryButton)
-            CategoryButton->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnCategoryButtonClicked);
-    }
-    
-    CategoryButtons.Reset();
-    CategoryButtonTagMap.Reset();
+
+    UnitsSelectionWidget::Private::ClearCategoryButtons(CategoryButtons, CategoryButtonTagMap, this);
 
     Super::NativeDestruct();
 }
@@ -148,7 +223,9 @@ void UUnitsSelectionWidget::SetupUnitsList()
         EntryList.Add(UnitWidget);
 
         if (UnitWidget->UnitButton)
-            UnitWidget->UnitButton->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnUnitSelected);
+        {
+            UnitsSelectionWidget::Private::AddDynamicIfValid(UnitWidget->UnitButton->OnButtonClicked, this, &UUnitsSelectionWidget::OnUnitSelected);
+        }
 
         for (const FName& Tag : UnitWidget->GetUnitTags())
         {
@@ -163,29 +240,20 @@ void UUnitsSelectionWidget::SetupUnitsList()
 
 void UUnitsSelectionWidget::OnShowUnitSelectionPressed()
 {
-    if (!ListBorder)
-        return;
-
-    if (ListBorder->GetVisibility() == ESlateVisibility::Visible)
-    {
-        ListBorder->SetVisibility(ESlateVisibility::Collapsed);
-    }
-    else
-    {
-        ListBorder->SetVisibility(ESlateVisibility::Visible);
-    }
+    UnitsSelectionWidget::Private::ToggleVisibility(ListBorder);
 }
 
 void UUnitsSelectionWidget::OnUnitSelected(UCustomButtonWidget* Button, int Index)
 {
+    const UCustomButtonWidget* SelectedButton = Button;
+
     for (UUnitsEntryWidget* EntryWidget : EntryList)
     {
         if (EntryWidget && EntryWidget->UnitButton)
-            EntryWidget->UnitButton->ToggleButtonIsSelected(false);
+        {
+            EntryWidget->UnitButton->ToggleButtonIsSelected(EntryWidget->UnitButton == SelectedButton);
+        }
     }
-
-    if (Button)
-        Button->ToggleButtonIsSelected(true);
 }
 
 void UUnitsSelectionWidget::OnCategoryButtonClicked(UCustomButtonWidget* Button, int /*Index*/)
@@ -195,18 +263,28 @@ void UUnitsSelectionWidget::OnCategoryButtonClicked(UCustomButtonWidget* Button,
 
     if (const FName* FoundTag = CategoryButtonTagMap.Find(Button))
     {
+        const bool bTagChanged = CurrentTagFilter != *FoundTag;
         CurrentTagFilter = *FoundTag;
         UpdateCategoryButtonSelection(Button);
-        ApplyFilters();
+        if (bTagChanged)
+        {
+            ApplyFilters();
+        }
     }
 }
 
 void UUnitsSelectionWidget::OnSearchTextChanged(const FText& Text)
 {
-    CurrentSearchText = Text.ToString();
-    CurrentSearchText.TrimStartAndEndInline();
-    CurrentSearchText.ToLowerInline();
+    FString NewSearchText = Text.ToString();
+    NewSearchText.TrimStartAndEndInline();
+    NewSearchText.ToLowerInline();
 
+    if (CurrentSearchText == NewSearchText)
+    {
+        return;
+    }
+
+    CurrentSearchText = MoveTemp(NewSearchText);
     ApplyFilters();
 }
 
@@ -214,9 +292,14 @@ void UUnitsSelectionWidget::OnSpawnCountTextCommitted(const FText& Text, ETextCo
 {
     int32 ParsedValue = CachedSpawnCount;
     const FString TextString = Text.ToString();
-    
+
     if (!TextString.IsEmpty())
-            ParsedValue = FCString::Atoi(*TextString);
+    {
+        if (!LexFromString(ParsedValue, *TextString))
+        {
+            ParsedValue = 0;
+        }
+    }
 
     ApplySpawnCount(ParsedValue);
 }
@@ -252,19 +335,11 @@ void UUnitsSelectionWidget::SetupCategoryButtons()
 {
     if (!CategoryWrapBox || !CategoryButtonClass)
     {
-        CategoryButtons.Reset();
-        CategoryButtonTagMap.Reset();
+        UnitsSelectionWidget::Private::ClearCategoryButtons(CategoryButtons, CategoryButtonTagMap, this);
         return;
     }
 
-    for (UCustomButtonWidget* CategoryButton : CategoryButtons)
-    {
-        if (CategoryButton)
-            CategoryButton->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnCategoryButtonClicked);
-    }
-
-    CategoryButtons.Reset();
-    CategoryButtonTagMap.Reset();
+    UnitsSelectionWidget::Private::ClearCategoryButtons(CategoryButtons, CategoryButtonTagMap, this);
 
     CategoryWrapBox->ClearChildren();
 
@@ -276,7 +351,7 @@ void UUnitsSelectionWidget::SetupCategoryButtons()
 
         CategoryButton->SetButtonText(Label);
         CategoryButton->ButtonIndex = CategoryButtons.Num();
-        CategoryButton->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnCategoryButtonClicked);
+        UnitsSelectionWidget::Private::AddDynamicIfValid(CategoryButton->OnButtonClicked, this, &UUnitsSelectionWidget::OnCategoryButtonClicked);
 
         CategoryWrapBox->AddChild(CategoryButton);
         CategoryButtons.Add(CategoryButton);
@@ -324,7 +399,7 @@ void UUnitsSelectionWidget::SetupCategoryButtons()
     }
 
     if (ButtonToSelect)
-    	UpdateCategoryButtonSelection(ButtonToSelect);
+        UpdateCategoryButtonSelection(ButtonToSelect);
 }
 
 void UUnitsSelectionWidget::InitializeFormationOptions()
@@ -345,12 +420,12 @@ void UUnitsSelectionWidget::InitializeFormationOptions()
         for (int32 EnumIndex = 0; EnumIndex < EnumPtr->NumEnums(); ++EnumIndex)
         {
             if (EnumPtr->HasMetaData(TEXT("Hidden"), EnumIndex))
-            	continue;
+                continue;
 
             const FString EnumName = EnumPtr->GetNameStringByIndex(EnumIndex);
             if (EnumName.Contains(TEXT("MAX")))
-            	continue;
-            	
+                continue;
+
             const ESpawnFormation FormationValue = static_cast<ESpawnFormation>(EnumPtr->GetValueByIndex(EnumIndex));
             const FString DisplayName = EnumPtr->GetDisplayNameTextByIndex(EnumIndex).ToString();
 
@@ -360,8 +435,8 @@ void UUnitsSelectionWidget::InitializeFormationOptions()
         }
     }
 
-    FormationDropdown->OnSelectionChanged.RemoveDynamic(this, &UUnitsSelectionWidget::OnFormationOptionChanged);
-    FormationDropdown->OnSelectionChanged.AddDynamic(this, &UUnitsSelectionWidget::OnFormationOptionChanged);
+    UnitsSelectionWidget::Private::RemoveDynamicIfValid(FormationDropdown->OnSelectionChanged, this, &UUnitsSelectionWidget::OnFormationOptionChanged);
+    UnitsSelectionWidget::Private::AddDynamicIfValid(FormationDropdown->OnSelectionChanged, this, &UUnitsSelectionWidget::OnFormationOptionChanged);
 
     if (SpawnComponent)
     {
@@ -379,7 +454,7 @@ void UUnitsSelectionWidget::InitializeFormationOptions()
 void UUnitsSelectionWidget::UpdateFormationSelection()
 {
     if (!FormationDropdown || !SpawnComponent)
-    	return;
+        return;
 
     if (const FString* FoundOption = FormationToOption.Find(SpawnComponent->GetSpawnFormation()))
     {
@@ -425,9 +500,19 @@ void UUnitsSelectionWidget::OnCustomFormationXCommitted(const FText& Text, EText
         return;
 
     int32 ParsedValue = SpawnComponent->GetCustomFormationDimensions().X;
-    
-    if (!Text.IsEmpty())
-        ParsedValue = FMath::Max(1, FCString::Atoi(*Text.ToString()));
+    const FString TextString = Text.ToString();
+
+    if (!TextString.IsEmpty())
+    {
+        if (LexFromString(ParsedValue, *TextString))
+        {
+            ParsedValue = FMath::Max(1, ParsedValue);
+        }
+        else
+        {
+            ParsedValue = 1;
+        }
+    }
 
     const int32 CurrentY = SpawnComponent->GetCustomFormationDimensions().Y;
     SpawnComponent->SetCustomFormationDimensions(FIntPoint(ParsedValue, CurrentY));
@@ -440,9 +525,19 @@ void UUnitsSelectionWidget::OnCustomFormationYCommitted(const FText& Text, EText
         return;
 
     int32 ParsedValue = SpawnComponent->GetCustomFormationDimensions().Y;
-    
-    if (!Text.IsEmpty())
-        ParsedValue = FMath::Max(1, FCString::Atoi(*Text.ToString()));
+    const FString TextString = Text.ToString();
+
+    if (!TextString.IsEmpty())
+    {
+        if (LexFromString(ParsedValue, *TextString))
+        {
+            ParsedValue = FMath::Max(1, ParsedValue);
+        }
+        else
+        {
+            ParsedValue = 1;
+        }
+    }
 
     const int32 CurrentX = SpawnComponent->GetCustomFormationDimensions().X;
     SpawnComponent->SetCustomFormationDimensions(FIntPoint(CurrentX, ParsedValue));
@@ -461,17 +556,38 @@ void UUnitsSelectionWidget::UpdateCategoryButtonSelection(UCustomButtonWidget* S
 void UUnitsSelectionWidget::ApplyFilters()
 {
     const bool bFilterByTag = !CurrentTagFilter.IsNone();
+    const bool bHasSearch = !CurrentSearchText.IsEmpty();
+
+    if (!bHasSearch && !bFilterByTag)
+    {
+        for (UUnitsEntryWidget* EntryWidget : EntryList)
+        {
+            if (EntryWidget)
+            {
+                UnitsSelectionWidget::Private::SetVisibilityIfChanged(EntryWidget, ESlateVisibility::Visible);
+            }
+        }
+        return;
+    }
 
     for (UUnitsEntryWidget* EntryWidget : EntryList)
     {
         if (!EntryWidget)
+        {
             continue;
+        }
 
-        const bool bMatchesSearch = CurrentSearchText.IsEmpty() || EntryWidget->MatchesSearch(CurrentSearchText);
         const bool bMatchesTag = !bFilterByTag || EntryWidget->HasTag(CurrentTagFilter);
 
+        if (!bMatchesTag)
+        {
+            UnitsSelectionWidget::Private::SetVisibilityIfChanged(EntryWidget, ESlateVisibility::Collapsed);
+            continue;
+        }
+
+        const bool bMatchesSearch = !bHasSearch || EntryWidget->MatchesSearch(CurrentSearchText);
         const ESlateVisibility TargetVisibility = (bMatchesSearch && bMatchesTag) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
-        EntryWidget->SetVisibility(TargetVisibility);
+        UnitsSelectionWidget::Private::SetVisibilityIfChanged(EntryWidget, TargetVisibility);
     }
 }
 
