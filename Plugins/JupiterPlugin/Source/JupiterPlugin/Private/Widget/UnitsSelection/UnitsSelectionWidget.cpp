@@ -15,28 +15,24 @@
 
 void UUnitsSelectionWidget::NativeOnInitialized()
 {
-        Super::NativeOnInitialized();
+    Super::NativeOnInitialized();
 
-        if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0))
-        {
-                if (APawn* PlayerPawn = PlayerController->GetPawn())
-                        SpawnComponent = PlayerPawn->FindComponentByClass<UUnitSpawnComponent>();
-        }
+    if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+    {
+        if (APawn* PlayerPawn = PlayerController->GetPawn())
+            SpawnComponent = PlayerPawn->FindComponentByClass<UUnitSpawnComponent>();
+    }
 
-        if (SpawnComponent)
-        {
-                CachedSpawnCount = FMath::Max(1, SpawnComponent->GetUnitsPerSpawn());
-                SpawnComponent->OnSpawnCountChanged.AddDynamic(this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
-        }
-        else
-        {
-                CachedSpawnCount = 1;
-        }
+    if (SpawnComponent)
+    {
+        CachedSpawnCount = FMath::Max(1, SpawnComponent->GetUnitsPerSpawn());
+        SpawnComponent->OnSpawnCountChanged.AddDynamic(this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
+    }
+    else
+        CachedSpawnCount = 1;
 
-        if (SpawnCountTextBox)
-        {
-                SpawnCountTextBox->OnTextCommitted.AddDynamic(this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
-        }
+    if (SpawnCountTextBox)
+        SpawnCountTextBox->OnTextCommitted.AddDynamic(this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
 
     if (SearchTextBox)
     {
@@ -47,75 +43,56 @@ void UUnitsSelectionWidget::NativeOnInitialized()
         CurrentSearchText.ToLowerInline();
     }
 
-        if (Btn_IncreaseSpawnCount)
-        {
-                Btn_IncreaseSpawnCount->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
-        }
+    if (Btn_IncreaseSpawnCount)
+        Btn_IncreaseSpawnCount->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
 
-        if (Btn_DecreaseSpawnCount)
-        {
-                Btn_DecreaseSpawnCount->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
-        }
+    if (Btn_DecreaseSpawnCount)
+        Btn_DecreaseSpawnCount->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
 
-        if (Btn_ShowUnitsSelection)
-                Btn_ShowUnitsSelection->OnPressed.AddDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
+    if (Btn_ShowUnitsSelection)
+            Btn_ShowUnitsSelection->OnPressed.AddDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
 
-        RefreshSpawnCountDisplay();
-        OnShowUnitSelectionPressed();
-        SetupUnitsList();
+    RefreshSpawnCountDisplay();
+    OnShowUnitSelectionPressed();
+    SetupUnitsList();
 }
 
 void UUnitsSelectionWidget::NativeDestruct()
 {
-        if (SpawnComponent)
-        {
-                SpawnComponent->OnSpawnCountChanged.RemoveDynamic(this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
-        }
+    if (SpawnComponent)
+        SpawnComponent->OnSpawnCountChanged.RemoveDynamic(this, &UUnitsSelectionWidget::HandleSpawnCountChanged);
 
-        if (SpawnCountTextBox)
-        {
-                SpawnCountTextBox->OnTextCommitted.RemoveDynamic(this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
-        }
+    if (SpawnCountTextBox)
+        SpawnCountTextBox->OnTextCommitted.RemoveDynamic(this, &UUnitsSelectionWidget::OnSpawnCountTextCommitted);
 
     if (SearchTextBox)
-    {
         SearchTextBox->OnTextChanged.RemoveDynamic(this, &UUnitsSelectionWidget::OnSearchTextChanged);
-    }
 
-        if (Btn_IncreaseSpawnCount)
-        {
-                Btn_IncreaseSpawnCount->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
-        }
+    if (Btn_IncreaseSpawnCount)
+        Btn_IncreaseSpawnCount->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnIncreaseSpawnCount);
 
-        if (Btn_DecreaseSpawnCount)
-        {
-                Btn_DecreaseSpawnCount->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
-        }
+    if (Btn_DecreaseSpawnCount)
+        Btn_DecreaseSpawnCount->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnDecreaseSpawnCount);
 
-        if (Btn_ShowUnitsSelection)
-        {
-                Btn_ShowUnitsSelection->OnPressed.RemoveDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
-        }
-
+    if (Btn_ShowUnitsSelection)
+        Btn_ShowUnitsSelection->OnPressed.RemoveDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
+    
     for (UCustomButtonWidget* CategoryButton : CategoryButtons)
     {
         if (CategoryButton)
-        {
             CategoryButton->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnCategoryButtonClicked);
-        }
     }
+    
     CategoryButtons.Reset();
     CategoryButtonTagMap.Reset();
 
-        Super::NativeDestruct();
+    Super::NativeDestruct();
 }
 
 void UUnitsSelectionWidget::SetupUnitsList()
 {
     if (!WrapBox)
-    {
         return;
-    }
 
     WrapBox->ClearChildren();
     EntryList.Reset();
@@ -124,31 +101,23 @@ void UUnitsSelectionWidget::SetupUnitsList()
     for (UUnitsSelectionDataAsset* Data : UnitsSelectionDataAssets)
     {
         if (!Data)
-        {
             continue;
-        }
 
         UUnitsEntryWidget* UnitWidget = CreateWidget<UUnitsEntryWidget>(GetWorld(), UnitsEntryClass);
         if (!UnitWidget)
-        {
             continue;
-        }
 
         UnitWidget->InitEntry(Data);
         WrapBox->AddChild(UnitWidget);
         EntryList.Add(UnitWidget);
 
         if (UnitWidget->UnitButton)
-        {
             UnitWidget->UnitButton->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnUnitSelected);
-        }
 
         for (const FName& Tag : UnitWidget->GetUnitTags())
         {
             if (!Tag.IsNone())
-            {
                 CachedCategoryTags.AddUnique(Tag);
-            }
         }
     }
 
@@ -159,9 +128,7 @@ void UUnitsSelectionWidget::SetupUnitsList()
 void UUnitsSelectionWidget::OnShowUnitSelectionPressed()
 {
     if (!ListBorder)
-    {
         return;
-    }
 
     if (ListBorder->GetVisibility() == ESlateVisibility::Visible)
     {
@@ -175,22 +142,20 @@ void UUnitsSelectionWidget::OnShowUnitSelectionPressed()
 
 void UUnitsSelectionWidget::OnUnitSelected(UCustomButtonWidget* Button, int Index)
 {
-        for (UUnitsEntryWidget* EntryWidget : EntryList)
-        {
-                if (EntryWidget && EntryWidget->UnitButton)
-                        EntryWidget->UnitButton->ToggleButtonIsSelected(false);
-        }
+    for (UUnitsEntryWidget* EntryWidget : EntryList)
+    {
+        if (EntryWidget && EntryWidget->UnitButton)
+                EntryWidget->UnitButton->ToggleButtonIsSelected(false);
+    }
 
-        if (Button)
-                Button->ToggleButtonIsSelected(true);
+    if (Button)
+            Button->ToggleButtonIsSelected(true);
 }
 
 void UUnitsSelectionWidget::OnCategoryButtonClicked(UCustomButtonWidget* Button, int /*Index*/)
 {
     if (!Button)
-    {
         return;
-    }
 
     if (const FName* FoundTag = CategoryButtonTagMap.Find(Button))
     {
@@ -211,29 +176,29 @@ void UUnitsSelectionWidget::OnSearchTextChanged(const FText& Text)
 
 void UUnitsSelectionWidget::OnSpawnCountTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
-        int32 ParsedValue = CachedSpawnCount;
-        const FString TextString = Text.ToString();
-        
-        if (!TextString.IsEmpty())
-                ParsedValue = FCString::Atoi(*TextString);
+    int32 ParsedValue = CachedSpawnCount;
+    const FString TextString = Text.ToString();
+    
+    if (!TextString.IsEmpty())
+            ParsedValue = FCString::Atoi(*TextString);
 
-        ApplySpawnCount(ParsedValue);
+    ApplySpawnCount(ParsedValue);
 }
 
 void UUnitsSelectionWidget::OnIncreaseSpawnCount(UCustomButtonWidget* /*Button*/, int /*Index*/)
 {
-        ApplySpawnCount(CachedSpawnCount + 1);
+    ApplySpawnCount(CachedSpawnCount + 1);
 }
 
 void UUnitsSelectionWidget::OnDecreaseSpawnCount(UCustomButtonWidget* /*Button*/, int /*Index*/)
 {
-        ApplySpawnCount(CachedSpawnCount - 1);
+    ApplySpawnCount(CachedSpawnCount - 1);
 }
 
 void UUnitsSelectionWidget::HandleSpawnCountChanged(int32 NewCount)
 {
-        CachedSpawnCount = FMath::Max(1, NewCount);
-        RefreshSpawnCountDisplay();
+    CachedSpawnCount = FMath::Max(1, NewCount);
+    RefreshSpawnCountDisplay();
 }
 
 void UUnitsSelectionWidget::SetupCategoryButtons()
@@ -248,9 +213,7 @@ void UUnitsSelectionWidget::SetupCategoryButtons()
     for (UCustomButtonWidget* CategoryButton : CategoryButtons)
     {
         if (CategoryButton)
-        {
             CategoryButton->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnCategoryButtonClicked);
-        }
     }
 
     CategoryButtons.Reset();
@@ -262,9 +225,7 @@ void UUnitsSelectionWidget::SetupCategoryButtons()
     {
         UCustomButtonWidget* CategoryButton = CreateWidget<UCustomButtonWidget>(GetWorld(), CategoryButtonClass);
         if (!CategoryButton)
-        {
             return;
-        }
 
         CategoryButton->SetButtonText(Label);
         CategoryButton->ButtonIndex = CategoryButtons.Num();
@@ -326,9 +287,7 @@ void UUnitsSelectionWidget::UpdateCategoryButtonSelection(UCustomButtonWidget* S
     for (UCustomButtonWidget* CategoryButton : CategoryButtons)
     {
         if (CategoryButton)
-        {
             CategoryButton->ToggleButtonIsSelected(CategoryButton == SelectedButton);
-        }
     }
 }
 
@@ -339,9 +298,7 @@ void UUnitsSelectionWidget::ApplyFilters()
     for (UUnitsEntryWidget* EntryWidget : EntryList)
     {
         if (!EntryWidget)
-        {
             continue;
-        }
 
         const bool bMatchesSearch = CurrentSearchText.IsEmpty() || EntryWidget->MatchesSearch(CurrentSearchText);
         const bool bMatchesTag = !bFilterByTag || EntryWidget->HasTag(CurrentTagFilter);
@@ -353,19 +310,19 @@ void UUnitsSelectionWidget::ApplyFilters()
 
 void UUnitsSelectionWidget::ApplySpawnCount(int32 NewCount)
 {
-        const int32 ClampedCount = FMath::Clamp(NewCount, 1, MaxSpawnCount);
+    const int32 ClampedCount = FMath::Clamp(NewCount, 1, MaxSpawnCount);
 
-        if (SpawnComponent)
-                SpawnComponent->SetUnitsPerSpawn(ClampedCount);
+    if (SpawnComponent)
+        SpawnComponent->SetUnitsPerSpawn(ClampedCount);
 
-        CachedSpawnCount = ClampedCount;
-        RefreshSpawnCountDisplay();
+    CachedSpawnCount = ClampedCount;
+    RefreshSpawnCountDisplay();
 }
 
 void UUnitsSelectionWidget::RefreshSpawnCountDisplay() const
 {
-        if (SpawnCountTextBox)
-                SpawnCountTextBox->SetText(FText::AsNumber(CachedSpawnCount));
+    if (SpawnCountTextBox)
+            SpawnCountTextBox->SetText(FText::AsNumber(CachedSpawnCount));
 }
 
 #undef LOCTEXT_NAMESPACE
