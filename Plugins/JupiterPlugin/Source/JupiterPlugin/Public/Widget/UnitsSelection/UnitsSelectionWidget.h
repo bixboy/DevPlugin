@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Types/SlateEnums.h"
 #include "Widget/CustomButtonWidget.h"
 #include "UnitsSelectionWidget.generated.h"
 
@@ -12,6 +13,8 @@ class UButton;
 class UUnitsSelectionDataAsset;
 class UEditableTextBox;
 class UUnitSpawnComponent;
+class UComboBoxString;
+enum class ESpawnFormation : uint8;
 
 
 UCLASS()
@@ -52,11 +55,29 @@ protected:
     UFUNCTION()
     void HandleSpawnCountChanged(int32 NewCount);
 
+    UFUNCTION()
+    void HandleSpawnFormationChanged(ESpawnFormation NewFormation);
+
+    UFUNCTION()
+    void HandleCustomFormationDimensionsChanged(FIntPoint NewDimensions);
+
+    UFUNCTION()
+    void OnFormationOptionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+    UFUNCTION()
+    void OnCustomFormationXCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+    UFUNCTION()
+    void OnCustomFormationYCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
     void ApplySpawnCount(int32 NewCount);
     void RefreshSpawnCountDisplay() const;
     void SetupCategoryButtons();
     void UpdateCategoryButtonSelection(UCustomButtonWidget* SelectedButton);
     void ApplyFilters();
+    void InitializeFormationOptions();
+    void UpdateFormationSelection() const;
+    void RefreshCustomFormationInputs() const;
 
         UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
         TSubclassOf<UUnitsEntryWidget> UnitsEntryClass;
@@ -91,6 +112,15 @@ protected:
     UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
     UCustomButtonWidget* Btn_DecreaseSpawnCount;
 
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UComboBoxString* FormationDropdown;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UEditableTextBox* CustomFormationXTextBox;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UEditableTextBox* CustomFormationYTextBox;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings", meta = (ClampMin = "1"))
     int32 MaxSpawnCount = 50;
 
@@ -118,4 +148,11 @@ protected:
     UPROPERTY()
     TArray<FName> CachedCategoryTags;
 
+    UPROPERTY(Transient)
+    TMap<FString, ESpawnFormation> OptionToFormation;
+
+    UPROPERTY(Transient)
+    TMap<ESpawnFormation, FString> FormationToOption;
+
+    bool bUpdatingFormationSelection = false;
 };
