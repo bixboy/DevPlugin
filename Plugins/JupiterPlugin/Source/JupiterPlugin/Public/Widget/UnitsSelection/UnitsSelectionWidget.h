@@ -70,17 +70,32 @@ protected:
     UFUNCTION()
     void OnCustomFormationYCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
+	UFUNCTION()
     void ApplySpawnCount(int32 NewCount);
+	
+	UFUNCTION()
     void RefreshSpawnCountDisplay() const;
+
+	UFUNCTION()
     void SetupCategoryButtons();
+
+	UFUNCTION()
     void UpdateCategoryButtonSelection(UCustomButtonWidget* SelectedButton);
+
+	UFUNCTION()
     void ApplyFilters();
+
+	UFUNCTION()
     void InitializeFormationOptions();
-    void UpdateFormationSelection() const;
+
+	UFUNCTION()
+    void UpdateFormationSelection();
+
+	UFUNCTION()
     void RefreshCustomFormationInputs() const;
 
-        UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
-        TSubclassOf<UUnitsEntryWidget> UnitsEntryClass;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
+    TSubclassOf<UUnitsEntryWidget> UnitsEntryClass;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
     TSubclassOf<UCustomButtonWidget> CategoryButtonClass;

@@ -15,25 +15,26 @@ void UUnitsEntryWidget::NativeOnInitialized()
 	Super::NativeOnInitialized();
 
     if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
-                SpawnComponent = OwnerPawn->FindComponentByClass<UUnitSpawnComponent>();
+        SpawnComponent = OwnerPawn->FindComponentByClass<UUnitSpawnComponent>();
 
-        if (UnitButton)
-                UnitButton->OnButtonClicked.AddDynamic(this, &UUnitsEntryWidget::OnUnitSelected);
+    if (UnitButton)
+        UnitButton->OnButtonClicked.AddDynamic(this, &UUnitsEntryWidget::OnUnitSelected);
 }
 
 void UUnitsEntryWidget::InitEntry(UUnitsSelectionDataAsset* DataAsset)
 {
-        FUnitsSelectionData UnitData = DataAsset->UnitSelectionData;
+    FUnitsSelectionData UnitData = DataAsset->UnitSelectionData;
 
-        CachedUnitName = UnitData.UnitName;
-        UnitTags = UnitData.UnitTags;
+    CachedUnitName = UnitData.UnitName;
+    UnitTags = UnitData.UnitTags;
 
-        if (UnitButton)
-        {
-                UnitButton->SetButtonTexture(UnitData.UnitImage);
-                UnitButton->SetButtonText(CachedUnitName);
-        }
-        UnitClass = UnitData.UnitClass;
+    if (UnitButton)
+    {
+        UnitButton->SetButtonTexture(UnitData.UnitImage);
+        UnitButton->SetButtonText(CachedUnitName);
+    }
+	
+    UnitClass = UnitData.UnitClass;
 }
 
 void UUnitsEntryWidget::OnUnitSelected(UCustomButtonWidget* Button, int Index)
@@ -47,23 +48,19 @@ void UUnitsEntryWidget::OnUnitSelected(UCustomButtonWidget* Button, int Index)
 
 bool UUnitsEntryWidget::MatchesSearch(const FString& SearchLower) const
 {
-        if (SearchLower.IsEmpty())
-        {
-                return true;
-        }
+    if (SearchLower.IsEmpty())
+		return true;
 
-        FString NameLower = CachedUnitName.ToString();
-        NameLower.ToLowerInline();
+    FString NameLower = CachedUnitName.ToString();
+    NameLower.ToLowerInline();
 
-        return NameLower.Contains(SearchLower);
+    return NameLower.Contains(SearchLower);
 }
 
 bool UUnitsEntryWidget::HasTag(FName Tag) const
 {
-        if (Tag.IsNone())
-        {
-                return true;
-        }
+    if (Tag.IsNone())
+		return true;
 
-        return UnitTags.Contains(Tag);
+    return UnitTags.Contains(Tag);
 }

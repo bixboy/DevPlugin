@@ -181,11 +181,11 @@ void UUnitsSelectionWidget::OnUnitSelected(UCustomButtonWidget* Button, int Inde
     for (UUnitsEntryWidget* EntryWidget : EntryList)
     {
         if (EntryWidget && EntryWidget->UnitButton)
-                EntryWidget->UnitButton->ToggleButtonIsSelected(false);
+            EntryWidget->UnitButton->ToggleButtonIsSelected(false);
     }
 
     if (Button)
-            Button->ToggleButtonIsSelected(true);
+        Button->ToggleButtonIsSelected(true);
 }
 
 void UUnitsSelectionWidget::OnCategoryButtonClicked(UCustomButtonWidget* Button, int /*Index*/)
@@ -324,9 +324,7 @@ void UUnitsSelectionWidget::SetupCategoryButtons()
     }
 
     if (ButtonToSelect)
-    {
-        UpdateCategoryButtonSelection(ButtonToSelect);
-    }
+    	UpdateCategoryButtonSelection(ButtonToSelect);
 }
 
 void UUnitsSelectionWidget::InitializeFormationOptions()
@@ -347,16 +345,12 @@ void UUnitsSelectionWidget::InitializeFormationOptions()
         for (int32 EnumIndex = 0; EnumIndex < EnumPtr->NumEnums(); ++EnumIndex)
         {
             if (EnumPtr->HasMetaData(TEXT("Hidden"), EnumIndex))
-            {
-                continue;
-            }
+            	continue;
 
             const FString EnumName = EnumPtr->GetNameStringByIndex(EnumIndex);
             if (EnumName.Contains(TEXT("MAX")))
-            {
-                continue;
-            }
-
+            	continue;
+            	
             const ESpawnFormation FormationValue = static_cast<ESpawnFormation>(EnumPtr->GetValueByIndex(EnumIndex));
             const FString DisplayName = EnumPtr->GetDisplayNameTextByIndex(EnumIndex).ToString();
 
@@ -382,12 +376,10 @@ void UUnitsSelectionWidget::InitializeFormationOptions()
     }
 }
 
-void UUnitsSelectionWidget::UpdateFormationSelection() const
+void UUnitsSelectionWidget::UpdateFormationSelection()
 {
     if (!FormationDropdown || !SpawnComponent)
-    {
-        return;
-    }
+    	return;
 
     if (const FString* FoundOption = FormationToOption.Find(SpawnComponent->GetSpawnFormation()))
     {
@@ -418,9 +410,7 @@ void UUnitsSelectionWidget::RefreshCustomFormationInputs() const
 void UUnitsSelectionWidget::OnFormationOptionChanged(FString SelectedItem, ESelectInfo::Type /*SelectionType*/)
 {
     if (bUpdatingFormationSelection || !SpawnComponent)
-    {
         return;
-    }
 
     if (const ESpawnFormation* Formation = OptionToFormation.Find(SelectedItem))
     {
@@ -432,15 +422,12 @@ void UUnitsSelectionWidget::OnFormationOptionChanged(FString SelectedItem, ESele
 void UUnitsSelectionWidget::OnCustomFormationXCommitted(const FText& Text, ETextCommit::Type /*CommitMethod*/)
 {
     if (!SpawnComponent)
-    {
         return;
-    }
 
     int32 ParsedValue = SpawnComponent->GetCustomFormationDimensions().X;
+    
     if (!Text.IsEmpty())
-    {
         ParsedValue = FMath::Max(1, FCString::Atoi(*Text.ToString()));
-    }
 
     const int32 CurrentY = SpawnComponent->GetCustomFormationDimensions().Y;
     SpawnComponent->SetCustomFormationDimensions(FIntPoint(ParsedValue, CurrentY));
@@ -450,15 +437,12 @@ void UUnitsSelectionWidget::OnCustomFormationXCommitted(const FText& Text, EText
 void UUnitsSelectionWidget::OnCustomFormationYCommitted(const FText& Text, ETextCommit::Type /*CommitMethod*/)
 {
     if (!SpawnComponent)
-    {
         return;
-    }
 
     int32 ParsedValue = SpawnComponent->GetCustomFormationDimensions().Y;
+    
     if (!Text.IsEmpty())
-    {
         ParsedValue = FMath::Max(1, FCString::Atoi(*Text.ToString()));
-    }
 
     const int32 CurrentX = SpawnComponent->GetCustomFormationDimensions().X;
     SpawnComponent->SetCustomFormationDimensions(FIntPoint(CurrentX, ParsedValue));
@@ -505,7 +489,7 @@ void UUnitsSelectionWidget::ApplySpawnCount(int32 NewCount)
 void UUnitsSelectionWidget::RefreshSpawnCountDisplay() const
 {
     if (SpawnCountTextBox)
-            SpawnCountTextBox->SetText(FText::AsNumber(CachedSpawnCount));
+        SpawnCountTextBox->SetText(FText::AsNumber(CachedSpawnCount));
 }
 
 #undef LOCTEXT_NAMESPACE
