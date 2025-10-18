@@ -17,11 +17,11 @@ struct FUnitsSelectionData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit")
 	FText UnitName;
 
-        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit")
-        TSubclassOf<ASoldierRts> UnitClass;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit")
+    TSubclassOf<ASoldierRts> UnitClass;
 
-        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit")
-        TArray<FName> UnitTags;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit")
+    TArray<FName> UnitTags;
 };
 
 UENUM(BlueprintType)
