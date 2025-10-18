@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Utilities/PreviewPoseMesh.h"
 
 APlayerCamera::APlayerCamera()
 {
