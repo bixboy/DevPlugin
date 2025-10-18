@@ -1014,8 +1014,14 @@ void APlayerCamera::PreviewFollowMouse()
 
                 const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
                 const bool bLeftMouseDown = Player->IsInputKeyDown(EKeys::LeftMouseButton);
+                const bool bRightMouseDown = Player->IsInputKeyDown(EKeys::RightMouseButton);
+                const bool bSpawnInputDown = bLeftMouseDown || bRightMouseDown;
 
-                if (Player->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+                const bool bLeftMouseJustPressed = Player->WasInputKeyJustPressed(EKeys::LeftMouseButton);
+                const bool bRightMouseJustPressed = Player->WasInputKeyJustPressed(EKeys::RightMouseButton);
+                const bool bSpawnInputJustPressed = bLeftMouseJustPressed || bRightMouseJustPressed;
+
+                if (bSpawnInputJustPressed)
                 {
                         bSpawnRotationHoldActive = true;
                         SpawnRotationHoldStartTime = CurrentTime;
@@ -1025,7 +1031,7 @@ void APlayerCamera::PreviewFollowMouse()
                         SpawnRotationBase = FRotator(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
                         CurrentSpawnPreviewRotation = SpawnRotationBase;
                 }
-                else if (!bLeftMouseDown)
+                else if (!bSpawnInputDown)
                 {
                         bSpawnRotationHoldActive = false;
                 }
