@@ -5,6 +5,7 @@
 #include "Data/AiData.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "Player/PlayerCameraRotationPreview.h"
 #include "PlayerCamera.generated.h"
 
 class ASoldierRts;
@@ -323,25 +324,10 @@ protected:
         bool bIsCommandActionHeld = false;
 
         UPROPERTY()
-        float CommandActionHoldStartTime = 0.f;
-
-        UPROPERTY()
-        bool bCommandRotationPreviewActive = false;
-
-        UPROPERTY()
         bool bCommandPreviewVisible = false;
 
         UPROPERTY()
-        FVector CommandPreviewCenter = FVector::ZeroVector;
-
-        UPROPERTY()
-        FVector CommandRotationInitialDirection = FVector::ZeroVector;
-
-        UPROPERTY()
-        FRotator CommandRotationBase = FRotator::ZeroRotator;
-
-        UPROPERTY()
-        FRotator CurrentCommandPreviewRotation = FRotator::ZeroRotator;
+        FRotationPreviewState CommandRotationPreview;
 
         UPROPERTY()
         int32 CommandPreviewInstanceCount = 0;
@@ -392,32 +378,13 @@ protected:
         bool HasPreviewUnits() const { return PreviewUnit != nullptr; }
 
         UPROPERTY()
-        bool bSpawnRotationPreviewActive = false;
-
-        UPROPERTY()
-        bool bSpawnRotationHoldActive = false;
-
-        UPROPERTY()
-        float SpawnRotationHoldStartTime = 0.f;
-
-        UPROPERTY()
-        FVector SpawnPreviewCenter = FVector::ZeroVector;
-
-        UPROPERTY()
-        FVector SpawnRotationInitialDirection = FVector::ZeroVector;
-
-        UPROPERTY()
-        FRotator SpawnRotationBase = FRotator::ZeroRotator;
-
-        UPROPERTY()
-        FRotator CurrentSpawnPreviewRotation = FRotator::ZeroRotator;
+        FRotationPreviewState SpawnRotationPreview;
 
         void UpdateCommandPreview();
         void BeginCommandRotationPreview(const FVector& MouseLocation);
         void StopCommandPreview();
         bool EnsureCommandPreviewMesh(const TArray<AActor*>& SelectedUnits);
         void BuildCommandPreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation, TArray<FTransform>& OutTransforms) const;
-        FRotator ComputeRotationFromMouseDelta(const FVector& Center, const FVector& InitialDirection, const FRotator& BaseRotation, const FVector& MouseLocation) const;
 
 #pragma endregion
 
