@@ -12,13 +12,13 @@ void UUnitSpawnFormationWidget::NativeOnInitialized()
 
 void UUnitSpawnFormationWidget::NativeDestruct()
 {
-        Super::NativeDestruct();
+    Super::NativeDestruct();
 
-        if (SpawnComponent)
-        {
-                SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelection);
-                SpawnComponent = nullptr;
-        }
+    if (SpawnComponent)
+    {
+        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelection);
+        SpawnComponent = nullptr;
+    }
 }
 
 
