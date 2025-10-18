@@ -151,7 +151,7 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
 		
 		
 		//COMMANDS
-		EnhancedInput->BindAction(CommandAction, ETriggerEvent::Started, this, &APlayerCamera::CommandStart);
+                EnhancedInput->BindAction(CommandAction, ETriggerEvent::Started, this, &APlayerCamera::HandleCommandActionStarted);
 		EnhancedInput->BindAction(CommandAction, ETriggerEvent::Completed, this, &APlayerCamera::Command);
 		
 		EnhancedInput->BindAction(AltCommandAction, ETriggerEvent::Started, this, &APlayerCamera::Input_AltFunction);
@@ -199,10 +199,15 @@ void APlayerCamera::Tick(float DeltaTime)
 		bAltIsPressed = false;
 	}
 
-	if (bIsInSpawnUnits)
-	{
-		PreviewFollowMouse();
-	}
+        if (bIsInSpawnUnits)
+        {
+                PreviewFollowMouse();
+        }
+
+        if (bIsCommandActionHeld)
+        {
+                UpdateCommandPreview();
+        }
 }
 
 void APlayerCamera::UnPossessed()
@@ -746,13 +751,44 @@ void APlayerCamera::Input_OnDestroySelected()
 
 void APlayerCamera::Server_DestroyActor_Implementation(const TArray<AActor*>& ActorToDestroy)
 {
-	for (AActor* Actor : ActorToDestroy)
-	{
-		if (Actor) Actor->Destroy();
-	}
+        for (AActor* Actor : ActorToDestroy)
+        {
+                if (Actor) Actor->Destroy();
+        }
 }
 
 //----------------
+void APlayerCamera::HandleCommandActionStarted()
+{
+        if (!Player || bIsInSpawnUnits)
+        {
+                bIsCommandActionHeld = false;
+                return;
+        }
+
+        bIsCommandActionHeld = true;
+
+        if (const UWorld* World = GetWorld())
+        {
+                CommandActionHoldStartTime = World->GetTimeSeconds();
+        }
+        else
+        {
+                CommandActionHoldStartTime = 0.f;
+        }
+
+        CommandRotationInitialDirection = FVector::ZeroVector;
+        CommandRotationBase = FRotator(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
+        CurrentCommandPreviewRotation = CommandRotationBase;
+        bCommandRotationPreviewActive = false;
+        bCommandPreviewVisible = false;
+        CommandPreviewInstanceCount = 0;
+
+        CommandStart();
+
+        CommandPreviewCenter = CommandLocation;
+}
+
 void APlayerCamera::CommandStart()
 {
         if (!Player || bIsInSpawnUnits) return;
@@ -766,7 +802,12 @@ void APlayerCamera::CommandStart()
 
 void APlayerCamera::Command()
 {
-        if (!Player || bAltIsPressed || bIsInSpawnUnits) return;
+        if (!Player || bIsInSpawnUnits || bAltIsPressed)
+        {
+                bIsCommandActionHeld = false;
+                StopCommandPreview();
+                return;
+        }
 
         FHitResult Hit;
         if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
@@ -775,24 +816,51 @@ void APlayerCamera::Command()
         }
         else
         {
+                bIsCommandActionHeld = false;
+                StopCommandPreview();
                 return;
         }
-        AActor* ActorEnemy = GetSelectedObject();
-	
-	if (ActorEnemy && ActorEnemy->Implements<USelectable>())
-	{
-            if (OrderComponent)
-            {
-                OrderComponent->IssueOrder(CreateCommandData(CommandAttack, ActorEnemy));
-            }
-		return;
-	}
 
-	if (Hit.bBlockingHit)
-            if (OrderComponent)
-            {
-                OrderComponent->IssueOrder(FCommandData(Player, Hit.Location, GetActorRotation(), CommandMove));
-            }
+        AActor* ActorEnemy = GetSelectedObject();
+
+        if (ActorEnemy && ActorEnemy->Implements<USelectable>())
+        {
+                if (OrderComponent)
+                {
+                        OrderComponent->IssueOrder(CreateCommandData(CommandAttack, ActorEnemy));
+                }
+
+                bIsCommandActionHeld = false;
+                StopCommandPreview();
+                return;
+        }
+
+        const bool bHasValidGround = Hit.bBlockingHit;
+        const bool bUseRotationPreview = bCommandRotationPreviewActive;
+
+        if (!bHasValidGround && !bUseRotationPreview)
+        {
+                bIsCommandActionHeld = false;
+                StopCommandPreview();
+                return;
+        }
+
+        const FVector TargetLocation = bUseRotationPreview && CommandPreviewCenter != FVector::ZeroVector ? CommandPreviewCenter : Hit.Location;
+
+        if (OrderComponent)
+        {
+                const FRotator DefaultRotation(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
+                const FRotator FinalRotation = bUseRotationPreview ? CurrentCommandPreviewRotation : DefaultRotation;
+
+                FCommandData CommandData(Player, TargetLocation, FinalRotation, CommandMove);
+                CommandData.SourceLocation = TargetLocation;
+                CommandData.Rotation = FinalRotation;
+
+                OrderComponent->IssueOrder(CommandData);
+        }
+
+        bIsCommandActionHeld = false;
+        StopCommandPreview();
 }
 
 FCommandData APlayerCamera::CreateCommandData(const ECommandType Type, AActor* Enemy, const float Radius) const
@@ -842,8 +910,13 @@ void APlayerCamera::Input_OnSpawnUnits()
 
         if (PreviewUnit && PreviewUnit->GetIsValidPlacement() && SpawnComponent)
         {
-                SpawnComponent->SpawnUnits();
+                const FVector SpawnLocation = SpawnPreviewCenter;
+                const FRotator SpawnRotation = bSpawnRotationPreviewActive ? CurrentSpawnPreviewRotation : FRotator::ZeroRotator;
+                SpawnComponent->SpawnUnitsWithTransform(SpawnLocation, SpawnRotation);
         }
+
+        bSpawnRotationHoldActive = false;
+        bSpawnRotationPreviewActive = false;
 }
 
 void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
@@ -864,6 +937,11 @@ void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
                                 if (USkeletalMesh* SkeletalMesh = MeshComponent->GetSkeletalMeshAsset())
                                 {
                                         bIsInSpawnUnits = true;
+                                        bSpawnRotationPreviewActive = false;
+                                        bSpawnRotationHoldActive = false;
+                                        SpawnRotationInitialDirection = FVector::ZeroVector;
+                                        SpawnRotationBase = FRotator(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
+                                        CurrentSpawnPreviewRotation = SpawnRotationBase;
                                         PreviewUnit->ShowPreview(SkeletalMesh, DefaultSoldier->GetCapsuleComponent()->GetRelativeScale3D(), InstanceCount);
                                         if (GetSelectionComponentChecked())
                                         {
@@ -880,6 +958,11 @@ void APlayerCamera::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
                                 if (UStaticMesh* StaticMesh = StaticMeshComponent->GetStaticMesh())
                                 {
                                         bIsInSpawnUnits = true;
+                                        bSpawnRotationPreviewActive = false;
+                                        bSpawnRotationHoldActive = false;
+                                        SpawnRotationInitialDirection = FVector::ZeroVector;
+                                        SpawnRotationBase = FRotator(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
+                                        CurrentSpawnPreviewRotation = SpawnRotationBase;
                                         PreviewUnit->ShowPreview(StaticMesh, StaticMeshComponent->GetRelativeScale3D(), InstanceCount);
                                         if (GetSelectionComponentChecked())
                                         {
@@ -903,6 +986,8 @@ void APlayerCamera::HidePreview()
                 PreviewUnit->HidePreview();
         }
         bIsInSpawnUnits = false;
+        bSpawnRotationPreviewActive = false;
+        bSpawnRotationHoldActive = false;
 }
 
 void APlayerCamera::PreviewFollowMouse()
@@ -920,13 +1005,343 @@ void APlayerCamera::PreviewFollowMouse()
                 {
                         return;
                 }
-                const FRotator MouseRotation(0.f, CameraComponent->GetComponentRotation().Yaw, CameraComponent->GetComponentRotation().Roll);
+                const FVector MouseLocation = MouseHit.Location;
 
-                if (MouseHit.Location != FVector::ZeroVector)
+                if (MouseLocation == FVector::ZeroVector)
                 {
-                        UpdatePreviewTransforms(MouseHit.Location, MouseRotation);
+                        return;
+                }
+
+                const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+                const bool bLeftMouseDown = Player->IsInputKeyDown(EKeys::LeftMouseButton);
+
+                if (Player->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+                {
+                        bSpawnRotationHoldActive = true;
+                        SpawnRotationHoldStartTime = CurrentTime;
+                        bSpawnRotationPreviewActive = false;
+                        SpawnPreviewCenter = MouseLocation;
+                        SpawnRotationInitialDirection = FVector::ZeroVector;
+                        SpawnRotationBase = FRotator(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
+                        CurrentSpawnPreviewRotation = SpawnRotationBase;
+                }
+                else if (!bLeftMouseDown)
+                {
+                        bSpawnRotationHoldActive = false;
+                }
+
+                if (!bSpawnRotationPreviewActive)
+                {
+                        const FRotator MouseRotation(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
+                        CurrentSpawnPreviewRotation = MouseRotation;
+                        SpawnRotationBase = MouseRotation;
+                        SpawnPreviewCenter = MouseLocation;
+                }
+
+                if (bSpawnRotationHoldActive && !bSpawnRotationPreviewActive)
+                {
+                        if (CurrentTime - SpawnRotationHoldStartTime >= RotationPreviewHoldTime)
+                        {
+                                bSpawnRotationPreviewActive = true;
+                                SpawnPreviewCenter = MouseLocation;
+                                SpawnRotationBase = CurrentSpawnPreviewRotation;
+
+                                FVector InitialDirection = MouseLocation - SpawnPreviewCenter;
+                                InitialDirection.Z = 0.f;
+                                if (!InitialDirection.Normalize())
+                                {
+                                        InitialDirection = SpawnRotationBase.Vector();
+                                        InitialDirection.Z = 0.f;
+                                        if (!InitialDirection.Normalize())
+                                        {
+                                                InitialDirection = FVector::XAxisVector;
+                                        }
+                                }
+
+                                SpawnRotationInitialDirection = InitialDirection;
+                        }
+                }
+
+                if (bSpawnRotationPreviewActive)
+                {
+                        CurrentSpawnPreviewRotation = ComputeRotationFromMouseDelta(SpawnPreviewCenter, SpawnRotationInitialDirection, SpawnRotationBase, MouseLocation);
+                }
+
+                UpdatePreviewTransforms(SpawnPreviewCenter, CurrentSpawnPreviewRotation);
+        }
+}
+
+void APlayerCamera::UpdateCommandPreview()
+{
+        if (!bIsCommandActionHeld)
+        {
+                return;
+        }
+
+        if (!Player)
+        {
+                bIsCommandActionHeld = false;
+                StopCommandPreview();
+                return;
+        }
+
+        UUnitSelectionComponent* Selection = GetSelectionComponentChecked();
+        if (!Selection)
+        {
+                StopCommandPreview();
+                return;
+        }
+
+        const UWorld* World = GetWorld();
+        const float CurrentTime = World ? World->GetTimeSeconds() : 0.f;
+
+        FHitResult MouseHit = Selection->GetMousePositionOnTerrain();
+        const FVector MouseLocation = MouseHit.Location;
+
+        if (!bCommandRotationPreviewActive)
+        {
+                if (CurrentTime - CommandActionHoldStartTime >= RotationPreviewHoldTime)
+                {
+                        BeginCommandRotationPreview(MouseLocation);
+                }
+                else
+                {
+                        return;
                 }
         }
+
+        if (!bCommandRotationPreviewActive)
+        {
+                return;
+        }
+
+        CurrentCommandPreviewRotation = ComputeRotationFromMouseDelta(CommandPreviewCenter, CommandRotationInitialDirection, CommandRotationBase, MouseLocation);
+
+        if (!PreviewUnit)
+        {
+                return;
+        }
+
+        TArray<FTransform> InstanceTransforms;
+        BuildCommandPreviewTransforms(CommandPreviewCenter, CurrentCommandPreviewRotation, InstanceTransforms);
+
+        if (!InstanceTransforms.IsEmpty())
+        {
+                PreviewUnit->UpdateInstances(InstanceTransforms);
+        }
+}
+
+void APlayerCamera::BeginCommandRotationPreview(const FVector& MouseLocation)
+{
+        if (!SelectionComponent)
+        {
+                return;
+        }
+
+        const TArray<AActor*> SelectedUnits = SelectionComponent->GetSelectedActors();
+        if (SelectedUnits.IsEmpty())
+        {
+                return;
+        }
+
+        if (CommandPreviewCenter == FVector::ZeroVector && MouseLocation != FVector::ZeroVector)
+        {
+                CommandPreviewCenter = MouseLocation;
+        }
+
+        if (!EnsureCommandPreviewMesh(SelectedUnits))
+        {
+                return;
+        }
+
+        bCommandRotationPreviewActive = true;
+        CommandRotationBase = FRotator(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
+        CurrentCommandPreviewRotation = CommandRotationBase;
+
+        FVector InitialDirection = MouseLocation - CommandPreviewCenter;
+        InitialDirection.Z = 0.f;
+        if (!InitialDirection.Normalize())
+        {
+                InitialDirection = CommandRotationBase.Vector();
+                InitialDirection.Z = 0.f;
+                if (!InitialDirection.Normalize())
+                {
+                        InitialDirection = FVector::XAxisVector;
+                }
+        }
+
+        CommandRotationInitialDirection = InitialDirection;
+
+        if (PreviewUnit)
+        {
+                TArray<FTransform> InstanceTransforms;
+                BuildCommandPreviewTransforms(CommandPreviewCenter, CurrentCommandPreviewRotation, InstanceTransforms);
+                if (!InstanceTransforms.IsEmpty())
+                {
+                        PreviewUnit->UpdateInstances(InstanceTransforms);
+                }
+        }
+}
+
+void APlayerCamera::StopCommandPreview()
+{
+        if (bCommandPreviewVisible && PreviewUnit && !bIsInSpawnUnits)
+        {
+                PreviewUnit->HidePreview();
+        }
+
+        bCommandRotationPreviewActive = false;
+        bCommandPreviewVisible = false;
+        CommandPreviewInstanceCount = 0;
+}
+
+bool APlayerCamera::EnsureCommandPreviewMesh(const TArray<AActor*>& SelectedUnits)
+{
+        if (SelectedUnits.IsEmpty())
+        {
+                return false;
+        }
+
+        EnsurePreviewUnit();
+
+        if (!HasPreviewUnits())
+        {
+                return false;
+        }
+
+        USkeletalMesh* SkeletalMesh = nullptr;
+        FVector SkeletalScale = FVector::OneVector;
+        UStaticMesh* StaticMesh = nullptr;
+        FVector StaticScale = FVector::OneVector;
+
+        for (AActor* Unit : SelectedUnits)
+        {
+                if (!Unit)
+                {
+                        continue;
+                }
+
+                if (!SkeletalMesh)
+                {
+                        if (const USkeletalMeshComponent* SkeletalComponent = Unit->FindComponentByClass<USkeletalMeshComponent>())
+                        {
+                                if (USkeletalMesh* Mesh = SkeletalComponent->GetSkeletalMeshAsset())
+                                {
+                                        SkeletalMesh = Mesh;
+                                        SkeletalScale = SkeletalComponent->GetRelativeScale3D();
+                                }
+                        }
+                }
+
+                if (!StaticMesh)
+                {
+                        if (const UStaticMeshComponent* StaticComponent = Unit->FindComponentByClass<UStaticMeshComponent>())
+                        {
+                                if (UStaticMesh* Mesh = StaticComponent->GetStaticMesh())
+                                {
+                                        StaticMesh = Mesh;
+                                        StaticScale = StaticComponent->GetRelativeScale3D();
+                                }
+                        }
+                }
+
+                if (SkeletalMesh || StaticMesh)
+                {
+                        break;
+                }
+        }
+
+        const int32 InstanceCount = SelectedUnits.Num();
+
+        if (SkeletalMesh)
+        {
+                PreviewUnit->ShowPreview(SkeletalMesh, SkeletalScale, InstanceCount);
+                bCommandPreviewVisible = true;
+                CommandPreviewInstanceCount = InstanceCount;
+                return true;
+        }
+
+        if (StaticMesh)
+        {
+                PreviewUnit->ShowPreview(StaticMesh, StaticScale, InstanceCount);
+                bCommandPreviewVisible = true;
+                CommandPreviewInstanceCount = InstanceCount;
+                return true;
+        }
+
+        return false;
+}
+
+void APlayerCamera::BuildCommandPreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation, TArray<FTransform>& OutTransforms) const
+{
+        OutTransforms.Reset();
+
+        if (!SelectionComponent)
+        {
+                OutTransforms.Add(FTransform(FacingRotation, CenterLocation));
+                return;
+        }
+
+        const TArray<AActor*> SelectedUnits = SelectionComponent->GetSelectedActors();
+        if (SelectedUnits.IsEmpty())
+        {
+                OutTransforms.Add(FTransform(FacingRotation, CenterLocation));
+                return;
+        }
+
+        if (FormationComponent)
+        {
+                FCommandData BaseCommand(Player, CenterLocation, FacingRotation, ECommandType::CommandMove);
+                BaseCommand.SourceLocation = CenterLocation;
+                BaseCommand.Location = CenterLocation;
+                BaseCommand.Rotation = FacingRotation;
+
+                TArray<FCommandData> Commands;
+                FormationComponent->BuildFormationCommands(BaseCommand, SelectedUnits, Commands);
+
+                if (!Commands.IsEmpty())
+                {
+                        OutTransforms.Reserve(Commands.Num());
+                        for (const FCommandData& Command : Commands)
+                        {
+                                OutTransforms.Add(FTransform(FacingRotation, Command.Location));
+                        }
+                        return;
+                }
+        }
+
+        OutTransforms.Reserve(SelectedUnits.Num());
+        for (int32 Index = 0; Index < SelectedUnits.Num(); ++Index)
+        {
+                OutTransforms.Add(FTransform(FacingRotation, CenterLocation));
+        }
+}
+
+FRotator APlayerCamera::ComputeRotationFromMouseDelta(const FVector& Center, const FVector& InitialDirection, const FRotator& BaseRotation, const FVector& MouseLocation) const
+{
+        FVector NormalizedInitial = InitialDirection;
+        NormalizedInitial.Z = 0.f;
+        if (!NormalizedInitial.Normalize())
+        {
+                return BaseRotation;
+        }
+
+        FVector CurrentDirection = MouseLocation - Center;
+        CurrentDirection.Z = 0.f;
+        if (!CurrentDirection.Normalize())
+        {
+                return BaseRotation;
+        }
+
+        const float InitialAngle = FMath::Atan2(NormalizedInitial.Y, NormalizedInitial.X);
+        const float CurrentAngle = FMath::Atan2(CurrentDirection.Y, CurrentDirection.X);
+        const float DeltaDegrees = FMath::RadiansToDegrees(CurrentAngle - InitialAngle);
+
+        FRotator Result = BaseRotation;
+        Result.Yaw = FMath::UnwindDegrees(Result.Yaw + DeltaDegrees);
+        Result.Pitch = 0.f;
+        Result.Roll = 0.f;
+        return Result;
 }
 
 void APlayerCamera::HandleSpawnCountChanged(int32 NewSpawnCount)
@@ -993,9 +1408,11 @@ void APlayerCamera::UpdatePreviewTransforms(const FVector& CenterLocation, const
         TArray<FTransform> InstanceTransforms;
         InstanceTransforms.Reserve(FormationOffsets.Num());
 
+        const FQuat RotationQuat = FRotator(0.f, FacingRotation.Yaw, 0.f).Quaternion();
         for (const FVector& Offset : FormationOffsets)
         {
-                const FVector FormationLocation = CenterLocation + Offset;
+                const FVector RotatedOffset = RotationQuat.RotateVector(Offset);
+                const FVector FormationLocation = CenterLocation + RotatedOffset;
                 InstanceTransforms.Add(FTransform(FacingRotation, FormationLocation));
         }
 

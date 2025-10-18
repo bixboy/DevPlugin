@@ -67,10 +67,15 @@ void UUnitSpawnComponent::SpawnUnits()
 
     const FVector SpawnLocation = HitResult.bBlockingHit ? HitResult.Location : HitResult.TraceEnd;
 
+    SpawnUnitsWithTransform(SpawnLocation, FRotator::ZeroRotator);
+}
+
+void UUnitSpawnComponent::SpawnUnitsWithTransform(const FVector& SpawnLocation, const FRotator& SpawnRotation)
+{
     if (GetOwner() && GetOwner()->HasAuthority())
-        ServerSpawnUnits(SpawnLocation);
+        ServerSpawnUnits(SpawnLocation, SpawnRotation);
     else
-        ServerSpawnUnits(SpawnLocation);
+        ServerSpawnUnits(SpawnLocation, SpawnRotation);
 }
 
 void UUnitSpawnComponent::SetUnitsPerSpawn(int32 NewSpawnCount)
@@ -184,7 +189,7 @@ void UUnitSpawnComponent::ServerSetCustomFormationDimensions_Implementation(FInt
     UpdateSpawnCountFromCustomFormation();
 }
 
-void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLocation)
+void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLocation, const FRotator& SpawnRotation)
 {
     if (!UnitToSpawn)
         return;
@@ -199,7 +204,9 @@ void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLo
         const float Spacing = FMath::Max(FormationSpacing, 0.f);
 
         TArray<FVector> SpawnOffsets;
-        GenerateSpawnOffsets(SpawnOffsets, SpawnCount, Spacing);
+        GenerateSpawnOffsets(SpawnOffsets, SpawnCount, Spacing, SpawnRotation);
+
+        const FRotator AppliedRotation(0.f, SpawnRotation.Yaw, 0.f);
 
         bool bSpawnedAnyUnit = false;
 
@@ -207,7 +214,7 @@ void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLo
         {
             const FVector FormationLocation = SpawnLocation + SpawnOffsets[Index];
 
-            ASoldierRts* SpawnedUnit = World->SpawnActor<ASoldierRts>(UnitToSpawn, FormationLocation, FRotator::ZeroRotator, SpawnParams);
+            ASoldierRts* SpawnedUnit = World->SpawnActor<ASoldierRts>(UnitToSpawn, FormationLocation, AppliedRotation, SpawnParams);
 
             bSpawnedAnyUnit |= (SpawnedUnit != nullptr);
         }
@@ -252,7 +259,7 @@ void UUnitSpawnComponent::UpdateSpawnCountFromCustomFormation()
     SetUnitsPerSpawn(DesiredCount);
 }
 
-void UUnitSpawnComponent::GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing) const
+void UUnitSpawnComponent::GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing, const FRotator& Rotation) const
 {
     OutOffsets.Reset();
     if (SpawnCount <= 0)
@@ -378,6 +385,15 @@ void UUnitSpawnComponent::GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int3
         for (FVector& Offset : OutOffsets)
         {
             Offset -= FVector(AverageOffset.X, AverageOffset.Y, 0.f);
+        }
+    }
+
+    if (!OutOffsets.IsEmpty())
+    {
+        const FQuat RotationQuat = FRotator(0.f, Rotation.Yaw, 0.f).Quaternion();
+        for (FVector& Offset : OutOffsets)
+        {
+            Offset = RotationQuat.RotateVector(Offset);
         }
     }
 }
