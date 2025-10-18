@@ -845,15 +845,15 @@ void APlayerCamera::Command()
                 return;
         }
 
-        const FVector TargetLocation = bUseRotationPreview && CommandPreviewCenter != FVector::ZeroVector ? CommandPreviewCenter : Hit.Location;
+        const FVector TempTargetLocation = bUseRotationPreview && CommandPreviewCenter != FVector::ZeroVector ? CommandPreviewCenter : Hit.Location;
 
         if (OrderComponent)
         {
                 const FRotator DefaultRotation(0.f, CameraComponent->GetComponentRotation().Yaw, 0.f);
                 const FRotator FinalRotation = bUseRotationPreview ? CurrentCommandPreviewRotation : DefaultRotation;
 
-                FCommandData CommandData(Player, TargetLocation, FinalRotation, CommandMove);
-                CommandData.SourceLocation = TargetLocation;
+                FCommandData CommandData(Player, TempTargetLocation, FinalRotation, CommandMove);
+                CommandData.SourceLocation = TempTargetLocation;
                 CommandData.Rotation = FinalRotation;
 
                 OrderComponent->IssueOrder(CommandData);
