@@ -104,6 +104,7 @@ protected:
     UFUNCTION()
     void OnRep_CustomFormationDimensions();
 
+    void UpdateSpawnCountFromCustomFormation();
     void GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing) const;
 
 protected:

@@ -12,21 +12,30 @@ void UUnitSpawnFormationWidget::NativeOnInitialized()
 
 void UUnitSpawnFormationWidget::NativeDestruct()
 {
-	Super::NativeDestruct();
+    Super::NativeDestruct();
 
-	if (SpawnComponent)
-		SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelection);
+    if (SpawnComponent)
+    {
+        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelection);
+        SpawnComponent = nullptr;
+    }
 }
 
 
 void UUnitSpawnFormationWidget::SetupWithComponent(UUnitSpawnComponent* InSpawnComponent)
 {
+    if (SpawnComponent)
+    {
+        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelection);
+    }
+
     SpawnComponent = InSpawnComponent;
     InitializeFormationOptions();
-    UpdateSelection(ESpawnFormation::Square);
+    const ESpawnFormation InitialFormation = SpawnComponent ? SpawnComponent->GetSpawnFormation() : ESpawnFormation::Square;
+    UpdateSelection(InitialFormation);
 
     if (SpawnComponent)
-    	SpawnComponent->OnSpawnFormationChanged.AddDynamic(this, &UUnitSpawnFormationWidget::UpdateSelection);
+        SpawnComponent->OnSpawnFormationChanged.AddDynamic(this, &UUnitSpawnFormationWidget::UpdateSelection);
 }
 
 void UUnitSpawnFormationWidget::InitializeFormationOptions()

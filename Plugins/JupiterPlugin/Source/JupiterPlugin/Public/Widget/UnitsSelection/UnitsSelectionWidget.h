@@ -54,6 +54,15 @@ protected:
 
     void InitializeSpawnOptionWidgets();
 
+    UFUNCTION()
+    void OnCountOptionSelected(UCustomButtonWidget* Button, int Index);
+
+    UFUNCTION()
+    void OnFormationOptionSelected(UCustomButtonWidget* Button, int Index);
+
+    void UpdateSpawnOptionButtons(UCustomButtonWidget* SelectedButton);
+    void UpdateSpawnOptionVisibility(bool bShowCountOptions);
+
     /* ---------- PROPRIÉTÉS ---------- */
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")

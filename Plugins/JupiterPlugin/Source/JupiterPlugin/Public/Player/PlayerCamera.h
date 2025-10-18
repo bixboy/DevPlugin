@@ -20,6 +20,7 @@ class UUnitSelectionComponent;
 class UUnitOrderComponent;
 class UUnitFormationComponent;
 class UUnitSpawnComponent;
+enum class ESpawnFormation : uint8;
 UCLASS()
 class JUPITERPLUGIN_API APlayerCamera : public APawn
 {
@@ -335,6 +336,12 @@ protected:
         UFUNCTION()
         void HandleSpawnCountChanged(int32 NewSpawnCount);
 
+        UFUNCTION()
+        void HandleSpawnFormationChanged(ESpawnFormation NewFormation);
+
+        UFUNCTION()
+        void HandleCustomFormationDimensionsChanged(FIntPoint NewDimensions);
+
         UPROPERTY()
         bool bIsInSpawnUnits = false;
 
@@ -346,6 +353,9 @@ protected:
 
         void EnsurePreviewUnit();
         void UpdatePreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation);
+        void RefreshPreviewInstances();
+        void BuildPreviewFormationOffsets(int32 SpawnCount, float Spacing, TArray<FVector>& OutOffsets) const;
+        int32 GetEffectiveSpawnCount() const;
         bool HasPreviewUnits() const { return PreviewUnit != nullptr; }
 
 #pragma endregion
