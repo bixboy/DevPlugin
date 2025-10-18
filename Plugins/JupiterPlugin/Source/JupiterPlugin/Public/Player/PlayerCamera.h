@@ -257,8 +257,11 @@ protected:
 	UPROPERTY()
 	APlayerController* Player;
 	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Mouse")
-	float LeftMouseHoldThreshold = 0.15f;
+        UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Mouse")
+        float LeftMouseHoldThreshold = 0.15f;
+
+        UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Mouse")
+        float RotationPreviewHoldTime = 1.f;
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Mouse")
 	TSubclassOf<ASelectionBox> SelectionBoxClass;
@@ -292,7 +295,10 @@ protected:
 	void Server_DestroyActor(const TArray<AActor*>& ActorToDestroy);
 
 	UFUNCTION(BlueprintCallable)
-	void CommandStart();
+        void CommandStart();
+
+        UFUNCTION()
+        void HandleCommandActionStarted();
 
 	UFUNCTION(BlueprintCallable)
 	void Command();
@@ -307,11 +313,38 @@ protected:
 	UPROPERTY()
 	ASphereRadius* SphereRadius;
 	
-	UPROPERTY()
-	bool SphereRadiusEnable;
-	
-	UPROPERTY()
-	FVector CommandLocation;
+        UPROPERTY()
+        bool SphereRadiusEnable;
+
+        UPROPERTY()
+        FVector CommandLocation;
+
+        UPROPERTY()
+        bool bIsCommandActionHeld = false;
+
+        UPROPERTY()
+        float CommandActionHoldStartTime = 0.f;
+
+        UPROPERTY()
+        bool bCommandRotationPreviewActive = false;
+
+        UPROPERTY()
+        bool bCommandPreviewVisible = false;
+
+        UPROPERTY()
+        FVector CommandPreviewCenter = FVector::ZeroVector;
+
+        UPROPERTY()
+        FVector CommandRotationInitialDirection = FVector::ZeroVector;
+
+        UPROPERTY()
+        FRotator CommandRotationBase = FRotator::ZeroRotator;
+
+        UPROPERTY()
+        FRotator CurrentCommandPreviewRotation = FRotator::ZeroRotator;
+
+        UPROPERTY()
+        int32 CommandPreviewInstanceCount = 0;
 #pragma endregion
 
 #pragma region Spawn Units
@@ -319,7 +352,7 @@ protected:
 protected:
 
 	UFUNCTION()
-	void CreatePreviewMesh();
+        void CreatePreviewMesh();
 	
         UFUNCTION()
         void Input_OnSpawnUnits();
@@ -357,6 +390,34 @@ protected:
         void BuildPreviewFormationOffsets(int32 SpawnCount, float Spacing, TArray<FVector>& OutOffsets) const;
         int32 GetEffectiveSpawnCount() const;
         bool HasPreviewUnits() const { return PreviewUnit != nullptr; }
+
+        UPROPERTY()
+        bool bSpawnRotationPreviewActive = false;
+
+        UPROPERTY()
+        bool bSpawnRotationHoldActive = false;
+
+        UPROPERTY()
+        float SpawnRotationHoldStartTime = 0.f;
+
+        UPROPERTY()
+        FVector SpawnPreviewCenter = FVector::ZeroVector;
+
+        UPROPERTY()
+        FVector SpawnRotationInitialDirection = FVector::ZeroVector;
+
+        UPROPERTY()
+        FRotator SpawnRotationBase = FRotator::ZeroRotator;
+
+        UPROPERTY()
+        FRotator CurrentSpawnPreviewRotation = FRotator::ZeroRotator;
+
+        void UpdateCommandPreview();
+        void BeginCommandRotationPreview(const FVector& MouseLocation);
+        void StopCommandPreview();
+        bool EnsureCommandPreviewMesh(const TArray<AActor*>& SelectedUnits);
+        void BuildCommandPreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation, TArray<FTransform>& OutTransforms) const;
+        FRotator ComputeRotationFromMouseDelta(const FVector& Center, const FVector& InitialDirection, const FRotator& BaseRotation, const FVector& MouseLocation) const;
 
 #pragma endregion
 

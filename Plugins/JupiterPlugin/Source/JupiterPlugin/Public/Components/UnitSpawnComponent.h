@@ -41,6 +41,9 @@ public:
     void SpawnUnits();
 
     UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
+    void SpawnUnitsWithTransform(const FVector& SpawnLocation, const FRotator& SpawnRotation);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
     void SetUnitsPerSpawn(int32 NewSpawnCount);
 
     UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
@@ -81,7 +84,7 @@ protected:
     void ServerSetUnitClass(TSubclassOf<ASoldierRts> NewUnitClass);
 
     UFUNCTION(Server, Reliable)
-    void ServerSpawnUnits(const FVector& SpawnLocation);
+    void ServerSpawnUnits(const FVector& SpawnLocation, const FRotator& SpawnRotation);
 
     UFUNCTION(Server, Reliable)
     void ServerSetUnitsPerSpawn(int32 NewSpawnCount);
@@ -105,7 +108,7 @@ protected:
     void OnRep_CustomFormationDimensions();
 
     void UpdateSpawnCountFromCustomFormation();
-    void GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing) const;
+    void GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing, const FRotator& Rotation) const;
 
 protected:
     UPROPERTY()
