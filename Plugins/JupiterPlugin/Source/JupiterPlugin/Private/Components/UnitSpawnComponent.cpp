@@ -77,6 +77,12 @@ void UUnitSpawnComponent::SetUnitsPerSpawn(int32 NewSpawnCount)
 {
     NewSpawnCount = FMath::Max(1, NewSpawnCount);
 
+    if (SpawnFormation == ESpawnFormation::Custom)
+    {
+        const int32 DesiredCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
+        NewSpawnCount = DesiredCount;
+    }
+
     if (GetOwner() && GetOwner()->HasAuthority())
     {
         if (UnitsPerSpawn != NewSpawnCount)
@@ -105,6 +111,8 @@ void UUnitSpawnComponent::SetSpawnFormation(ESpawnFormation NewFormation)
     {
         ServerSetSpawnFormation(NewFormation);
     }
+
+    UpdateSpawnCountFromCustomFormation();
 }
 
 void UUnitSpawnComponent::SetCustomFormationDimensions(FIntPoint NewDimensions)
@@ -124,6 +132,8 @@ void UUnitSpawnComponent::SetCustomFormationDimensions(FIntPoint NewDimensions)
     {
         ServerSetCustomFormationDimensions(NewDimensions);
     }
+
+    UpdateSpawnCountFromCustomFormation();
 }
 
 void UUnitSpawnComponent::ServerSetUnitClass_Implementation(TSubclassOf<ASoldierRts> NewUnitClass)
@@ -135,6 +145,12 @@ void UUnitSpawnComponent::ServerSetUnitClass_Implementation(TSubclassOf<ASoldier
 void UUnitSpawnComponent::ServerSetUnitsPerSpawn_Implementation(int32 NewSpawnCount)
 {
     NewSpawnCount = FMath::Max(1, NewSpawnCount);
+
+    if (SpawnFormation == ESpawnFormation::Custom)
+    {
+        const int32 DesiredCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
+        NewSpawnCount = DesiredCount;
+    }
 
     if (UnitsPerSpawn != NewSpawnCount)
     {
@@ -150,6 +166,8 @@ void UUnitSpawnComponent::ServerSetSpawnFormation_Implementation(ESpawnFormation
         SpawnFormation = NewFormation;
         OnRep_SpawnFormation();
     }
+
+    UpdateSpawnCountFromCustomFormation();
 }
 
 void UUnitSpawnComponent::ServerSetCustomFormationDimensions_Implementation(FIntPoint NewDimensions)
@@ -162,6 +180,8 @@ void UUnitSpawnComponent::ServerSetCustomFormationDimensions_Implementation(FInt
         CustomFormationDimensions = NewDimensions;
         OnRep_CustomFormationDimensions();
     }
+
+    UpdateSpawnCountFromCustomFormation();
 }
 
 void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLocation)
@@ -217,6 +237,19 @@ void UUnitSpawnComponent::OnRep_SpawnFormation()
 void UUnitSpawnComponent::OnRep_CustomFormationDimensions()
 {
     OnCustomFormationDimensionsChanged.Broadcast(CustomFormationDimensions);
+}
+
+void UUnitSpawnComponent::UpdateSpawnCountFromCustomFormation()
+{
+    if (SpawnFormation != ESpawnFormation::Custom)
+        return;
+
+    const int32 DesiredCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
+
+    if (UnitsPerSpawn == DesiredCount)
+        return;
+
+    SetUnitsPerSpawn(DesiredCount);
 }
 
 void UUnitSpawnComponent::GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing) const

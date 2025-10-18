@@ -34,6 +34,8 @@ void UUnitsSelectionWidget::NativeOnInitialized()
     if (SpawnAxisWidget)
         SpawnAxisWidget->SetupWithComponent(SpawnComponent);
 
+    InitializeSpawnOptionWidgets();
+
     if (Btn_ShowUnitsSelection)
         Btn_ShowUnitsSelection->OnPressed.AddDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
 
@@ -54,6 +56,12 @@ void UUnitsSelectionWidget::NativeDestruct()
 {
     if (Btn_ShowUnitsSelection)
         Btn_ShowUnitsSelection->OnPressed.RemoveDynamic(this, &UUnitsSelectionWidget::OnShowUnitSelectionPressed);
+
+    if (CountOptionButton)
+        CountOptionButton->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnCountOptionSelected);
+
+    if (FormationOptionButton)
+        FormationOptionButton->OnButtonClicked.RemoveDynamic(this, &UUnitsSelectionWidget::OnFormationOptionSelected);
 
     if (SearchTextBox)
         SearchTextBox->OnTextChanged.RemoveDynamic(this, &UUnitsSelectionWidget::OnSearchTextChanged);
@@ -108,6 +116,28 @@ void UUnitsSelectionWidget::SetupUnitsList()
 
     SetupCategoryButtons();
     ApplyFilters();
+}
+
+void UUnitsSelectionWidget::InitializeSpawnOptionWidgets()
+{
+    if (CountOptionButton)
+        CountOptionButton->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnCountOptionSelected);
+
+    if (FormationOptionButton)
+        FormationOptionButton->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnFormationOptionSelected);
+
+    if (CountOptionButton)
+    {
+        OnCountOptionSelected(CountOptionButton, CountOptionButton->ButtonIndex);
+    }
+    else if (FormationOptionButton)
+    {
+        OnFormationOptionSelected(FormationOptionButton, FormationOptionButton->ButtonIndex);
+    }
+    else
+    {
+        UpdateSpawnOptionVisibility(true);
+    }
 }
 
 void UUnitsSelectionWidget::OnShowUnitSelectionPressed()
@@ -262,6 +292,42 @@ void UUnitsSelectionWidget::ApplyFilters()
 
         EntryWidget->SetVisibility(TargetVisibility);
     }
+}
+
+void UUnitsSelectionWidget::OnCountOptionSelected(UCustomButtonWidget* Button, int /*Index*/)
+{
+    UpdateSpawnOptionButtons(Button);
+    UpdateSpawnOptionVisibility(true);
+}
+
+void UUnitsSelectionWidget::OnFormationOptionSelected(UCustomButtonWidget* Button, int /*Index*/)
+{
+    UpdateSpawnOptionButtons(Button);
+    UpdateSpawnOptionVisibility(false);
+}
+
+void UUnitsSelectionWidget::UpdateSpawnOptionButtons(UCustomButtonWidget* SelectedButton)
+{
+    if (CountOptionButton)
+        CountOptionButton->ToggleButtonIsSelected(CountOptionButton == SelectedButton);
+
+    if (FormationOptionButton)
+        FormationOptionButton->ToggleButtonIsSelected(FormationOptionButton == SelectedButton);
+}
+
+void UUnitsSelectionWidget::UpdateSpawnOptionVisibility(bool bShowCountOptions)
+{
+    const ESlateVisibility CountVisibility = bShowCountOptions ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+    const ESlateVisibility FormationVisibility = bShowCountOptions ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
+
+    if (SpawnCountWidget)
+        SpawnCountWidget->SetVisibility(CountVisibility);
+
+    if (SpawnFormationWidget)
+        SpawnFormationWidget->SetVisibility(FormationVisibility);
+
+    if (SpawnAxisWidget)
+        SpawnAxisWidget->SetVisibility(FormationVisibility);
 }
 
 #undef LOCTEXT_NAMESPACE

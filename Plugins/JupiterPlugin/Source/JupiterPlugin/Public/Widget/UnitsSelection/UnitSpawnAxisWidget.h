@@ -27,16 +27,21 @@ protected:
 	UFUNCTION()
 	void OnCustomFormationXCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
-	UFUNCTION()
-	void OnCustomFormationYCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+        UFUNCTION()
+        void OnCustomFormationYCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
-	UFUNCTION()
-	void RefreshCustomFormationInputs(ESpawnFormation NewFormation);
+        UFUNCTION()
+        void RefreshCustomFormationInputs(ESpawnFormation NewFormation);
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	UEditableTextBox* FormationX;
+        UFUNCTION()
+        void HandleCustomFormationDimensionsChanged(FIntPoint NewDimensions);
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+        void ApplyCustomFormationToSpawnCount() const;
+
+        UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+        UEditableTextBox* FormationX;
+
+        UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	UEditableTextBox* FormationY;
 	
 	UPROPERTY()
