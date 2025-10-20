@@ -2,10 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Data/AiData.h"
 #include "UnitPatrolComponent.generated.h"
 
 class APlayerCamera;
+class APlayerController;
 class UUnitSelectionComponent;
+class UUnitOrderComponent;
 
 USTRUCT(BlueprintType)
 struct FPatrolRoute
@@ -60,9 +63,13 @@ protected:
 
     //------------------------------------ Patrol Management ------------------------------------
     void RegisterPatrolRoute(const FPatrolRoute& NewRoute);
+    void IssuePatrolCommands(FPatrolRoute& Route);
+    void RemoveUnitsFromRoutes(const TArray<AActor*>& UnitsToRemove);
+    void CleanupActiveRoutes();
     void RefreshSelectionCache(const TArray<AActor*>& SelectedActors);
     bool SelectionContainsRouteUnits(const FPatrolRoute& Route) const;
     bool TryGetCursorLocation(FVector& OutLocation) const;
+    APlayerController* ResolveOwningController() const;
 
     //------------------------------------ Debug Drawing ------------------------------------
     void DrawPendingRoute() const;
@@ -72,6 +79,9 @@ protected:
     UFUNCTION()
     void HandleSelectionChanged(const TArray<AActor*>& SelectedActors);
 
+    UFUNCTION()
+    void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& CommandData);
+
 protected:
     /** Cached reference to the owning player camera pawn. */
     UPROPERTY()
@@ -80,6 +90,10 @@ protected:
     /** Cached reference to the selection component that provides cursor projection. */
     UPROPERTY()
     TObjectPtr<UUnitSelectionComponent> CachedSelectionComponent;
+
+    /** Cached reference to the order component to react to manual orders. */
+    UPROPERTY()
+    TObjectPtr<UUnitOrderComponent> CachedOrderComponent;
 
     /** All confirmed patrol routes currently active. */
     UPROPERTY()

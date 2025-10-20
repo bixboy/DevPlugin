@@ -51,7 +51,9 @@ struct FCommandData
 		Rotation(FRotator::ZeroRotator),
 		Type(ECommandType::CommandMove),
 		Target(nullptr),
-		Radius(0.f) {}
+		Radius(0.f),
+		PatrolPath(),
+		bPatrolLoop(false) {}
 
 	// Assignation des parametres 
 	FCommandData(APlayerController* InRequesting, const FVector InLocation, const FRotator InRotation, const ECommandType InType, AActor* InTarget = nullptr, const float InRadius = 0.0f)
@@ -61,7 +63,9 @@ struct FCommandData
 		Rotation(InRotation),
 		Type(InType),
 		Target(InTarget),
-		Radius(InRadius) {}
+		Radius(InRadius),
+		PatrolPath(),
+		bPatrolLoop(false) {}
 
 
 	// Variables
@@ -85,4 +89,10 @@ struct FCommandData
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	float Radius;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TArray<FVector> PatrolPath;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool bPatrolLoop;
 };

@@ -105,4 +105,17 @@ private:
         void HandleInvalidAttackTarget();
 
         UFUNCTION() void StartPatrol();
+        void AdvancePatrolWaypoint();
+
+        UPROPERTY()
+        TArray<FVector> CurrentPatrolPath;
+
+        UPROPERTY()
+        bool bPatrolLoopPattern = false;
+
+        UPROPERTY()
+        int32 CurrentPatrolWaypointIndex = 0;
+
+        UPROPERTY()
+        bool bPatrolForward = true;
 };

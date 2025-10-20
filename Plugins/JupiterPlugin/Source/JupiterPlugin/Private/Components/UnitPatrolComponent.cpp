@@ -2,7 +2,11 @@
 
 #include "DrawDebugHelpers.h"
 #include "Player/PlayerCamera.h"
+#include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
+#include "Interfaces/Selectable.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 
 namespace
 {
@@ -26,6 +30,11 @@ void UUnitPatrolComponent::BeginPlay()
         CachedSelectionComponent->OnSelectionChanged.AddDynamic(this, &UUnitPatrolComponent::HandleSelectionChanged);
         RefreshSelectionCache(CachedSelectionComponent->GetSelectedActors());
     }
+
+    if (CachedOrderComponent)
+    {
+        CachedOrderComponent->OnOrdersDispatched.AddDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
+    }
 }
 
 void UUnitPatrolComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -33,6 +42,11 @@ void UUnitPatrolComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     if (CachedSelectionComponent)
     {
         CachedSelectionComponent->OnSelectionChanged.RemoveDynamic(this, &UUnitPatrolComponent::HandleSelectionChanged);
+    }
+
+    if (CachedOrderComponent)
+    {
+        CachedOrderComponent->OnOrdersDispatched.RemoveDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
     }
 
     Super::EndPlay(EndPlayReason);
@@ -64,6 +78,8 @@ void UUnitPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
     {
         bHasCursorLocation = false;
     }
+
+    CleanupActiveRoutes();
 
     DrawPendingRoute();
     DrawActiveRoutes();
@@ -142,14 +158,25 @@ void UUnitPatrolComponent::CacheDependencies()
         {
             CachedSelectionComponent = CachedPlayerCamera->FindComponentByClass<UUnitSelectionComponent>();
         }
+
+        if (CachedPlayerCamera->OrderComponent)
+        {
+            CachedOrderComponent = CachedPlayerCamera->OrderComponent;
+        }
+        else
+        {
+            CachedOrderComponent = CachedPlayerCamera->FindComponentByClass<UUnitOrderComponent>();
+        }
     }
     else if (AActor* OwnerActor = GetOwner())
     {
         CachedSelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
+        CachedOrderComponent = OwnerActor->FindComponentByClass<UUnitOrderComponent>();
     }
     else
     {
         CachedSelectionComponent = nullptr;
+        CachedOrderComponent = nullptr;
     }
 }
 
@@ -206,11 +233,6 @@ bool UUnitPatrolComponent::ConfirmPatrolCreation()
     const bool bShouldLoop = FVector::Dist(PendingPatrolPoints[0], PendingPatrolPoints.Last()) <= LoopClosureThreshold;
     NewRoute.bIsLoop = bShouldLoop;
 
-    if (bShouldLoop)
-    {
-        NewRoute.PatrolPoints.Last() = PendingPatrolPoints[0];
-    }
-
     for (const TWeakObjectPtr<AActor>& WeakActor : PendingAssignedUnits)
     {
         if (WeakActor.IsValid())
@@ -256,7 +278,92 @@ void UUnitPatrolComponent::CancelPatrolCreation()
 
 void UUnitPatrolComponent::RegisterPatrolRoute(const FPatrolRoute& NewRoute)
 {
-    ActivePatrolRoutes.Add(NewRoute);
+    FPatrolRoute SanitizedRoute = NewRoute;
+    SanitizedRoute.AssignedUnits.RemoveAll([](AActor* Actor)
+    {
+        return !IsValid(Actor);
+    });
+
+    SanitizedRoute.PatrolPoints.RemoveAllSwap([](const FVector& Point)
+    {
+        return !Point.IsFinite();
+    }, false);
+
+    if (SanitizedRoute.AssignedUnits.IsEmpty() || SanitizedRoute.PatrolPoints.Num() < 2)
+    {
+        return;
+    }
+
+    FPatrolRoute& StoredRoute = ActivePatrolRoutes.Add_GetRef(SanitizedRoute);
+    IssuePatrolCommands(StoredRoute);
+    CleanupActiveRoutes();
+}
+
+void UUnitPatrolComponent::IssuePatrolCommands(FPatrolRoute& Route)
+{
+    APlayerController* RequestingController = ResolveOwningController();
+
+    for (int32 Index = Route.AssignedUnits.Num() - 1; Index >= 0; --Index)
+    {
+        AActor* Unit = Route.AssignedUnits[Index];
+        if (!IsValid(Unit) || !Unit->Implements<USelectable>())
+        {
+            Route.AssignedUnits.RemoveAt(Index);
+            continue;
+        }
+
+        FCommandData PatrolCommand;
+        PatrolCommand.RequestingController = RequestingController;
+        PatrolCommand.Type = ECommandType::CommandPatrol;
+        PatrolCommand.SourceLocation = Route.PatrolPoints[0];
+        PatrolCommand.Location = Route.PatrolPoints[0];
+        PatrolCommand.Rotation = FRotator::ZeroRotator;
+        PatrolCommand.Target = nullptr;
+        PatrolCommand.Radius = 0.f;
+        PatrolCommand.PatrolPath = Route.PatrolPoints;
+        PatrolCommand.bPatrolLoop = Route.bIsLoop;
+
+        ISelectable::Execute_CommandMove(Unit, PatrolCommand);
+    }
+}
+
+void UUnitPatrolComponent::RemoveUnitsFromRoutes(const TArray<AActor*>& UnitsToRemove)
+{
+    if (UnitsToRemove.IsEmpty())
+    {
+        return;
+    }
+
+    for (FPatrolRoute& Route : ActivePatrolRoutes)
+    {
+        Route.AssignedUnits.RemoveAll([&UnitsToRemove](AActor* Actor)
+        {
+            return !IsValid(Actor) || UnitsToRemove.Contains(Actor);
+        });
+    }
+}
+
+void UUnitPatrolComponent::CleanupActiveRoutes()
+{
+    for (int32 RouteIndex = ActivePatrolRoutes.Num() - 1; RouteIndex >= 0; --RouteIndex)
+    {
+        FPatrolRoute& Route = ActivePatrolRoutes[RouteIndex];
+
+        Route.AssignedUnits.RemoveAll([](AActor* Actor)
+        {
+            return !IsValid(Actor);
+        });
+
+        Route.PatrolPoints.RemoveAllSwap([](const FVector& Point)
+        {
+            return !Point.IsFinite();
+        }, false);
+
+        if (Route.AssignedUnits.IsEmpty() || Route.PatrolPoints.Num() < 2)
+        {
+            ActivePatrolRoutes.RemoveAt(RouteIndex);
+        }
+    }
 }
 
 void UUnitPatrolComponent::RefreshSelectionCache(const TArray<AActor*>& SelectedActors)
@@ -399,5 +506,31 @@ void UUnitPatrolComponent::HandleSelectionChanged(const TArray<AActor*>& Selecte
             }
         }
     }
+}
+
+void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& CommandData)
+{
+    if (CommandData.Type == ECommandType::CommandPatrol)
+    {
+        return;
+    }
+
+    RemoveUnitsFromRoutes(AffectedUnits);
+    CleanupActiveRoutes();
+}
+
+APlayerController* UUnitPatrolComponent::ResolveOwningController() const
+{
+    if (CachedPlayerCamera)
+    {
+        return Cast<APlayerController>(CachedPlayerCamera->GetController());
+    }
+
+    if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+    {
+        return Cast<APlayerController>(OwnerPawn->GetController());
+    }
+
+    return nullptr;
 }
 
