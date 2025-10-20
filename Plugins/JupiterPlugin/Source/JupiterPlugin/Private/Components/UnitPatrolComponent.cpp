@@ -7,6 +7,7 @@
 #include "Interfaces/Selectable.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "Math/UnrealMathUtility.h"
 
 namespace
 {
@@ -286,8 +287,8 @@ void UUnitPatrolComponent::RegisterPatrolRoute(const FPatrolRoute& NewRoute)
 
     SanitizedRoute.PatrolPoints.RemoveAllSwap([](const FVector& Point)
     {
-        return !Point.IsFinite();
-    }, false);
+        return !FMath::IsFinite(Point.X) || !FMath::IsFinite(Point.Y) || !FMath::IsFinite(Point.Z);
+    }, EAllowShrinking::No);
 
     if (SanitizedRoute.AssignedUnits.IsEmpty() || SanitizedRoute.PatrolPoints.Num() < 2)
     {
@@ -356,8 +357,8 @@ void UUnitPatrolComponent::CleanupActiveRoutes()
 
         Route.PatrolPoints.RemoveAllSwap([](const FVector& Point)
         {
-            return !Point.IsFinite();
-        }, false);
+            return !FMath::IsFinite(Point.X) || !FMath::IsFinite(Point.Y) || !FMath::IsFinite(Point.Z);
+        }, EAllowShrinking::No);
 
         if (Route.AssignedUnits.IsEmpty() || Route.PatrolPoints.Num() < 2)
         {
