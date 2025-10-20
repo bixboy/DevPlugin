@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Patrol/PlayerCameraPatrolComponent.h"
 #include "Utilities/PreviewPoseMesh.h"
 
 APlayerCamera::APlayerCamera()
@@ -39,6 +40,7 @@ APlayerCamera::APlayerCamera()
         OrderComponent = CreateDefaultSubobject<UUnitOrderComponent>(TEXT("OrderComponent"));
         FormationComponent = CreateDefaultSubobject<UUnitFormationComponent>(TEXT("FormationComponent"));
         SpawnComponent = CreateDefaultSubobject<UUnitSpawnComponent>(TEXT("SpawnComponent"));
+        PatrolComponent = CreateDefaultSubobject<UPlayerCameraPatrolComponent>(TEXT("PatrolComponent"));
 }
 
 UUnitSelectionComponent* APlayerCamera::GetSelectionComponentChecked() const
@@ -150,6 +152,11 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
         else
         {
                 UE_LOG(LogTemp, Warning, TEXT("EnhancedInputComponent is NOT valid"));
+        }
+
+        if (PatrolComponent)
+        {
+                PatrolComponent->BindInput(Input);
         }
 }
 

@@ -1,23 +1,25 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "UObject/ObjectPtr.h"
 #include "PatrolRouteTypes.generated.h"
 
+class AActor;
+
+/** Describes a patrol route assigned to one or more units. */
 USTRUCT(BlueprintType)
-struct FPatrolRoute
+struct JUPITERPLUGIN_API FPatrolRoute
 {
         GENERATED_BODY()
 
-        /** Units assigned to this patrol. */
+        /** Units following this patrol route. */
         UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
-        TArray<TObjectPtr<AActor>> AssignedUnits;
+        TArray<AActor*> AssignedUnits;
 
-        /** Ordered patrol points in world space. */
+        /** Ordered world positions that make up the patrol path. */
         UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
         TArray<FVector> PatrolPoints;
 
-        /** Whether the patrol loops back to the start instead of ping-ponging. */
+        /** True when the route forms a closed loop instead of ping-pong motion. */
         UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
         bool bIsLoop = false;
 };

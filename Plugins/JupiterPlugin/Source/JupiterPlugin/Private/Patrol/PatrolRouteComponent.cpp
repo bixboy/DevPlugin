@@ -6,12 +6,13 @@
 UPatrolRouteComponent::UPatrolRouteComponent()
 {
         PrimaryComponentTick.bCanEverTick = true;
-        PrimaryComponentTick.bStartWithTickEnabled = true;
 }
 
 void UPatrolRouteComponent::BeginPlay()
 {
         Super::BeginPlay();
+
+        EnsureOwnerInRoute();
 }
 
 void UPatrolRouteComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -31,8 +32,7 @@ void UPatrolRouteComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 
         const FVector TargetPoint = ActiveRoute.PatrolPoints[CurrentPointIndex];
         FVector OwnerLocation = Owner->GetActorLocation();
-        const FVector ToTarget = TargetPoint - OwnerLocation;
-        const float Distance = ToTarget.Size();
+        const float Distance = FVector::Dist(OwnerLocation, TargetPoint);
 
         if (Distance <= AcceptanceRadius)
         {
@@ -40,29 +40,26 @@ void UPatrolRouteComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
                 return;
         }
 
-        if (!ToTarget.IsNearlyZero())
-        {
-                const FVector Direction = ToTarget / Distance;
-                OwnerLocation += Direction * PatrolSpeed * DeltaTime;
-                Owner->SetActorLocation(OwnerLocation, true);
-        }
+        const FVector DirectionVector = (TargetPoint - OwnerLocation).GetSafeNormal();
+        OwnerLocation += DirectionVector * PatrolSpeed * DeltaTime;
+        Owner->SetActorLocation(OwnerLocation);
 }
 
 void UPatrolRouteComponent::AssignRoute(const FPatrolRoute& NewRoute)
 {
         ActiveRoute = NewRoute;
-        EnsureOwnerInRoute();
         bHasRoute = ActiveRoute.PatrolPoints.Num() >= 2;
-        bReverseTraversal = false;
-        CurrentPointIndex = bHasRoute ? 0 : INDEX_NONE;
+        CurrentPointIndex = 0;
+        Direction = 1;
+        EnsureOwnerInRoute();
 }
 
 void UPatrolRouteComponent::ClearRoute()
 {
         ActiveRoute = FPatrolRoute();
         bHasRoute = false;
-        bReverseTraversal = false;
-        CurrentPointIndex = INDEX_NONE;
+        CurrentPointIndex = 0;
+        Direction = 1;
 }
 
 void UPatrolRouteComponent::DrawRoute(UWorld* World, const FColor& LineColor, float Duration) const
@@ -76,17 +73,17 @@ void UPatrolRouteComponent::DrawRoute(UWorld* World, const FColor& LineColor, fl
         for (int32 Index = 0; Index < PointCount; ++Index)
         {
                 const FVector Current = ActiveRoute.PatrolPoints[Index];
-                DrawDebugSphere(World, Current, 32.0f, 12, LineColor, false, Duration, 0, 1.5f);
+                DrawDebugSphere(World, Current, 24.0f, 12, LineColor, false, Duration, 0, 1.0f);
 
-                if (Index < PointCount - 1)
+                if (Index + 1 < PointCount)
                 {
                         DrawDebugLine(World, Current, ActiveRoute.PatrolPoints[Index + 1], LineColor, false, Duration, 0, 2.0f);
                 }
+        }
 
-                if (ActiveRoute.bIsLoop && Index == PointCount - 1)
-                {
-                        DrawDebugLine(World, Current, ActiveRoute.PatrolPoints[0], LineColor, false, Duration, 0, 2.0f);
-                }
+        if (ActiveRoute.bIsLoop)
+        {
+                DrawDebugLine(World, ActiveRoute.PatrolPoints.Last(), ActiveRoute.PatrolPoints[0], LineColor, false, Duration, 0, 2.0f);
         }
 }
 
@@ -97,37 +94,35 @@ void UPatrolRouteComponent::AdvanceToNextPoint()
                 return;
         }
 
+        const int32 PointCount = ActiveRoute.PatrolPoints.Num();
         if (ActiveRoute.bIsLoop)
         {
-                CurrentPointIndex = (CurrentPointIndex + 1) % ActiveRoute.PatrolPoints.Num();
+                CurrentPointIndex = (CurrentPointIndex + 1) % PointCount;
                 return;
         }
 
-        if (!bReverseTraversal)
+        CurrentPointIndex += Direction;
+        if (CurrentPointIndex >= PointCount)
         {
-                ++CurrentPointIndex;
-                if (CurrentPointIndex >= ActiveRoute.PatrolPoints.Num())
-                {
-                        bReverseTraversal = true;
-                        CurrentPointIndex = ActiveRoute.PatrolPoints.Num() - 2;
-                }
+                Direction = -1;
+                CurrentPointIndex = PointCount - 2;
         }
-        else
+        else if (CurrentPointIndex < 0)
         {
-                --CurrentPointIndex;
-                if (CurrentPointIndex < 0)
-                {
-                        bReverseTraversal = false;
-                        CurrentPointIndex = 1;
-                }
+                Direction = 1;
+                CurrentPointIndex = 1;
         }
 }
 
 void UPatrolRouteComponent::EnsureOwnerInRoute()
 {
-        AActor* Owner = GetOwner();
-        if (Owner && !ActiveRoute.AssignedUnits.Contains(Owner))
+        if (!bHasRoute || !ActiveRoute.PatrolPoints.IsValidIndex(0))
         {
-                ActiveRoute.AssignedUnits.Add(Owner);
+                return;
+        }
+
+        if (AActor* Owner = GetOwner())
+        {
+                Owner->SetActorLocation(ActiveRoute.PatrolPoints[0]);
         }
 }

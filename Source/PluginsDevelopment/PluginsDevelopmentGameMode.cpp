@@ -2,7 +2,6 @@
 
 #include "PluginsDevelopmentGameMode.h"
 #include "PluginsDevelopmentCharacter.h"
-#include "Patrol/PatrolCommandController.h"
 #include "UObject/ConstructorHelpers.h"
 
 APluginsDevelopmentGameMode::APluginsDevelopmentGameMode()
@@ -14,5 +13,4 @@ APluginsDevelopmentGameMode::APluginsDevelopmentGameMode()
                 DefaultPawnClass = PlayerPawnBPClass.Class;
         }
 
-        PlayerControllerClass = APatrolCommandController::StaticClass();
 }
