@@ -101,7 +101,14 @@ bool UUnitPatrolComponent::HandleRightClickPressed(bool bAltDown)
             return true; // Consume the event so default handling does not interfere.
         }
 
-        return StartPatrolCreation();
+        if (StartPatrolCreation())
+        {
+            // The very first Alt+Right click should also place the initial patrol point.
+            TryAddPatrolPoint();
+            return true;
+        }
+
+        return false;
     }
 
     if (bIsCreatingPatrol)
@@ -121,12 +128,18 @@ bool UUnitPatrolComponent::HandleRightClickReleased(bool bAltDown)
 
     (void)bAltDown;
 
-    const bool bShouldConfirm = bPendingConfirmationClick;
+    const bool bShouldConfirm = bPendingConfirmationClick && bIsCreatingPatrol;
     bPendingConfirmationClick = false;
 
     if (bShouldConfirm)
     {
-        return ConfirmPatrolCreation();
+        ConfirmPatrolCreation();
+        return true;
+    }
+
+    if (bIsCreatingPatrol)
+    {
+        return true; // Swallow the release to avoid issuing move orders while editing.
     }
 
     return false;
