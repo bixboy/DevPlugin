@@ -145,17 +145,34 @@ bool UUnitPatrolComponent::HandleRightClickReleased(bool bAltDown)
     return false;
 }
 
-void UUnitPatrolComponent::HandleLeftClick(EInputEvent InputEvent)
+bool UUnitPatrolComponent::HandleLeftClick(EInputEvent InputEvent)
 {
-    if (!IsLocallyControlled() || InputEvent != IE_Pressed)
+    if (!IsLocallyControlled())
     {
-        return;
+        return false;
     }
 
-    if (bIsCreatingPatrol)
+    if (InputEvent == IE_Pressed)
     {
-        CancelPatrolCreation();
+        if (bIsCreatingPatrol)
+        {
+            CancelPatrolCreation();
+            bConsumePendingLeftRelease = true;
+            return true;
+        }
+
+        bConsumePendingLeftRelease = false;
+        return false;
     }
+
+    if (InputEvent == IE_Released)
+    {
+        const bool bShouldConsume = bConsumePendingLeftRelease;
+        bConsumePendingLeftRelease = false;
+        return bShouldConsume;
+    }
+
+    return bIsCreatingPatrol;
 }
 
 void UUnitPatrolComponent::CacheDependencies()
@@ -286,6 +303,7 @@ void UUnitPatrolComponent::CancelPatrolCreation()
 {
     bIsCreatingPatrol = false;
     bPendingConfirmationClick = false;
+    bConsumePendingLeftRelease = false;
     PendingPatrolPoints.Reset();
     PendingAssignedUnits.Reset();
 }

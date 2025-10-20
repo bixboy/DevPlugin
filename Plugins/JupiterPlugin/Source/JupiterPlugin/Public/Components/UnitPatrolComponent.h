@@ -44,8 +44,8 @@ public:
     /** Called when the player releases the right mouse button. Returns true when the event was consumed. */
     bool HandleRightClickReleased(bool bAltDown);
 
-    /** Called when the player presses the left mouse button (used to cancel pending patrol creation). */
-    void HandleLeftClick(EInputEvent InputEvent);
+    /** Handles left mouse interactions. Returns true when the component consumed the event. */
+    bool HandleLeftClick(EInputEvent InputEvent);
 
     /** Returns true when a patrol is currently being edited. */
     bool IsCreatingPatrol() const { return bIsCreatingPatrol; }
@@ -118,6 +118,10 @@ protected:
     /** Tracks whether the last alt+click should confirm on release even if alt is no longer pressed. */
     UPROPERTY()
     bool bPendingConfirmationClick = false;
+
+    /** True while waiting for the release associated with a left-click cancel to be consumed. */
+    UPROPERTY()
+    bool bConsumePendingLeftRelease = false;
 
     /** Cached cursor position used for drawing preview lines. */
     UPROPERTY()

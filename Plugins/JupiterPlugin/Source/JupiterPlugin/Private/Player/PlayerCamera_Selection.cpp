@@ -67,9 +67,11 @@ void APlayerCamera::Input_SquareSelection()
 
 void APlayerCamera::HandleLeftMouse(EInputEvent InputEvent, float Value)
 {
-        if (PatrolComponent)
+        const bool bPatrolConsumed = PatrolComponent && PatrolComponent->HandleLeftClick(InputEvent);
+
+        if (bPatrolConsumed)
         {
-                PatrolComponent->HandleLeftClick(InputEvent);
+                return;
         }
 
         if (!Player || !MouseProjectionIsGrounded)
