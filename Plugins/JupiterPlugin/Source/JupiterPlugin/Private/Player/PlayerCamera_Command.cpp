@@ -6,6 +6,7 @@
 #include "Components/UnitFormationComponent.h"
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
+#include "Components/UnitPatrolComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/PlayerController.h"
@@ -75,6 +76,16 @@ void APlayerCamera::Server_DestroyActor_Implementation(const TArray<AActor*>& Ac
 
 void APlayerCamera::HandleCommandActionStarted()
 {
+        if (PatrolComponent)
+        {
+                const bool bAltDown = Player && (Player->IsInputKeyDown(EKeys::LeftAlt) || Player->IsInputKeyDown(EKeys::RightAlt));
+                if (PatrolComponent->HandleRightClickPressed(bAltDown))
+                {
+                        bIsCommandActionHeld = false;
+                        return;
+                }
+        }
+
         if (!Player || bIsInSpawnUnits)
         {
                 bIsCommandActionHeld = false;
@@ -109,6 +120,14 @@ void APlayerCamera::CommandStart()
 
 void APlayerCamera::Command()
 {
+        const bool bAltDown = Player && (Player->IsInputKeyDown(EKeys::LeftAlt) || Player->IsInputKeyDown(EKeys::RightAlt));
+        if (PatrolComponent && PatrolComponent->HandleRightClickReleased(bAltDown))
+        {
+                bIsCommandActionHeld = false;
+                StopCommandPreview();
+                return;
+        }
+
         if (!Player || bIsInSpawnUnits || bAltIsPressed)
         {
                 bIsCommandActionHeld = false;

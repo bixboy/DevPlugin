@@ -3,6 +3,7 @@
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
 #include "Components/UnitSpawnComponent.h"
+#include "Components/UnitPatrolComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Interfaces/Selectable.h"
 #include "Player/Selections/SelectionBox.h"
@@ -66,6 +67,11 @@ void APlayerCamera::Input_SquareSelection()
 
 void APlayerCamera::HandleLeftMouse(EInputEvent InputEvent, float Value)
 {
+        if (PatrolComponent)
+        {
+                PatrolComponent->HandleLeftClick(InputEvent);
+        }
+
         if (!Player || !MouseProjectionIsGrounded)
         {
                 return;

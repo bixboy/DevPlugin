@@ -6,6 +6,7 @@
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
 #include "Components/UnitSpawnComponent.h"
+#include "Components/UnitPatrolComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -39,6 +40,7 @@ APlayerCamera::APlayerCamera()
         OrderComponent = CreateDefaultSubobject<UUnitOrderComponent>(TEXT("OrderComponent"));
         FormationComponent = CreateDefaultSubobject<UUnitFormationComponent>(TEXT("FormationComponent"));
         SpawnComponent = CreateDefaultSubobject<UUnitSpawnComponent>(TEXT("SpawnComponent"));
+        PatrolComponent = CreateDefaultSubobject<UUnitPatrolComponent>(TEXT("PatrolComponent"));
 }
 
 UUnitSelectionComponent* APlayerCamera::GetSelectionComponentChecked() const
