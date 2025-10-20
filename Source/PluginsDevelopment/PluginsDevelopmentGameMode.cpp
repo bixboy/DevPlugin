@@ -2,14 +2,17 @@
 
 #include "PluginsDevelopmentGameMode.h"
 #include "PluginsDevelopmentCharacter.h"
+#include "Patrol/PatrolCommandController.h"
 #include "UObject/ConstructorHelpers.h"
 
 APluginsDevelopmentGameMode::APluginsDevelopmentGameMode()
 {
 	// set default pawn class to our Blueprinted character
 	static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
-	if (PlayerPawnBPClass.Class != NULL)
-	{
-		DefaultPawnClass = PlayerPawnBPClass.Class;
-	}
+        if (PlayerPawnBPClass.Class != NULL)
+        {
+                DefaultPawnClass = PlayerPawnBPClass.Class;
+        }
+
+        PlayerControllerClass = APatrolCommandController::StaticClass();
 }
