@@ -102,7 +102,7 @@ bool UUnitPatrolComponent::HandleRightClickReleased(bool bAltDown)
         return false;
     }
 
-    UE_UNUSED(bAltDown);
+    (void)bAltDown;
 
     const bool bShouldConfirm = bPendingConfirmationClick;
     bPendingConfirmationClick = false;
@@ -134,11 +134,22 @@ void UUnitPatrolComponent::CacheDependencies()
 
     if (CachedPlayerCamera)
     {
-        CachedSelectionComponent = CachedPlayerCamera->GetSelectionComponentChecked();
+        if (CachedPlayerCamera->SelectionComponent)
+        {
+            CachedSelectionComponent = CachedPlayerCamera->SelectionComponent;
+        }
+        else
+        {
+            CachedSelectionComponent = CachedPlayerCamera->FindComponentByClass<UUnitSelectionComponent>();
+        }
+    }
+    else if (AActor* OwnerActor = GetOwner())
+    {
+        CachedSelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
     }
     else
     {
-        CachedSelectionComponent = FindComponentByClass<UUnitSelectionComponent>();
+        CachedSelectionComponent = nullptr;
     }
 }
 
