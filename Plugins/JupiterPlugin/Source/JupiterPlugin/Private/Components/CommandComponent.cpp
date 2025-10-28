@@ -92,7 +92,7 @@ void UCommandComponent::CommandMoveToLocation(const FCommandData CommandData)
         TargetLocation = ResolveDestinationFromCommand(CommandData);
         CurrentCommand.Location = TargetLocation;
         CommandPatrol(CurrentCommand);
-    
+
         return;
     }
 
@@ -105,11 +105,15 @@ void UCommandComponent::CommandMoveToLocation(const FCommandData CommandData)
 
 void UCommandComponent::CommandPatrol(const FCommandData CommandData)
 {
-	if (OwnerAIController)
-	{
-		OwnerAIController->OnReachedDestination.Clear();
-		OwnerAIController->CommandPatrol(CommandData);
-	}
+    if (!OwnerAIController)
+        return;
+
+    OwnerAIController->OnReachedDestination.Clear();
+    if (!OwnerAIController->OnReachedDestination.IsBound())
+            OwnerAIController->OnReachedDestination.AddDynamic(this, &UCommandComponent::DestinationReached);
+
+    OwnerAIController->CommandPatrol(CommandData);
+    SetMoveMarker(TargetLocation, CommandData);
 }
 
 void UCommandComponent::CommandMove(const FCommandData CommandData)
@@ -153,7 +157,10 @@ bool UCommandComponent::HasValidAttackTarget(const FCommandData& CommandData) co
 FVector UCommandComponent::ResolveDestinationFromCommand(const FCommandData& CommandData) const
 {
     if (ShouldFollowCommandTarget(CommandData))
-		return CommandData.Target->GetActorLocation();
+                return CommandData.Target->GetActorLocation();
+
+    if (CommandData.Type == ECommandType::CommandPatrol && CommandData.PatrolPath.Num() > 0)
+                return CommandData.PatrolPath[0];
 
     return CommandData.Location;
 }

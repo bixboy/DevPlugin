@@ -21,7 +21,9 @@ class UUnitSelectionComponent;
 class UUnitOrderComponent;
 class UUnitFormationComponent;
 class UUnitSpawnComponent;
+class UUnitPatrolComponent;
 enum class ESpawnFormation : uint8;
+
 UCLASS()
 class JUPITERPLUGIN_API APlayerCamera : public APawn
 {
@@ -54,6 +56,9 @@ public:
 
         UPROPERTY(EditAnywhere, BlueprintReadOnly)
         UUnitSpawnComponent* SpawnComponent;
+
+        UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+        UUnitPatrolComponent* PatrolComponent;
 protected:
 //------------------------------------ Inputs ------------------------------------
 #pragma region Inputs

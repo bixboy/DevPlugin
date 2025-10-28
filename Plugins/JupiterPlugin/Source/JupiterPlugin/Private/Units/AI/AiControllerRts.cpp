@@ -1,5 +1,4 @@
 ﻿#include "JupiterPlugin/Public/Units/AI/AiControllerRts.h"
-#include "NavigationSystem.h"
 #include "TimerManager.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Data/AiData.h"
@@ -108,7 +107,11 @@ void AAiControllerRts::OnMoveCompleted(FAIRequestID RequestID, const FPathFollow
     
     if (bPatrolling)
     {
-        StartPatrol();
+        AdvancePatrolWaypoint();
+        if (bPatrolling)
+        {
+            StartPatrol();
+        }
     }
 }
 
@@ -197,6 +200,57 @@ void AAiControllerRts::StopAttack()
         StopMovement();
 }
 
+void AAiControllerRts::AdvancePatrolWaypoint()
+{
+    const int32 NumPoints = CurrentPatrolPath.Num();
+    if (NumPoints == 0)
+    {
+        bPatrolling = false;
+        return;
+    }
+
+    if (NumPoints == 1)
+    {
+        if (!bPatrolLoopPattern)
+        {
+            bPatrolling = false;
+        }
+
+        return;
+    }
+
+    if (bPatrolLoopPattern)
+    {
+        CurrentPatrolWaypointIndex = (CurrentPatrolWaypointIndex + 1) % NumPoints;
+        return;
+    }
+
+    if (bPatrolForward)
+    {
+        if (CurrentPatrolWaypointIndex >= NumPoints - 1)
+        {
+            bPatrolForward = false;
+            CurrentPatrolWaypointIndex = NumPoints - 2;
+        }
+        else
+        {
+            ++CurrentPatrolWaypointIndex;
+        }
+    }
+    else
+    {
+        if (CurrentPatrolWaypointIndex <= 0)
+        {
+            bPatrolForward = true;
+            CurrentPatrolWaypointIndex = 1;
+        }
+        else
+        {
+            --CurrentPatrolWaypointIndex;
+        }
+    }
+}
+
 
 // Utilities ------
 float AAiControllerRts::GetDistanceToTarget() const
@@ -246,22 +300,32 @@ void AAiControllerRts::HandleInvalidAttackTarget()
 
 void AAiControllerRts::CommandPatrol(const FCommandData Cmd)
 {
-        StopAttack();
-        CurrentCommand = Cmd;
-        bPatrolling = true;
-        bMoveComplete = false;
-        
-        StartPatrol();
+	StopAttack();
+	CurrentCommand = Cmd;
+	bPatrolling = true;
+	bMoveComplete = false;
+
+	CurrentPatrolPath = Cmd.PatrolPath;
+	bPatrolLoopPattern = Cmd.bPatrolLoop;
+	CurrentPatrolWaypointIndex = 0;
+	bPatrolForward = true;
+
+	StartPatrol();
 }
 
 void AAiControllerRts::StartPatrol()
 {
-    FVector Dest;
-    if (UNavigationSystemV1::K2_GetRandomLocationInNavigableRadius(GetWorld(), CurrentCommand.SourceLocation,
-            Dest, CurrentCommand.Radius))
+    const int32 NumPoints = CurrentPatrolPath.Num();
+    if (NumPoints == 0)
     {
-        MoveToLocation(Dest, 20.f);
+        bPatrolling = false;
+        return;
     }
+
+    const FVector Destination = CurrentPatrolPath[CurrentPatrolWaypointIndex];
+    CurrentCommand.Location = Destination;
+    MoveToLocation(Destination, GetAcceptanceRadius());
+    OnNewDestination.Broadcast(CurrentCommand);
 }
 
 #pragma endregion
