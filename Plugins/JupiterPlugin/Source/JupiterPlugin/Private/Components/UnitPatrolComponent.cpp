@@ -1,6 +1,7 @@
 #include "Components/UnitPatrolComponent.h"
 
-#include "DrawDebugHelpers.h"
+#include "Components/LineBatchComponent.h"
+#include "Engine/EngineTypes.h"
 #include "Player/PlayerCamera.h"
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
@@ -8,16 +9,13 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Math/UnrealMathUtility.h"
-
-namespace
-{
-    constexpr float DebugDrawDuration = 0.f; // Draw every frame without persistence.
-}
+#include "Net/UnrealNetwork.h"
 
 UUnitPatrolComponent::UUnitPatrolComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     bAutoActivate = true;
+    SetIsReplicatedByDefault(true);
 }
 
 void UUnitPatrolComponent::BeginPlay()
@@ -40,6 +38,12 @@ void UUnitPatrolComponent::BeginPlay()
 
 void UUnitPatrolComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (LineBatchComponent)
+    {
+        LineBatchComponent->DestroyComponent();
+        LineBatchComponent = nullptr;
+    }
+
     if (CachedSelectionComponent)
     {
         CachedSelectionComponent->OnSelectionChanged.RemoveDynamic(this, &UUnitPatrolComponent::HandleSelectionChanged);
@@ -80,10 +84,33 @@ void UUnitPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
         bHasCursorLocation = false;
     }
 
-    CleanupActiveRoutes();
+    if (bDrawCursorPreview && bHasCursorLocation)
+    {
+        if (!LastPreviewCursorLocation.Equals(CachedCursorLocation, 1.0f))
+        {
+            LastPreviewCursorLocation = CachedCursorLocation;
+            MarkVisualsDirty();
+        }
+    }
+    else if (!LastPreviewCursorLocation.IsNearlyZero())
+    {
+        LastPreviewCursorLocation = FVector::ZeroVector;
+        MarkVisualsDirty();
+    }
 
-    DrawPendingRoute();
-    DrawActiveRoutes();
+    if (HasAuthority())
+    {
+        CleanupActiveRoutes();
+    }
+
+    UpdateRouteVisuals(DeltaTime);
+}
+
+void UUnitPatrolComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(UUnitPatrolComponent, ActivePatrolRoutes);
 }
 
 bool UUnitPatrolComponent::HandleRightClickPressed(bool bAltDown)
@@ -217,6 +244,65 @@ bool UUnitPatrolComponent::IsLocallyControlled() const
     return OwnerPawn && OwnerPawn->IsLocallyControlled();
 }
 
+bool UUnitPatrolComponent::HasAuthority() const
+{
+    const AActor* OwnerActor = GetOwner();
+    return OwnerActor && OwnerActor->HasAuthority();
+}
+
+void UUnitPatrolComponent::EnsureLineBatchComponent()
+{
+    if (LineBatchComponent && LineBatchComponent->IsRegistered())
+    {
+        return;
+    }
+
+    if (AActor* OwnerActor = GetOwner())
+    {
+        LineBatchComponent = NewObject<ULineBatchComponent>(OwnerActor, TEXT("PatrolRouteLineBatcher"));
+        if (LineBatchComponent)
+        {
+            if (USceneComponent* RootComponent = OwnerActor->GetRootComponent())
+            {
+                LineBatchComponent->SetupAttachment(RootComponent);
+            }
+
+            LineBatchComponent->SetAutoActivate(true);
+            LineBatchComponent->RegisterComponent();
+            LineBatchComponent->SetHiddenInGame(false);
+            LineBatchComponent->SetRelativeLocation(FVector::ZeroVector);
+        }
+    }
+}
+
+void UUnitPatrolComponent::MarkVisualsDirty()
+{
+    bVisualsDirty = true;
+}
+
+void UUnitPatrolComponent::UpdateRouteVisuals(float DeltaSeconds)
+{
+    EnsureLineBatchComponent();
+
+    if (!LineBatchComponent)
+    {
+        return;
+    }
+
+    VisualRefreshTimer -= DeltaSeconds;
+    if (!bVisualsDirty && VisualRefreshTimer > 0.f)
+    {
+        return;
+    }
+
+    LineBatchComponent->Flush();
+    DrawPendingRouteVisualization();
+    DrawActiveRouteVisualizations();
+
+    VisualRefreshTimer = VisualRefreshInterval;
+    bVisualsDirty = false;
+}
+
 bool UUnitPatrolComponent::StartPatrolCreation()
 {
     if (!CachedSelectionComponent)
@@ -241,6 +327,8 @@ bool UUnitPatrolComponent::StartPatrolCreation()
 
     bIsCreatingPatrol = true;
     bPendingConfirmationClick = false;
+
+    MarkVisualsDirty();
 
     return true;
 }
@@ -272,7 +360,14 @@ bool UUnitPatrolComponent::ConfirmPatrolCreation()
         }
     }
 
-    RegisterPatrolRoute(NewRoute);
+    if (HasAuthority())
+    {
+        RegisterPatrolRoute(NewRoute);
+    }
+    else
+    {
+        ServerRegisterPatrolRoute(NewRoute);
+    }
 
     CancelPatrolCreation();
     return true;
@@ -296,6 +391,7 @@ bool UUnitPatrolComponent::TryAddPatrolPoint()
     }
 
     PendingPatrolPoints.Add(CursorLocation);
+    MarkVisualsDirty();
     return true;
 }
 
@@ -306,10 +402,16 @@ void UUnitPatrolComponent::CancelPatrolCreation()
     bConsumePendingLeftRelease = false;
     PendingPatrolPoints.Reset();
     PendingAssignedUnits.Reset();
+    MarkVisualsDirty();
 }
 
 void UUnitPatrolComponent::RegisterPatrolRoute(const FPatrolRoute& NewRoute)
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
+
     FPatrolRoute SanitizedRoute = NewRoute;
     SanitizedRoute.AssignedUnits.RemoveAll([](AActor* Actor)
     {
@@ -329,10 +431,16 @@ void UUnitPatrolComponent::RegisterPatrolRoute(const FPatrolRoute& NewRoute)
     FPatrolRoute& StoredRoute = ActivePatrolRoutes.Add_GetRef(SanitizedRoute);
     IssuePatrolCommands(StoredRoute);
     CleanupActiveRoutes();
+    MarkVisualsDirty();
 }
 
 void UUnitPatrolComponent::IssuePatrolCommands(FPatrolRoute& Route)
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
+
     APlayerController* RequestingController = ResolveOwningController();
 
     for (int32 Index = Route.AssignedUnits.Num() - 1; Index >= 0; --Index)
@@ -361,40 +469,78 @@ void UUnitPatrolComponent::IssuePatrolCommands(FPatrolRoute& Route)
 
 void UUnitPatrolComponent::RemoveUnitsFromRoutes(const TArray<AActor*>& UnitsToRemove)
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
+
     if (UnitsToRemove.IsEmpty())
     {
         return;
     }
 
+    bool bRoutesModified = false;
     for (FPatrolRoute& Route : ActivePatrolRoutes)
     {
+        const int32 PreviousNum = Route.AssignedUnits.Num();
         Route.AssignedUnits.RemoveAll([&UnitsToRemove](AActor* Actor)
         {
             return !IsValid(Actor) || UnitsToRemove.Contains(Actor);
         });
+
+        bRoutesModified |= PreviousNum != Route.AssignedUnits.Num();
+    }
+
+    if (bRoutesModified)
+    {
+        MarkVisualsDirty();
     }
 }
 
 void UUnitPatrolComponent::CleanupActiveRoutes()
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    bool bRoutesModified = false;
     for (int32 RouteIndex = ActivePatrolRoutes.Num() - 1; RouteIndex >= 0; --RouteIndex)
     {
         FPatrolRoute& Route = ActivePatrolRoutes[RouteIndex];
 
+        const int32 PreviousAssigned = Route.AssignedUnits.Num();
         Route.AssignedUnits.RemoveAll([](AActor* Actor)
         {
             return !IsValid(Actor);
         });
 
+        if (Route.AssignedUnits.Num() != PreviousAssigned)
+        {
+            bRoutesModified = true;
+        }
+
+        const int32 PreviousPoints = Route.PatrolPoints.Num();
         Route.PatrolPoints.RemoveAllSwap([](const FVector& Point)
         {
             return !FMath::IsFinite(Point.X) || !FMath::IsFinite(Point.Y) || !FMath::IsFinite(Point.Z);
         }, EAllowShrinking::No);
 
+        if (Route.PatrolPoints.Num() != PreviousPoints)
+        {
+            bRoutesModified = true;
+        }
+
         if (Route.AssignedUnits.IsEmpty() || Route.PatrolPoints.Num() < 2)
         {
             ActivePatrolRoutes.RemoveAt(RouteIndex);
+            bRoutesModified = true;
         }
+    }
+
+    if (bRoutesModified)
+    {
+        MarkVisualsDirty();
     }
 }
 
@@ -408,6 +554,8 @@ void UUnitPatrolComponent::RefreshSelectionCache(const TArray<AActor*>& Selected
             CachedSelection.Add(Actor);
         }
     }
+
+    MarkVisualsDirty();
 }
 
 bool UUnitPatrolComponent::SelectionContainsRouteUnits(const FPatrolRoute& Route) const
@@ -458,28 +606,25 @@ bool UUnitPatrolComponent::TryGetCursorLocation(FVector& OutLocation) const
     return true;
 }
 
-void UUnitPatrolComponent::DrawPendingRoute() const
+void UUnitPatrolComponent::DrawPendingRouteVisualization()
 {
-    if (!bIsCreatingPatrol || PendingPatrolPoints.Num() == 0)
+    if (!LineBatchComponent || !bIsCreatingPatrol || PendingPatrolPoints.Num() == 0)
     {
         return;
     }
 
-    DrawRoute(PendingPatrolPoints, false, PendingRouteColor);
+    DrawRouteVisualization(PendingPatrolPoints, false, PendingRouteColor);
 
     if (bDrawCursorPreview && PendingPatrolPoints.Num() > 0 && bHasCursorLocation)
     {
-        if (UWorld* World = GetWorld())
-        {
-            const FVector LastPoint = PendingPatrolPoints.Last();
-            DrawDebugLine(World, LastPoint, CachedCursorLocation, PendingRouteColor, false, DebugDrawDuration, 0, DebugLineThickness);
-        }
+        LineBatchComponent->DrawLine(PendingPatrolPoints.Last(), CachedCursorLocation, PendingRouteColor, SDPG_World, DebugLineThickness, VisualRefreshInterval + KINDA_SMALL_NUMBER);
+        LineBatchComponent->DrawPoint(CachedCursorLocation, PendingRouteColor, DebugPointRadius, SDPG_World, VisualRefreshInterval + KINDA_SMALL_NUMBER);
     }
 }
 
-void UUnitPatrolComponent::DrawActiveRoutes() const
+void UUnitPatrolComponent::DrawActiveRouteVisualizations()
 {
-    if (ActivePatrolRoutes.Num() == 0)
+    if (!LineBatchComponent || ActivePatrolRoutes.Num() == 0)
     {
         return;
     }
@@ -491,36 +636,117 @@ void UUnitPatrolComponent::DrawActiveRoutes() const
             continue;
         }
 
-        DrawRoute(Route.PatrolPoints, Route.bIsLoop, ActiveRouteColor);
+        DrawRouteVisualization(Route.PatrolPoints, Route.bIsLoop, ActiveRouteColor);
     }
 }
 
-void UUnitPatrolComponent::DrawRoute(const TArray<FVector>& Points, bool bLoop, const FColor& Color) const
+void UUnitPatrolComponent::DrawRouteVisualization(const TArray<FVector>& Points, bool bLoop, const FColor& Color)
 {
-    if (Points.Num() == 0)
+    if (!LineBatchComponent || Points.Num() == 0)
     {
         return;
     }
 
-    if (UWorld* World = GetWorld())
-    {
-        for (int32 Index = 0; Index < Points.Num(); ++Index)
-        {
-            const FVector& Point = Points[Index];
-            DrawDebugSphere(World, Point, DebugPointRadius, 16, Color, false, DebugDrawDuration);
+    DrawRoutePoints(Points, Color);
 
-            const int32 NextIndex = Index + 1;
-            if (NextIndex < Points.Num())
+    if (Points.Num() == 1)
+    {
+        return;
+    }
+
+    TArray<FVector> Samples;
+    BuildSplineSamples(Points, bLoop, Samples);
+
+    if (Samples.Num() < 2)
+    {
+        return;
+    }
+
+    for (int32 Index = 0; Index < Samples.Num() - 1; ++Index)
+    {
+        LineBatchComponent->DrawLine(Samples[Index], Samples[Index + 1], Color, SDPG_World, DebugLineThickness, VisualRefreshInterval + KINDA_SMALL_NUMBER);
+    }
+
+    if (bLoop)
+    {
+        LineBatchComponent->DrawLine(Samples.Last(), Samples[0], Color, SDPG_World, DebugLineThickness, VisualRefreshInterval + KINDA_SMALL_NUMBER);
+    }
+}
+
+void UUnitPatrolComponent::DrawRoutePoints(const TArray<FVector>& Points, const FColor& Color)
+{
+    if (!LineBatchComponent)
+    {
+        return;
+    }
+
+    for (const FVector& Point : Points)
+    {
+        LineBatchComponent->DrawPoint(Point, Color, DebugPointRadius, SDPG_World, VisualRefreshInterval + KINDA_SMALL_NUMBER);
+    }
+}
+
+void UUnitPatrolComponent::BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples) const
+{
+    OutSamples.Reset();
+
+    const int32 NumPoints = Points.Num();
+    if (NumPoints < 2)
+    {
+        OutSamples = Points;
+        return;
+    }
+
+    const int32 NumSegments = bLoop ? NumPoints : NumPoints - 1;
+    if (NumSegments <= 0)
+    {
+        OutSamples = Points;
+        return;
+    }
+
+    const int32 StepsPerSegment = FMath::Max(1, SamplesPerSegment);
+
+    auto WrapIndex = [NumPoints, bLoop](int32 Index)
+    {
+        if (bLoop)
+        {
+            return (Index % NumPoints + NumPoints) % NumPoints;
+        }
+
+        return FMath::Clamp(Index, 0, NumPoints - 1);
+    };
+
+    for (int32 SegmentIndex = 0; SegmentIndex < NumSegments; ++SegmentIndex)
+    {
+        const FVector& P0 = Points[WrapIndex(SegmentIndex - 1)];
+        const FVector& P1 = Points[WrapIndex(SegmentIndex)];
+        const FVector& P2 = Points[WrapIndex(SegmentIndex + 1)];
+        const FVector& P3 = Points[WrapIndex(SegmentIndex + 2)];
+
+        for (int32 Step = 0; Step < StepsPerSegment; ++Step)
+        {
+            const float T = static_cast<float>(Step) / static_cast<float>(StepsPerSegment);
+            const FVector Sample = EvaluateCatmullRom(P0, P1, P2, P3, T);
+
+            if (OutSamples.IsEmpty() || !Sample.Equals(OutSamples.Last(), 1.0f))
             {
-                DrawDebugLine(World, Point, Points[NextIndex], Color, false, DebugDrawDuration, 0, DebugLineThickness);
+                OutSamples.Add(Sample);
             }
         }
-
-        if (bLoop && Points.Num() > 1)
-        {
-            DrawDebugLine(World, Points.Last(), Points[0], Color, false, DebugDrawDuration, 0, DebugLineThickness);
-        }
     }
+
+    OutSamples.Add(Points[bLoop ? 0 : NumPoints - 1]);
+}
+
+FVector UUnitPatrolComponent::EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T)
+{
+    const float T2 = T * T;
+    const float T3 = T2 * T;
+
+    return 0.5f * ((2.f * P1) +
+        (-P0 + P2) * T +
+        (2.f * P0 - 5.f * P1 + 4.f * P2 - P3) * T2 +
+        (-P0 + 3.f * P1 - 3.f * P2 + P3) * T3);
 }
 
 void UUnitPatrolComponent::HandleSelectionChanged(const TArray<AActor*>& SelectedActors)
@@ -538,6 +764,8 @@ void UUnitPatrolComponent::HandleSelectionChanged(const TArray<AActor*>& Selecte
             }
         }
     }
+
+    MarkVisualsDirty();
 }
 
 void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& CommandData)
@@ -564,5 +792,15 @@ APlayerController* UUnitPatrolComponent::ResolveOwningController() const
     }
 
     return nullptr;
+}
+
+void UUnitPatrolComponent::ServerRegisterPatrolRoute_Implementation(const FPatrolRoute& NewRoute)
+{
+    RegisterPatrolRoute(NewRoute);
+}
+
+void UUnitPatrolComponent::OnRep_ActivePatrolRoutes()
+{
+    MarkVisualsDirty();
 }
 

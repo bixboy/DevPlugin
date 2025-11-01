@@ -9,6 +9,7 @@ class APlayerCamera;
 class APlayerController;
 class UUnitSelectionComponent;
 class UUnitOrderComponent;
+class ULineBatchComponent;
 
 USTRUCT(BlueprintType)
 struct FPatrolRoute
@@ -37,6 +38,7 @@ public:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     /** Called when the player presses the right mouse button. Returns true when the event was consumed. */
     bool HandleRightClickPressed(bool bAltDown);
@@ -54,6 +56,16 @@ protected:
     //------------------------------------ Initialization ------------------------------------
     void CacheDependencies();
     bool IsLocallyControlled() const;
+    bool HasAuthority() const;
+    void EnsureLineBatchComponent();
+    void MarkVisualsDirty();
+    void UpdateRouteVisuals(float DeltaSeconds);
+    void DrawRouteVisualization(const TArray<FVector>& Points, bool bLoop, const FColor& Color);
+    void DrawPendingRouteVisualization();
+    void DrawActiveRouteVisualizations();
+    void DrawRoutePoints(const TArray<FVector>& Points, const FColor& Color);
+    void BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples) const;
+    static FVector EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T);
 
     //------------------------------------ Input Handling ------------------------------------
     bool StartPatrolCreation();
@@ -71,16 +83,17 @@ protected:
     bool TryGetCursorLocation(FVector& OutLocation) const;
     APlayerController* ResolveOwningController() const;
 
-    //------------------------------------ Debug Drawing ------------------------------------
-    void DrawPendingRoute() const;
-    void DrawActiveRoutes() const;
-    void DrawRoute(const TArray<FVector>& Points, bool bLoop, const FColor& Color) const;
-
     UFUNCTION()
     void HandleSelectionChanged(const TArray<AActor*>& SelectedActors);
 
     UFUNCTION()
     void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& CommandData);
+
+    UFUNCTION(Server, Reliable)
+    void ServerRegisterPatrolRoute(const FPatrolRoute& NewRoute);
+
+    UFUNCTION()
+    void OnRep_ActivePatrolRoutes();
 
 protected:
     /** Cached reference to the owning player camera pawn. */
@@ -96,7 +109,7 @@ protected:
     TObjectPtr<UUnitOrderComponent> CachedOrderComponent;
 
     /** All confirmed patrol routes currently active. */
-    UPROPERTY()
+    UPROPERTY(ReplicatedUsing = OnRep_ActivePatrolRoutes)
     TArray<FPatrolRoute> ActivePatrolRoutes;
 
     /** Currently selected units used for visualising patrols. */
@@ -131,6 +144,22 @@ protected:
     UPROPERTY()
     bool bHasCursorLocation = false;
 
+    /** Cached line batch component used for patrol visualisation. */
+    UPROPERTY(Transient)
+    TObjectPtr<ULineBatchComponent> LineBatchComponent = nullptr;
+
+    /** Accumulated time until the next forced visual refresh. */
+    UPROPERTY()
+    float VisualRefreshTimer = 0.f;
+
+    /** Tracks whether the route visuals need to be rebuilt. */
+    UPROPERTY()
+    bool bVisualsDirty = true;
+
+    /** Last cursor location used for preview drawing. */
+    UPROPERTY()
+    FVector LastPreviewCursorLocation = FVector::ZeroVector;
+
     //------------------------------------ Settings ------------------------------------
     /** Distance threshold (in uu) used to detect loop closures. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
@@ -155,5 +184,13 @@ protected:
     /** When true, a line preview towards the current cursor location is drawn while editing a patrol. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
     bool bDrawCursorPreview = true;
+
+    /** Number of spline samples generated per segment while drawing patrol routes. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "1"))
+    int32 SamplesPerSegment = 6;
+
+    /** Minimum time between visual refreshes when the data has not changed. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
+    float VisualRefreshInterval = 0.05f;
 };
 
