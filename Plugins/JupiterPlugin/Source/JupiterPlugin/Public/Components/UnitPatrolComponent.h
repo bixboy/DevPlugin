@@ -9,6 +9,7 @@ class APlayerCamera;
 class APlayerController;
 class UUnitSelectionComponent;
 class UUnitOrderComponent;
+class UPatrolVisualizationComponent;
 
 USTRUCT(BlueprintType)
 struct FPatrolRoute
@@ -72,9 +73,9 @@ protected:
     APlayerController* ResolveOwningController() const;
 
     //------------------------------------ Debug Drawing ------------------------------------
-    void DrawPendingRoute() const;
-    void DrawActiveRoutes() const;
-    void DrawRoute(const TArray<FVector>& Points, bool bLoop, const FColor& Color) const;
+    void DrawPendingRoute();
+    void DrawActiveRoutes();
+    void EnsureVisualizationComponent();
 
     UFUNCTION()
     void HandleSelectionChanged(const TArray<AActor*>& SelectedActors);
@@ -136,11 +137,11 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
     float LoopClosureThreshold = 200.f;
 
-    /** Radius of the debug spheres drawn for patrol points. */
+    /** Screen size (in pixels) of the patrol nodes that are rendered while editing. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
     float DebugPointRadius = 40.f;
 
-    /** Thickness of the debug lines used to visualise patrol paths. */
+    /** Thickness of the lines used to visualise patrol paths. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
     float DebugLineThickness = 3.f;
 
@@ -155,5 +156,13 @@ protected:
     /** When true, a line preview towards the current cursor location is drawn while editing a patrol. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
     bool bDrawCursorPreview = true;
+
+    /** Vertical offset applied to patrol visuals to avoid z-fighting with the terrain. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
+    float PatrolHeightOffset = 20.f;
+
+    /** Runtime component that renders patrol routes even in cooked builds. */
+    UPROPERTY(Transient)
+    TObjectPtr<UPatrolVisualizationComponent> PatrolVisualizationComponent;
 };
 

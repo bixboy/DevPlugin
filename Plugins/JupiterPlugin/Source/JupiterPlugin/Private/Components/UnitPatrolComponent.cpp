@@ -1,6 +1,6 @@
 #include "Components/UnitPatrolComponent.h"
 
-#include "DrawDebugHelpers.h"
+#include "Components/PatrolVisualizationComponent.h"
 #include "Player/PlayerCamera.h"
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
@@ -8,11 +8,6 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Math/UnrealMathUtility.h"
-
-namespace
-{
-    constexpr float DebugDrawDuration = 0.f; // Draw every frame without persistence.
-}
 
 UUnitPatrolComponent::UUnitPatrolComponent()
 {
@@ -57,12 +52,9 @@ void UUnitPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    if (!IsLocallyControlled())
-    {
-        return;
-    }
+    const bool bLocallyControlled = IsLocallyControlled();
 
-    if (CachedSelectionComponent)
+    if (CachedSelectionComponent && bLocallyControlled)
     {
         FVector CursorLocation;
         if (TryGetCursorLocation(CursorLocation))
@@ -78,6 +70,28 @@ void UUnitPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
     else
     {
         bHasCursorLocation = false;
+    }
+
+    EnsureVisualizationComponent();
+
+    if (PatrolVisualizationComponent)
+    {
+        PatrolVisualizationComponent->SetLineThickness(DebugLineThickness);
+        PatrolVisualizationComponent->SetPointSize(DebugPointRadius);
+        PatrolVisualizationComponent->SetHeightOffset(PatrolHeightOffset);
+
+        PatrolVisualizationComponent->SetVisibility(bLocallyControlled);
+
+        if (!bLocallyControlled)
+        {
+            PatrolVisualizationComponent->ClearPendingRoute();
+            PatrolVisualizationComponent->ClearActiveRoutes();
+        }
+    }
+
+    if (!bLocallyControlled)
+    {
+        return;
     }
 
     CleanupActiveRoutes();
@@ -458,31 +472,67 @@ bool UUnitPatrolComponent::TryGetCursorLocation(FVector& OutLocation) const
     return true;
 }
 
-void UUnitPatrolComponent::DrawPendingRoute() const
+void UUnitPatrolComponent::EnsureVisualizationComponent()
 {
-    if (!bIsCreatingPatrol || PendingPatrolPoints.Num() == 0)
+    if (PatrolVisualizationComponent || !GetOwner())
     {
         return;
     }
 
-    DrawRoute(PendingPatrolPoints, false, PendingRouteColor);
+    PatrolVisualizationComponent = NewObject<UPatrolVisualizationComponent>(GetOwner(), TEXT("PatrolVisualization"));
 
-    if (bDrawCursorPreview && PendingPatrolPoints.Num() > 0 && bHasCursorLocation)
+    if (!PatrolVisualizationComponent)
     {
-        if (UWorld* World = GetWorld())
-        {
-            const FVector LastPoint = PendingPatrolPoints.Last();
-            DrawDebugLine(World, LastPoint, CachedCursorLocation, PendingRouteColor, false, DebugDrawDuration, 0, DebugLineThickness);
-        }
+        return;
     }
+
+    if (USceneComponent* RootComponent = GetOwner()->GetRootComponent())
+    {
+        PatrolVisualizationComponent->SetupAttachment(RootComponent);
+    }
+
+    PatrolVisualizationComponent->SetIsVisualizationComponent(true);
+    PatrolVisualizationComponent->SetHiddenInGame(false);
+
+    PatrolVisualizationComponent->RegisterComponent();
+    PatrolVisualizationComponent->SetLineThickness(DebugLineThickness);
+    PatrolVisualizationComponent->SetPointSize(DebugPointRadius);
+    PatrolVisualizationComponent->SetHeightOffset(PatrolHeightOffset);
 }
 
-void UUnitPatrolComponent::DrawActiveRoutes() const
+void UUnitPatrolComponent::DrawPendingRoute()
 {
-    if (ActivePatrolRoutes.Num() == 0)
+    if (!PatrolVisualizationComponent)
     {
         return;
     }
+
+    if (!bIsCreatingPatrol || PendingPatrolPoints.Num() == 0)
+    {
+        PatrolVisualizationComponent->ClearPendingRoute();
+        return;
+    }
+
+    const bool bHasPreview = bDrawCursorPreview && PendingPatrolPoints.Num() > 0 && bHasCursorLocation;
+    const FVector PreviewLocation = bHasPreview ? CachedCursorLocation : FVector::ZeroVector;
+
+    PatrolVisualizationComponent->SetPendingRoute(PendingPatrolPoints, false, bHasPreview, PreviewLocation, PendingRouteColor);
+}
+
+void UUnitPatrolComponent::DrawActiveRoutes()
+{
+    if (!PatrolVisualizationComponent)
+    {
+        return;
+    }
+
+    if (ActivePatrolRoutes.Num() == 0)
+    {
+        PatrolVisualizationComponent->ClearActiveRoutes();
+        return;
+    }
+
+    TArray<FPatrolRouteVisualization> VisibleRoutes;
 
     for (const FPatrolRoute& Route : ActivePatrolRoutes)
     {
@@ -491,35 +541,19 @@ void UUnitPatrolComponent::DrawActiveRoutes() const
             continue;
         }
 
-        DrawRoute(Route.PatrolPoints, Route.bIsLoop, ActiveRouteColor);
-    }
-}
-
-void UUnitPatrolComponent::DrawRoute(const TArray<FVector>& Points, bool bLoop, const FColor& Color) const
-{
-    if (Points.Num() == 0)
-    {
-        return;
+        FPatrolRouteVisualization& RouteVisualization = VisibleRoutes.Emplace_GetRef();
+        RouteVisualization.Points = Route.PatrolPoints;
+        RouteVisualization.bIsLoop = Route.bIsLoop;
+        RouteVisualization.Color = ActiveRouteColor;
     }
 
-    if (UWorld* World = GetWorld())
+    if (VisibleRoutes.Num() > 0)
     {
-        for (int32 Index = 0; Index < Points.Num(); ++Index)
-        {
-            const FVector& Point = Points[Index];
-            DrawDebugSphere(World, Point, DebugPointRadius, 16, Color, false, DebugDrawDuration);
-
-            const int32 NextIndex = Index + 1;
-            if (NextIndex < Points.Num())
-            {
-                DrawDebugLine(World, Point, Points[NextIndex], Color, false, DebugDrawDuration, 0, DebugLineThickness);
-            }
-        }
-
-        if (bLoop && Points.Num() > 1)
-        {
-            DrawDebugLine(World, Points.Last(), Points[0], Color, false, DebugDrawDuration, 0, DebugLineThickness);
-        }
+        PatrolVisualizationComponent->SetActiveRoutes(VisibleRoutes);
+    }
+    else
+    {
+        PatrolVisualizationComponent->ClearActiveRoutes();
     }
 }
 
