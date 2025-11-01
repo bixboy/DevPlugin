@@ -2,30 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Data/AiData.h"
+#include "Data/PatrolRoute.h"
+#include "InputCoreTypes.h"
 #include "UnitPatrolComponent.generated.h"
 
-class APlayerCamera;
-class APlayerController;
+class USplineComponent;
 class UUnitSelectionComponent;
-class UUnitOrderComponent;
 
-USTRUCT(BlueprintType)
-struct FPatrolRoute
-{
-    GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    TArray<AActor*> AssignedUnits;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    TArray<FVector> PatrolPoints;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    bool bIsLoop = false;
-};
-
-/** Component responsible for handling unit patrol creation and debug rendering. */
+/** Component responsible for creating, replicating, and visualising unit patrol routes. */
 UCLASS(ClassGroup = (RTS), meta = (BlueprintSpawnableComponent))
 class JUPITERPLUGIN_API UUnitPatrolComponent : public UActorComponent
 {
@@ -36,124 +20,131 @@ public:
 
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-    /** Called when the player presses the right mouse button. Returns true when the event was consumed. */
+    /** Adds a patrol point to the locally edited route. */
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    void AddPendingPatrolPoint(const FVector& WorldLocation);
+
+    /** Clears the locally edited patrol. */
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    void ClearPendingPatrol();
+
+    /** Confirms the locally edited patrol and sends it to the server for replication. */
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    void ConfirmPendingPatrol(bool bLoop);
+
+    /** Enables or disables patrol spline visualisation on the owning client. */
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    void SetShowPatrols(bool bEnable);
+
+    /** Returns the currently replicated patrol routes. */
+    UFUNCTION(BlueprintPure, Category = "RTS|Patrol")
+    const TArray<FPatrolRoute>& GetActiveRoutes() const { return ActiveRoutes; }
+
+    /** Handles right mouse button presses. Returns true if the event was consumed. */
     bool HandleRightClickPressed(bool bAltDown);
 
-    /** Called when the player releases the right mouse button. Returns true when the event was consumed. */
+    /** Handles right mouse button releases. Returns true if the event was consumed. */
     bool HandleRightClickReleased(bool bAltDown);
 
-    /** Handles left mouse interactions. Returns true when the component consumed the event. */
+    /** Handles left mouse button events. Returns true if the event was consumed. */
     bool HandleLeftClick(EInputEvent InputEvent);
 
-    /** Returns true when a patrol is currently being edited. */
+    /** Returns true when a patrol route is currently being edited locally. */
     bool IsCreatingPatrol() const { return bIsCreatingPatrol; }
 
 protected:
-    //------------------------------------ Initialization ------------------------------------
-    void CacheDependencies();
+    /** RPC used to confirm a patrol on the server. */
+    UFUNCTION(Server, Reliable)
+    void ServerConfirmPatrol(const TArray<FVector>& RoutePoints, bool bLoop);
+
+    /** CLIENT: Updates spline visualisation when routes are replicated. */
+    UFUNCTION()
+    void OnRep_ActiveRoutes();
+
+    /** CLIENT: Rebuilds spline components that visualise replicated patrol routes. */
+    void UpdateSplineVisualisation();
+
+    /** CLIENT: Updates the preview spline used while editing a local patrol. */
+    void UpdatePendingSpline();
+
+    /** Removes all dynamically created spline components that represent active routes. */
+    void ClearSplineComponents();
+
+    /** CLIENT: Destroys the pending preview spline if present. */
+    void DestroyPendingSpline();
+
+    /** Returns true when the owning actor is locally controlled. */
     bool IsLocallyControlled() const;
 
-    //------------------------------------ Input Handling ------------------------------------
+    // SERVER: Called when a client confirms a patrol route
+    void HandleServerPatrolConfirmation(const TArray<FVector>& RoutePoints, bool bLoop);
+
+    /** Begins editing a new patrol route. */
     bool StartPatrolCreation();
-    bool ConfirmPatrolCreation();
+
+    /** Attempts to add another patrol point based on the current cursor location. */
     bool TryAddPatrolPoint();
+
+    /** Finalises the pending patrol route and sends it to the server. */
+    void ConfirmPatrolCreation();
+
+    /** Cancels the currently edited patrol route. */
     void CancelPatrolCreation();
 
-    //------------------------------------ Patrol Management ------------------------------------
-    void RegisterPatrolRoute(const FPatrolRoute& NewRoute);
-    void IssuePatrolCommands(FPatrolRoute& Route);
-    void RemoveUnitsFromRoutes(const TArray<AActor*>& UnitsToRemove);
-    void CleanupActiveRoutes();
-    void RefreshSelectionCache(const TArray<AActor*>& SelectedActors);
-    bool SelectionContainsRouteUnits(const FPatrolRoute& Route) const;
-    bool TryGetCursorLocation(FVector& OutLocation) const;
-    APlayerController* ResolveOwningController() const;
-
-    //------------------------------------ Debug Drawing ------------------------------------
-    void DrawPendingRoute() const;
-    void DrawActiveRoutes() const;
-    void DrawRoute(const TArray<FVector>& Points, bool bLoop, const FColor& Color) const;
-
-    UFUNCTION()
-    void HandleSelectionChanged(const TArray<AActor*>& SelectedActors);
-
-    UFUNCTION()
-    void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& CommandData);
+    /** Retrieves the cursor location projected onto the world. */
+    bool TryGetCursorLocation(FVector& OutLocation);
 
 protected:
-    /** Cached reference to the owning player camera pawn. */
-    UPROPERTY()
-    TObjectPtr<APlayerCamera> CachedPlayerCamera;
+    /** SERVER/CLIENT: Replicated list of active patrol routes. */
+    UPROPERTY(ReplicatedUsing = OnRep_ActiveRoutes)
+    TArray<FPatrolRoute> ActiveRoutes;
 
-    /** Cached reference to the selection component that provides cursor projection. */
-    UPROPERTY()
-    TObjectPtr<UUnitSelectionComponent> CachedSelectionComponent;
+    /** CLIENT: Runtime spline components created to render the active routes. */
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<USplineComponent>> ActiveSplines;
 
-    /** Cached reference to the order component to react to manual orders. */
-    UPROPERTY()
-    TObjectPtr<UUnitOrderComponent> CachedOrderComponent;
+    /** CLIENT: Spline used for previewing the locally edited patrol. */
+    UPROPERTY(Transient)
+    TObjectPtr<USplineComponent> PendingSpline;
 
-    /** All confirmed patrol routes currently active. */
-    UPROPERTY()
-    TArray<FPatrolRoute> ActivePatrolRoutes;
-
-    /** Currently selected units used for visualising patrols. */
-    UPROPERTY()
-    TArray<TWeakObjectPtr<AActor>> CachedSelection;
-
-    /** Temporary patrol points while the player is editing a patrol. */
-    UPROPERTY()
+    /** CLIENT: Locally edited patrol points prior to confirmation. */
+    UPROPERTY(Transient)
     TArray<FVector> PendingPatrolPoints;
 
-    /** Units assigned to the patrol currently being edited. */
-    UPROPERTY()
-    TArray<TWeakObjectPtr<AActor>> PendingAssignedUnits;
+    /** CLIENT: When false, spline visualisations are hidden. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
+    bool bShowPatrols = true;
 
-    /** When true a patrol is currently being created. */
-    UPROPERTY()
-    bool bIsCreatingPatrol = false;
+    /** CLIENT: Height offset applied to spline points to avoid z-fighting. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
+    float SplineHeightOffset = 20.f;
 
-    /** Tracks whether the last alt+click should confirm on release even if alt is no longer pressed. */
-    UPROPERTY()
-    bool bPendingConfirmationClick = false;
+    /** Minimum number of points required before creating a spline preview. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
+    int32 MinimumPointsForPreview = 2;
 
-    /** True while waiting for the release associated with a left-click cancel to be consumed. */
-    UPROPERTY()
-    bool bConsumePendingLeftRelease = false;
-
-    /** Cached cursor position used for drawing preview lines. */
-    UPROPERTY()
-    FVector CachedCursorLocation = FVector::ZeroVector;
-
-    /** Tracks whether the cached cursor location is valid for preview rendering. */
-    UPROPERTY()
-    bool bHasCursorLocation = false;
-
-    //------------------------------------ Settings ------------------------------------
-    /** Distance threshold (in uu) used to detect loop closures. */
+    /** Distance threshold used to detect loop closures when confirming a patrol. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
     float LoopClosureThreshold = 200.f;
 
-    /** Radius of the debug spheres drawn for patrol points. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
-    float DebugPointRadius = 40.f;
+    /** Cached reference to the unit selection component for cursor projection. */
+    UPROPERTY()
+    TObjectPtr<UUnitSelectionComponent> CachedSelectionComponent;
 
-    /** Thickness of the debug lines used to visualise patrol paths. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
-    float DebugLineThickness = 3.f;
+    /** Tracks whether a patrol route is currently being created. */
+    UPROPERTY(Transient)
+    bool bIsCreatingPatrol = false;
 
-    /** Colour applied to pending patrol debug visuals. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
-    FColor PendingRouteColor = FColor::Yellow;
+    /** When true, the next right-click release will confirm the pending patrol. */
+    UPROPERTY(Transient)
+    bool bPendingConfirmationClick = false;
 
-    /** Colour applied to confirmed patrol routes when one of their units is selected. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
-    FColor ActiveRouteColor = FColor::Cyan;
+    /** Used to consume the left mouse button release after cancelling a patrol. */
+    UPROPERTY(Transient)
+    bool bConsumePendingLeftRelease = false;
 
-    /** When true, a line preview towards the current cursor location is drawn while editing a patrol. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
-    bool bDrawCursorPreview = true;
+public:
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };
 

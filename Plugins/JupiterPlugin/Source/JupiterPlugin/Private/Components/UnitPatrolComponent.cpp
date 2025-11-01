@@ -1,89 +1,96 @@
 #include "Components/UnitPatrolComponent.h"
 
-#include "DrawDebugHelpers.h"
-#include "Player/PlayerCamera.h"
-#include "Components/UnitOrderComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/UnitSelectionComponent.h"
-#include "Interfaces/Selectable.h"
-#include "GameFramework/PlayerController.h"
+#include "Engine/EngineTypes.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Net/UnrealNetwork.h"
 #include "Math/UnrealMathUtility.h"
 
 namespace
 {
-    constexpr float DebugDrawDuration = 0.f; // Draw every frame without persistence.
+    /** Default colour assigned to locally edited patrol previews. */
+    constexpr FColor PendingRouteColour = FColor::Yellow;
 }
 
 UUnitPatrolComponent::UUnitPatrolComponent()
 {
-    PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.bCanEverTick = false;
     bAutoActivate = true;
+    SetIsReplicatedByDefault(true);
 }
 
 void UUnitPatrolComponent::BeginPlay()
 {
     Super::BeginPlay();
 
-    CacheDependencies();
-
-    if (CachedSelectionComponent)
+    if (AActor* OwnerActor = GetOwner())
     {
-        CachedSelectionComponent->OnSelectionChanged.AddDynamic(this, &UUnitPatrolComponent::HandleSelectionChanged);
-        RefreshSelectionCache(CachedSelectionComponent->GetSelectedActors());
+        CachedSelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
     }
 
-    if (CachedOrderComponent)
-    {
-        CachedOrderComponent->OnOrdersDispatched.AddDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
-    }
+    // CLIENT: ensure we start with a clean visualisation state
+    UpdateSplineVisualisation();
+    UpdatePendingSpline();
 }
 
 void UUnitPatrolComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    if (CachedSelectionComponent)
-    {
-        CachedSelectionComponent->OnSelectionChanged.RemoveDynamic(this, &UUnitPatrolComponent::HandleSelectionChanged);
-    }
-
-    if (CachedOrderComponent)
-    {
-        CachedOrderComponent->OnOrdersDispatched.RemoveDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
-    }
+    ClearSplineComponents();
+    DestroyPendingSpline();
 
     Super::EndPlay(EndPlayReason);
 }
 
-void UUnitPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+void UUnitPatrolComponent::AddPendingPatrolPoint(const FVector& WorldLocation)
 {
-    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
     if (!IsLocallyControlled())
     {
         return;
     }
 
-    if (CachedSelectionComponent)
+    PendingPatrolPoints.Add(WorldLocation);
+    bIsCreatingPatrol = true;
+    UpdatePendingSpline();
+}
+
+void UUnitPatrolComponent::ClearPendingPatrol()
+{
+    PendingPatrolPoints.Reset();
+    DestroyPendingSpline();
+    bIsCreatingPatrol = false;
+    bPendingConfirmationClick = false;
+    bConsumePendingLeftRelease = false;
+}
+
+void UUnitPatrolComponent::ConfirmPendingPatrol(bool bLoop)
+{
+    if (!IsLocallyControlled())
     {
-        FVector CursorLocation;
-        if (TryGetCursorLocation(CursorLocation))
-        {
-            CachedCursorLocation = CursorLocation;
-            bHasCursorLocation = true;
-        }
-        else
-        {
-            bHasCursorLocation = false;
-        }
-    }
-    else
-    {
-        bHasCursorLocation = false;
+        return;
     }
 
-    CleanupActiveRoutes();
+    if (PendingPatrolPoints.Num() < MinimumPointsForPreview)
+    {
+        CancelPatrolCreation();
+        return;
+    }
 
-    DrawPendingRoute();
-    DrawActiveRoutes();
+    ServerConfirmPatrol(PendingPatrolPoints, bLoop);
+    PendingPatrolPoints.Reset();
+    DestroyPendingSpline();
+    bIsCreatingPatrol = false;
+    bPendingConfirmationClick = false;
+}
+
+void UUnitPatrolComponent::SetShowPatrols(bool bEnable)
+{
+    bShowPatrols = bEnable;
+    UpdatePendingSpline();
+    UpdateSplineVisualisation();
 }
 
 bool UUnitPatrolComponent::HandleRightClickPressed(bool bAltDown)
@@ -98,13 +105,17 @@ bool UUnitPatrolComponent::HandleRightClickPressed(bool bAltDown)
         if (bIsCreatingPatrol)
         {
             bPendingConfirmationClick = true;
-            return true; // Consume the event so default handling does not interfere.
+            return true;
         }
 
         if (StartPatrolCreation())
         {
-            // The very first Alt+Right click should also place the initial patrol point.
-            TryAddPatrolPoint();
+            const bool bPlacedPoint = TryAddPatrolPoint();
+            if (!bPlacedPoint)
+            {
+                CancelPatrolCreation();
+            }
+
             return true;
         }
 
@@ -139,7 +150,7 @@ bool UUnitPatrolComponent::HandleRightClickReleased(bool bAltDown)
 
     if (bIsCreatingPatrol)
     {
-        return true; // Swallow the release to avoid issuing move orders while editing.
+        return true;
     }
 
     return false;
@@ -175,106 +186,228 @@ bool UUnitPatrolComponent::HandleLeftClick(EInputEvent InputEvent)
     return bIsCreatingPatrol;
 }
 
-void UUnitPatrolComponent::CacheDependencies()
+void UUnitPatrolComponent::ServerConfirmPatrol_Implementation(const TArray<FVector>& RoutePoints, bool bLoop)
 {
-    CachedPlayerCamera = Cast<APlayerCamera>(GetOwner());
+    HandleServerPatrolConfirmation(RoutePoints, bLoop);
+}
 
-    if (CachedPlayerCamera)
+void UUnitPatrolComponent::OnRep_ActiveRoutes()
+{
+    // CLIENT: Updates spline visualization when routes are replicated
+    UpdateSplineVisualisation();
+}
+
+void UUnitPatrolComponent::UpdateSplineVisualisation()
+{
+    ClearSplineComponents();
+
+    if (!bShowPatrols)
     {
-        if (CachedPlayerCamera->SelectionComponent)
+        return;
+    }
+
+    const AActor* OwnerActor = GetOwner();
+    if (!OwnerActor)
+    {
+        return;
+    }
+
+    UWorld* World = OwnerActor->GetWorld();
+    if (!World || World->GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    for (const FPatrolRoute& Route : ActiveRoutes)
+    {
+        if (Route.PatrolPoints.Num() == 0)
         {
-            CachedSelectionComponent = CachedPlayerCamera->SelectionComponent;
-        }
-        else
-        {
-            CachedSelectionComponent = CachedPlayerCamera->FindComponentByClass<UUnitSelectionComponent>();
+            continue;
         }
 
-        if (CachedPlayerCamera->OrderComponent)
+        USplineComponent* Spline = NewObject<USplineComponent>(OwnerActor);
+        if (!Spline)
         {
-            CachedOrderComponent = CachedPlayerCamera->OrderComponent;
+            continue;
         }
-        else
+
+        Spline->SetMobility(EComponentMobility::Movable);
+        Spline->bIsEditorOnly = false;
+        Spline->SetClosedLoop(Route.bIsLoop, true);
+        Spline->SetDrawDebug(true);
+        Spline->SetDrawDebugColor(FLinearColor(Route.RouteColor));
+#if WITH_EDITORONLY_DATA
+        Spline->SetSplineColor(FLinearColor(Route.RouteColor));
+#endif
+
+        if (USceneComponent* OwnerRoot = OwnerActor->GetRootComponent())
         {
-            CachedOrderComponent = CachedPlayerCamera->FindComponentByClass<UUnitOrderComponent>();
+            Spline->SetupAttachment(OwnerRoot);
+        }
+
+        Spline->RegisterComponent();
+        Spline->ClearSplinePoints(false);
+
+        for (const FVector& PatrolPoint : Route.PatrolPoints)
+        {
+            const FVector ElevatedPoint = PatrolPoint + FVector(0.f, 0.f, SplineHeightOffset);
+            Spline->AddSplinePoint(ElevatedPoint, ESplineCoordinateSpace::World, false);
+        }
+
+        Spline->UpdateSpline();
+        ActiveSplines.Add(Spline);
+    }
+}
+
+void UUnitPatrolComponent::UpdatePendingSpline()
+{
+    if (!IsLocallyControlled())
+    {
+        DestroyPendingSpline();
+        return;
+    }
+
+    if (!bShowPatrols || PendingPatrolPoints.Num() < MinimumPointsForPreview)
+    {
+        DestroyPendingSpline();
+        return;
+    }
+
+    AActor* OwnerActor = GetOwner();
+    if (!OwnerActor)
+    {
+        DestroyPendingSpline();
+        return;
+    }
+
+    UWorld* World = OwnerActor->GetWorld();
+    if (!World || World->GetNetMode() == NM_DedicatedServer)
+    {
+        DestroyPendingSpline();
+        return;
+    }
+
+    if (!PendingSpline)
+    {
+        PendingSpline = NewObject<USplineComponent>(OwnerActor);
+        if (!PendingSpline)
+        {
+            return;
+        }
+
+        PendingSpline->SetMobility(EComponentMobility::Movable);
+        PendingSpline->bIsEditorOnly = false;
+        PendingSpline->SetDrawDebug(true);
+        PendingSpline->SetDrawDebugColor(FLinearColor(PendingRouteColour));
+#if WITH_EDITORONLY_DATA
+        PendingSpline->SetSplineColor(FLinearColor(PendingRouteColour));
+#endif
+
+        if (USceneComponent* OwnerRoot = OwnerActor->GetRootComponent())
+        {
+            PendingSpline->SetupAttachment(OwnerRoot);
+        }
+
+        PendingSpline->RegisterComponent();
+    }
+
+    PendingSpline->SetClosedLoop(false, false);
+    PendingSpline->ClearSplinePoints(false);
+
+    for (const FVector& PatrolPoint : PendingPatrolPoints)
+    {
+        const FVector ElevatedPoint = PatrolPoint + FVector(0.f, 0.f, SplineHeightOffset);
+        PendingSpline->AddSplinePoint(ElevatedPoint, ESplineCoordinateSpace::World, false);
+    }
+
+    PendingSpline->UpdateSpline();
+}
+
+void UUnitPatrolComponent::ClearSplineComponents()
+{
+    for (USplineComponent* Spline : ActiveSplines)
+    {
+        if (IsValid(Spline))
+        {
+            Spline->DestroyComponent();
         }
     }
-    else if (AActor* OwnerActor = GetOwner())
+
+    ActiveSplines.Reset();
+}
+
+void UUnitPatrolComponent::DestroyPendingSpline()
+{
+    if (PendingSpline && IsValid(PendingSpline))
     {
-        CachedSelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
-        CachedOrderComponent = OwnerActor->FindComponentByClass<UUnitOrderComponent>();
+        PendingSpline->DestroyComponent();
     }
-    else
-    {
-        CachedSelectionComponent = nullptr;
-        CachedOrderComponent = nullptr;
-    }
+
+    PendingSpline = nullptr;
 }
 
 bool UUnitPatrolComponent::IsLocallyControlled() const
 {
-    const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-    return OwnerPawn && OwnerPawn->IsLocallyControlled();
+    if (const APawn* PawnOwner = Cast<APawn>(GetOwner()))
+    {
+        return PawnOwner->IsLocallyControlled();
+    }
+
+    if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwner()))
+    {
+        return PlayerController->IsLocalController();
+    }
+
+    return false;
+}
+
+void UUnitPatrolComponent::HandleServerPatrolConfirmation(const TArray<FVector>& RoutePoints, bool bLoop)
+{
+    if (!GetOwner() || RoutePoints.Num() == 0)
+    {
+        return;
+    }
+
+    if (!GetOwner()->HasAuthority())
+    {
+        return;
+    }
+
+    FPatrolRoute NewRoute;
+    NewRoute.PatrolPoints = RoutePoints;
+    NewRoute.bIsLoop = bLoop;
+    NewRoute.RouteColor = bLoop ? FColor::Green : FColor::Cyan;
+
+    ActiveRoutes.Add(NewRoute);
+
+    // SERVER: keep listen servers in sync with their own visualisation
+    UpdateSplineVisualisation();
 }
 
 bool UUnitPatrolComponent::StartPatrolCreation()
 {
+    if (!IsLocallyControlled())
+    {
+        return false;
+    }
+
+    if (!CachedSelectionComponent)
+    {
+        if (AActor* OwnerActor = GetOwner())
+        {
+            CachedSelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
+        }
+    }
+
     if (!CachedSelectionComponent)
     {
         return false;
     }
 
-    TArray<AActor*> SelectedActors = CachedSelectionComponent->GetSelectedActors();
-    SelectedActors.RemoveAll([](AActor* Actor) { return !IsValid(Actor); });
-
-    if (SelectedActors.Num() == 0)
-    {
-        return false;
-    }
-
     PendingPatrolPoints.Reset();
-    PendingAssignedUnits.Reset();
-    for (AActor* Actor : SelectedActors)
-    {
-        PendingAssignedUnits.Add(Actor);
-    }
-
     bIsCreatingPatrol = true;
     bPendingConfirmationClick = false;
-
-    return true;
-}
-
-bool UUnitPatrolComponent::ConfirmPatrolCreation()
-{
-    if (!bIsCreatingPatrol)
-    {
-        return false;
-    }
-
-    if (PendingPatrolPoints.Num() < 2)
-    {
-        CancelPatrolCreation();
-        return true;
-    }
-
-    FPatrolRoute NewRoute;
-    NewRoute.PatrolPoints = PendingPatrolPoints;
-
-    const bool bShouldLoop = FVector::Dist(PendingPatrolPoints[0], PendingPatrolPoints.Last()) <= LoopClosureThreshold;
-    NewRoute.bIsLoop = bShouldLoop;
-
-    for (const TWeakObjectPtr<AActor>& WeakActor : PendingAssignedUnits)
-    {
-        if (WeakActor.IsValid())
-        {
-            NewRoute.AssignedUnits.Add(WeakActor.Get());
-        }
-    }
-
-    RegisterPatrolRoute(NewRoute);
-
-    CancelPatrolCreation();
+    UpdatePendingSpline();
     return true;
 }
 
@@ -283,166 +416,66 @@ bool UUnitPatrolComponent::TryAddPatrolPoint()
     FVector CursorLocation;
     if (!TryGetCursorLocation(CursorLocation))
     {
-        return true;
+        return false;
     }
 
-    if (!PendingPatrolPoints.IsEmpty())
+    AddPendingPatrolPoint(CursorLocation);
+    return true;
+}
+
+void UUnitPatrolComponent::ConfirmPatrolCreation()
+{
+    if (!IsLocallyControlled())
     {
-        const float Distance = FVector::Dist(PendingPatrolPoints.Last(), CursorLocation);
-        if (Distance <= KINDA_SMALL_NUMBER)
+        return;
+    }
+
+    if (!bIsCreatingPatrol)
+    {
+        return;
+    }
+
+    if (PendingPatrolPoints.Num() < MinimumPointsForPreview)
+    {
+        CancelPatrolCreation();
+        return;
+    }
+
+    bool bLoop = false;
+    if (PendingPatrolPoints.Num() >= 3)
+    {
+        const FVector& FirstPoint = PendingPatrolPoints[0];
+        const FVector& LastPoint = PendingPatrolPoints.Last();
+        if (FVector::DistSquared(FirstPoint, LastPoint) <= FMath::Square(LoopClosureThreshold))
         {
-            return true; // Ignore negligible movements but consume the click.
+            bLoop = true;
+            PendingPatrolPoints.Last() = FirstPoint;
         }
     }
 
-    PendingPatrolPoints.Add(CursorLocation);
-    return true;
+    ConfirmPendingPatrol(bLoop);
 }
 
 void UUnitPatrolComponent::CancelPatrolCreation()
 {
-    bIsCreatingPatrol = false;
-    bPendingConfirmationClick = false;
-    bConsumePendingLeftRelease = false;
-    PendingPatrolPoints.Reset();
-    PendingAssignedUnits.Reset();
+    ClearPendingPatrol();
 }
 
-void UUnitPatrolComponent::RegisterPatrolRoute(const FPatrolRoute& NewRoute)
+bool UUnitPatrolComponent::TryGetCursorLocation(FVector& OutLocation)
 {
-    FPatrolRoute SanitizedRoute = NewRoute;
-    SanitizedRoute.AssignedUnits.RemoveAll([](AActor* Actor)
-    {
-        return !IsValid(Actor);
-    });
-
-    SanitizedRoute.PatrolPoints.RemoveAllSwap([](const FVector& Point)
-    {
-        return !FMath::IsFinite(Point.X) || !FMath::IsFinite(Point.Y) || !FMath::IsFinite(Point.Z);
-    }, EAllowShrinking::No);
-
-    if (SanitizedRoute.AssignedUnits.IsEmpty() || SanitizedRoute.PatrolPoints.Num() < 2)
-    {
-        return;
-    }
-
-    FPatrolRoute& StoredRoute = ActivePatrolRoutes.Add_GetRef(SanitizedRoute);
-    IssuePatrolCommands(StoredRoute);
-    CleanupActiveRoutes();
-}
-
-void UUnitPatrolComponent::IssuePatrolCommands(FPatrolRoute& Route)
-{
-    APlayerController* RequestingController = ResolveOwningController();
-
-    for (int32 Index = Route.AssignedUnits.Num() - 1; Index >= 0; --Index)
-    {
-        AActor* Unit = Route.AssignedUnits[Index];
-        if (!IsValid(Unit) || !Unit->Implements<USelectable>())
-        {
-            Route.AssignedUnits.RemoveAt(Index);
-            continue;
-        }
-
-        FCommandData PatrolCommand;
-        PatrolCommand.RequestingController = RequestingController;
-        PatrolCommand.Type = ECommandType::CommandPatrol;
-        PatrolCommand.SourceLocation = Route.PatrolPoints[0];
-        PatrolCommand.Location = Route.PatrolPoints[0];
-        PatrolCommand.Rotation = FRotator::ZeroRotator;
-        PatrolCommand.Target = nullptr;
-        PatrolCommand.Radius = 0.f;
-        PatrolCommand.PatrolPath = Route.PatrolPoints;
-        PatrolCommand.bPatrolLoop = Route.bIsLoop;
-
-        ISelectable::Execute_CommandMove(Unit, PatrolCommand);
-    }
-}
-
-void UUnitPatrolComponent::RemoveUnitsFromRoutes(const TArray<AActor*>& UnitsToRemove)
-{
-    if (UnitsToRemove.IsEmpty())
-    {
-        return;
-    }
-
-    for (FPatrolRoute& Route : ActivePatrolRoutes)
-    {
-        Route.AssignedUnits.RemoveAll([&UnitsToRemove](AActor* Actor)
-        {
-            return !IsValid(Actor) || UnitsToRemove.Contains(Actor);
-        });
-    }
-}
-
-void UUnitPatrolComponent::CleanupActiveRoutes()
-{
-    for (int32 RouteIndex = ActivePatrolRoutes.Num() - 1; RouteIndex >= 0; --RouteIndex)
-    {
-        FPatrolRoute& Route = ActivePatrolRoutes[RouteIndex];
-
-        Route.AssignedUnits.RemoveAll([](AActor* Actor)
-        {
-            return !IsValid(Actor);
-        });
-
-        Route.PatrolPoints.RemoveAllSwap([](const FVector& Point)
-        {
-            return !FMath::IsFinite(Point.X) || !FMath::IsFinite(Point.Y) || !FMath::IsFinite(Point.Z);
-        }, EAllowShrinking::No);
-
-        if (Route.AssignedUnits.IsEmpty() || Route.PatrolPoints.Num() < 2)
-        {
-            ActivePatrolRoutes.RemoveAt(RouteIndex);
-        }
-    }
-}
-
-void UUnitPatrolComponent::RefreshSelectionCache(const TArray<AActor*>& SelectedActors)
-{
-    CachedSelection.Reset();
-    for (AActor* Actor : SelectedActors)
-    {
-        if (IsValid(Actor))
-        {
-            CachedSelection.Add(Actor);
-        }
-    }
-}
-
-bool UUnitPatrolComponent::SelectionContainsRouteUnits(const FPatrolRoute& Route) const
-{
-    if (CachedSelection.IsEmpty())
+    if (!IsLocallyControlled())
     {
         return false;
     }
 
-    for (const TWeakObjectPtr<AActor>& WeakSelected : CachedSelection)
+    if (!CachedSelectionComponent)
     {
-        if (!WeakSelected.IsValid())
+        if (AActor* OwnerActor = GetOwner())
         {
-            continue;
-        }
-
-        for (AActor* Unit : Route.AssignedUnits)
-        {
-            if (!IsValid(Unit))
-            {
-                continue;
-            }
-
-            if (Unit == WeakSelected.Get())
-            {
-                return true;
-            }
+            CachedSelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
         }
     }
 
-    return false;
-}
-
-bool UUnitPatrolComponent::TryGetCursorLocation(FVector& OutLocation) const
-{
     if (!CachedSelectionComponent)
     {
         return false;
@@ -458,111 +491,10 @@ bool UUnitPatrolComponent::TryGetCursorLocation(FVector& OutLocation) const
     return true;
 }
 
-void UUnitPatrolComponent::DrawPendingRoute() const
+void UUnitPatrolComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-    if (!bIsCreatingPatrol || PendingPatrolPoints.Num() == 0)
-    {
-        return;
-    }
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-    DrawRoute(PendingPatrolPoints, false, PendingRouteColor);
-
-    if (bDrawCursorPreview && PendingPatrolPoints.Num() > 0 && bHasCursorLocation)
-    {
-        if (UWorld* World = GetWorld())
-        {
-            const FVector LastPoint = PendingPatrolPoints.Last();
-            DrawDebugLine(World, LastPoint, CachedCursorLocation, PendingRouteColor, false, DebugDrawDuration, 0, DebugLineThickness);
-        }
-    }
-}
-
-void UUnitPatrolComponent::DrawActiveRoutes() const
-{
-    if (ActivePatrolRoutes.Num() == 0)
-    {
-        return;
-    }
-
-    for (const FPatrolRoute& Route : ActivePatrolRoutes)
-    {
-        if (!SelectionContainsRouteUnits(Route))
-        {
-            continue;
-        }
-
-        DrawRoute(Route.PatrolPoints, Route.bIsLoop, ActiveRouteColor);
-    }
-}
-
-void UUnitPatrolComponent::DrawRoute(const TArray<FVector>& Points, bool bLoop, const FColor& Color) const
-{
-    if (Points.Num() == 0)
-    {
-        return;
-    }
-
-    if (UWorld* World = GetWorld())
-    {
-        for (int32 Index = 0; Index < Points.Num(); ++Index)
-        {
-            const FVector& Point = Points[Index];
-            DrawDebugSphere(World, Point, DebugPointRadius, 16, Color, false, DebugDrawDuration);
-
-            const int32 NextIndex = Index + 1;
-            if (NextIndex < Points.Num())
-            {
-                DrawDebugLine(World, Point, Points[NextIndex], Color, false, DebugDrawDuration, 0, DebugLineThickness);
-            }
-        }
-
-        if (bLoop && Points.Num() > 1)
-        {
-            DrawDebugLine(World, Points.Last(), Points[0], Color, false, DebugDrawDuration, 0, DebugLineThickness);
-        }
-    }
-}
-
-void UUnitPatrolComponent::HandleSelectionChanged(const TArray<AActor*>& SelectedActors)
-{
-    RefreshSelectionCache(SelectedActors);
-
-    if (bIsCreatingPatrol)
-    {
-        PendingAssignedUnits.Reset();
-        for (AActor* Actor : SelectedActors)
-        {
-            if (IsValid(Actor))
-            {
-                PendingAssignedUnits.Add(Actor);
-            }
-        }
-    }
-}
-
-void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& CommandData)
-{
-    if (CommandData.Type == ECommandType::CommandPatrol)
-    {
-        return;
-    }
-
-    RemoveUnitsFromRoutes(AffectedUnits);
-    CleanupActiveRoutes();
-}
-
-APlayerController* UUnitPatrolComponent::ResolveOwningController() const
-{
-    if (CachedPlayerCamera)
-    {
-        return Cast<APlayerController>(CachedPlayerCamera->GetController());
-    }
-
-    if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
-    {
-        return Cast<APlayerController>(OwnerPawn->GetController());
-    }
-
-    return nullptr;
+    DOREPLIFETIME(UUnitPatrolComponent, ActiveRoutes);
 }
 
