@@ -2,9 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "InputCoreTypes.h"
+#include "Data/AiData.h"
 #include "UnitPatrolComponent.generated.h"
 
 class ULineBatchComponent;
+class UUnitOrderComponent;
+class UUnitSelectionComponent;
 
 /** Structure représentant une route de patrouille (répliquée). */
 USTRUCT(BlueprintType)
@@ -51,6 +55,15 @@ public:
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    /** Handles left mouse button events forwarded by the player camera. */
+    bool HandleLeftClick(EInputEvent InputEvent);
+
+    /** Handles the right mouse button being pressed. */
+    bool HandleRightClickPressed(bool bAltDown);
+
+    /** Handles the right mouse button being released. */
+    bool HandleRightClickReleased(bool bAltDown);
+
 protected:
     // === Internal Helpers ===
     void EnsureLineBatchComponent();
@@ -81,6 +94,20 @@ protected:
     float GlobalVisualTime = 0.f;
     float VisualRefreshTimer = 0.f;
     bool bVisualsDirty = true;
+
+    // === Dependencies ===
+    UPROPERTY()
+    TObjectPtr<UUnitOrderComponent> OrderComponent = nullptr;
+
+    UPROPERTY()
+    TObjectPtr<UUnitSelectionComponent> SelectionComponent = nullptr;
+
+    // === Input Helpers ===
+    UFUNCTION()
+    void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& IssuedCommand);
+
+    void RefreshRoutesFromSelection();
+    void ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes);
 
     // === Settings ===
     UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")

@@ -1,6 +1,9 @@
 #include "Components/UnitPatrolComponent.h"
 #include "Components/LineBatchComponent.h"
+#include "Components/UnitOrderComponent.h"
+#include "Components/UnitSelectionComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Interfaces/Selectable.h"
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/Pawn.h"
 
@@ -15,10 +18,27 @@ void UUnitPatrolComponent::BeginPlay()
 {
     Super::BeginPlay();
     RoutesVisCache.SetNum(ActivePatrolRoutes.Num());
+
+    if (AActor* OwnerActor = GetOwner())
+    {
+        SelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
+        OrderComponent = OwnerActor->FindComponentByClass<UUnitOrderComponent>();
+
+        if (OrderComponent)
+        {
+            OrderComponent->OnOrdersDispatched.AddDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
+        }
+    }
 }
 
 void UUnitPatrolComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (OrderComponent)
+    {
+        OrderComponent->OnOrdersDispatched.RemoveDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
+        OrderComponent = nullptr;
+    }
+
     if (LineBatchComponent)
     {
         LineBatchComponent->DestroyComponent();
@@ -39,6 +59,37 @@ void UUnitPatrolComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(UUnitPatrolComponent, ActivePatrolRoutes);
+}
+
+bool UUnitPatrolComponent::HandleLeftClick(EInputEvent InputEvent)
+{
+    if (!IsLocallyControlled())
+    {
+        return false;
+    }
+
+    if (InputEvent == IE_Released)
+    {
+        RefreshRoutesFromSelection();
+    }
+
+    return false;
+}
+
+bool UUnitPatrolComponent::HandleRightClickPressed(bool /*bAltDown*/)
+{
+    return false;
+}
+
+bool UUnitPatrolComponent::HandleRightClickReleased(bool /*bAltDown*/)
+{
+    if (!IsLocallyControlled())
+    {
+        return false;
+    }
+
+    RefreshRoutesFromSelection();
+    return false;
 }
 
 bool UUnitPatrolComponent::IsLocallyControlled() const
@@ -264,5 +315,141 @@ void UUnitPatrolComponent::OnRep_ActivePatrolRoutes()
 {
     RoutesVisCache.SetNum(ActivePatrolRoutes.Num());
     for (FPatrolRouteVisCache& C : RoutesVisCache) C.GeometryHash = 0;
+    bVisualsDirty = true;
+}
+
+void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& IssuedCommand)
+{
+    if (IssuedCommand.Type != ECommandType::CommandPatrol)
+    {
+        if (!ActivePatrolRoutes.IsEmpty())
+        {
+            TArray<FPatrolRoute> EmptyRoutes;
+            ApplyRoutes(EmptyRoutes);
+        }
+        return;
+    }
+
+    TArray<FPatrolRoute> NewRoutes;
+    NewRoutes.Reserve(AffectedUnits.Num());
+
+    for (AActor* Unit : AffectedUnits)
+    {
+        if (!Unit || !Unit->Implements<USelectable>())
+        {
+            continue;
+        }
+
+        const FCommandData CurrentCommand = ISelectable::Execute_GetCurrentCommand(Unit);
+        if (CurrentCommand.Type != ECommandType::CommandPatrol || CurrentCommand.PatrolPath.Num() < 2)
+        {
+            continue;
+        }
+
+        FPatrolRoute Route;
+        Route.PatrolPoints = CurrentCommand.PatrolPath;
+        Route.bIsLoop = CurrentCommand.bPatrolLoop;
+        NewRoutes.Add(Route);
+    }
+
+    if (NewRoutes.IsEmpty() && IssuedCommand.PatrolPath.Num() >= 2)
+    {
+        FPatrolRoute Route;
+        Route.PatrolPoints = IssuedCommand.PatrolPath;
+        Route.bIsLoop = IssuedCommand.bPatrolLoop;
+        NewRoutes.Add(Route);
+    }
+
+    ApplyRoutes(NewRoutes);
+}
+
+void UUnitPatrolComponent::RefreshRoutesFromSelection()
+{
+    if (!SelectionComponent)
+    {
+        if (AActor* OwnerActor = GetOwner())
+        {
+            SelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
+        }
+    }
+
+    if (!SelectionComponent)
+    {
+        return;
+    }
+
+    const TArray<AActor*> SelectedActors = SelectionComponent->GetSelectedActors();
+
+    TArray<FPatrolRoute> NewRoutes;
+    NewRoutes.Reserve(SelectedActors.Num());
+
+    for (AActor* Unit : SelectedActors)
+    {
+        if (!Unit || !Unit->Implements<USelectable>())
+        {
+            continue;
+        }
+
+        const FCommandData CurrentCommand = ISelectable::Execute_GetCurrentCommand(Unit);
+        if (CurrentCommand.Type != ECommandType::CommandPatrol || CurrentCommand.PatrolPath.Num() < 2)
+        {
+            continue;
+        }
+
+        FPatrolRoute Route;
+        Route.PatrolPoints = CurrentCommand.PatrolPath;
+        Route.bIsLoop = CurrentCommand.bPatrolLoop;
+        NewRoutes.Add(Route);
+    }
+
+    ApplyRoutes(NewRoutes);
+}
+
+namespace
+{
+    bool AreRoutesEquivalent(const TArray<FPatrolRoute>& A, const TArray<FPatrolRoute>& B)
+    {
+        if (A.Num() != B.Num())
+        {
+            return false;
+        }
+
+        for (int32 Index = 0; Index < A.Num(); ++Index)
+        {
+            const FPatrolRoute& RouteA = A[Index];
+            const FPatrolRoute& RouteB = B[Index];
+
+            if (RouteA.bIsLoop != RouteB.bIsLoop || RouteA.PatrolPoints.Num() != RouteB.PatrolPoints.Num())
+            {
+                return false;
+            }
+
+            for (int32 PointIdx = 0; PointIdx < RouteA.PatrolPoints.Num(); ++PointIdx)
+            {
+                if (!RouteA.PatrolPoints[PointIdx].Equals(RouteB.PatrolPoints[PointIdx], KINDA_SMALL_NUMBER))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+}
+
+void UUnitPatrolComponent::ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes)
+{
+    if (AreRoutesEquivalent(ActivePatrolRoutes, NewRoutes))
+    {
+        return;
+    }
+
+    ActivePatrolRoutes = NewRoutes;
+    RoutesVisCache.SetNum(ActivePatrolRoutes.Num());
+    for (FPatrolRouteVisCache& Cache : RoutesVisCache)
+    {
+        Cache.GeometryHash = 0;
+    }
+
     bVisualsDirty = true;
 }
