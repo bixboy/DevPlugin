@@ -1,23 +1,21 @@
-#include "JupiterPlugin/Public/Player/PlayerCamera.h"
+#include "Player/PlayerCamera.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
-#include "Components/UnitFormationComponent.h"
-#include "Components/UnitOrderComponent.h"
-#include "Components/UnitSelectionComponent.h"
-#include "Components/UnitSpawnComponent.h"
-#include "Components/UnitPatrolComponent.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystemInterface.h"
-#include "EnhancedInputSubsystems.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "Kismet/KismetMathLibrary.h"
-#include "Utilities/PreviewPoseMesh.h"
+#include "Player/CameraCommandSystem.h"
+#include "Player/CameraMovementSystem.h"
+#include "Player/CameraPatrolSystem.h"
+#include "Player/CameraPreviewSystem.h"
+#include "Player/CameraSelectionSystem.h"
+#include "Player/CameraSpawnSystem.h"
 
 APlayerCamera::APlayerCamera()
 {
@@ -30,7 +28,6 @@ APlayerCamera::APlayerCamera()
 
     SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
     SpringArm->SetupAttachment(RootComponent);
-    SpringArm->TargetArmLength = 2000.0f;
     SpringArm->bDoCollisionTest = false;
 
     CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComponent"));
@@ -41,201 +38,351 @@ APlayerCamera::APlayerCamera()
     FormationComponent = CreateDefaultSubobject<UUnitFormationComponent>(TEXT("FormationComponent"));
     SpawnComponent = CreateDefaultSubobject<UUnitSpawnComponent>(TEXT("SpawnComponent"));
     PatrolComponent = CreateDefaultSubobject<UUnitPatrolComponent>(TEXT("PatrolComponent"));
-}
 
-UUnitSelectionComponent* APlayerCamera::GetSelectionComponentChecked() const
-{
-    if (SelectionComponent)
-    {
-        return SelectionComponent;
-    }
+    MovementSystemClass = UCameraMovementSystem::StaticClass();
+    SelectionSystemClass = UCameraSelectionSystem::StaticClass();
+    CommandSystemClass = UCameraCommandSystem::StaticClass();
+    PatrolSystemClass = UCameraPatrolSystem::StaticClass();
+    SpawnSystemClass = UCameraSpawnSystem::StaticClass();
+    PreviewSystemClass = UCameraPreviewSystem::StaticClass();
 
-    UUnitSelectionComponent* FoundComponent = FindComponentByClass<UUnitSelectionComponent>();
-    if (!FoundComponent)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("%s is missing a UnitSelectionComponent."), *GetPathName());
-        return nullptr;
-    }
-
-    const_cast<APlayerCamera*>(this)->SelectionComponent = FoundComponent;
-    return FoundComponent;
-}
 
 void APlayerCamera::BeginPlay()
 {
     Super::BeginPlay();
-
-    Player = Cast<APlayerController>(GetInstigatorController());
-    if (!Player)
-		return;
-
-    FInputModeGameAndUI InputMode;
-    InputMode.SetHideCursorDuringCapture(false);
-    Player->SetInputMode(InputMode);
-    Player->bShowMouseCursor = true;
-
-    CustomInitialized();
-
-    CreateSelectionBox();
-    CreateSphereRadius();
-
-    if (UUnitSelectionComponent* Selection = GetSelectionComponentChecked())
+    CachePlayerController();
+    if (Player.IsValid())
     {
-        Selection->CreateHud();
+        FInputModeGameAndUI InputMode;
+        InputMode.SetHideCursorDuringCapture(false);
+        Player->SetInputMode(InputMode);
+        Player->bShowMouseCursor = true;
     }
+    InitializeSystems();
 
-    if (FormationComponent && OrderComponent)
-    {
-        FormationComponent->OnFormationStateChanged.RemoveDynamic(OrderComponent, &UUnitOrderComponent::ReapplyCachedFormation);
-        FormationComponent->OnFormationStateChanged.AddDynamic(OrderComponent, &UUnitOrderComponent::ReapplyCachedFormation);
-    }
-
-    if (SpawnComponent)
-    {
-        SpawnComponent->OnUnitClassChanged.RemoveDynamic(this, &APlayerCamera::ShowUnitPreview);
-        SpawnComponent->OnUnitClassChanged.AddDynamic(this, &APlayerCamera::ShowUnitPreview);
-        SpawnComponent->OnSpawnCountChanged.RemoveDynamic(this, &APlayerCamera::HandleSpawnCountChanged);
-        SpawnComponent->OnSpawnCountChanged.AddDynamic(this, &APlayerCamera::HandleSpawnCountChanged);
-        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &APlayerCamera::HandleSpawnFormationChanged);
-        SpawnComponent->OnSpawnFormationChanged.AddDynamic(this, &APlayerCamera::HandleSpawnFormationChanged);
-        SpawnComponent->OnCustomFormationDimensionsChanged.RemoveDynamic(this, &APlayerCamera::HandleCustomFormationDimensionsChanged);
-        SpawnComponent->OnCustomFormationDimensionsChanged.AddDynamic(this, &APlayerCamera::HandleCustomFormationDimensionsChanged);
-    }
-
-    CreatePreviewMesh();
-}
-
-void APlayerCamera::CustomInitialized()
-{
-        TargetLocation = GetActorLocation();
-        TargetZoom = 3000.f;
-
-        const FRotator Rotation = SpringArm->GetRelativeRotation();
-        TargetRotation = FRotator(Rotation.Pitch + -50.f, Rotation.Yaw, 0.f);
-}
-
-void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
-{
-        Super::SetupPlayerInputComponent(Input);
-
-        if (auto* EnhancedInput = Cast<UEnhancedInputComponent>(Input))
-        {
-            // MOVEMENTS
-            EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_OnMove);
-            EnhancedInput->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_Zoom);
-
-            // ROTATION
-            EnhancedInput->BindAction(EnableRotateAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_EnableRotate);
-            EnhancedInput->BindAction(RotateHorizontalAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_RotateHorizontal);
-            EnhancedInput->BindAction(RotateVerticalAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_RotateVertical);
-
-            // SELECTION
-            EnhancedInput->BindAction(SelectAction, ETriggerEvent::Started, this, &APlayerCamera::Input_SquareSelection);
-            EnhancedInput->BindAction(SelectAction, ETriggerEvent::Completed, this, &APlayerCamera::Input_LeftMouseReleased);
-            EnhancedInput->BindAction(SelectHoldAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_LeftMouseInputHold);
-            EnhancedInput->BindAction(DoubleTap, ETriggerEvent::Completed, this, &APlayerCamera::Input_SelectAllUnitType);
-
-            // COMMANDS
-            EnhancedInput->BindAction(CommandAction, ETriggerEvent::Started, this, &APlayerCamera::HandleCommandActionStarted);
-            EnhancedInput->BindAction(CommandAction, ETriggerEvent::Completed, this, &APlayerCamera::Command);
-        	
-            EnhancedInput->BindAction(AltCommandAction, ETriggerEvent::Started, this, &APlayerCamera::Input_AltFunction);
-            EnhancedInput->BindAction(AltCommandAction, ETriggerEvent::Completed, this, &APlayerCamera::Input_AltFunctionRelease);
-            EnhancedInput->BindAction(AltCommandActionTrigger, ETriggerEvent::Triggered, this, &APlayerCamera::Input_AltFunctionHold);
-        	
-            EnhancedInput->BindAction(PatrolCommandAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_PatrolZone);
-            EnhancedInput->BindAction(DeleteCommandAction, ETriggerEvent::Triggered, this, &APlayerCamera::Input_OnDestroySelected);
-
-            // SPAWN
-            EnhancedInput->BindAction(SpawnUnitAction, ETriggerEvent::Completed, this, &APlayerCamera::Input_OnSpawnUnits);
-        }
-        else
-        {
-                UE_LOG(LogTemp, Warning, TEXT("EnhancedInputComponent is NOT valid"));
-        }
-}
 
 void APlayerCamera::Tick(float DeltaTime)
 {
-        Super::Tick(DeltaTime);
-
-        if (!Player)
+    Super::Tick(DeltaTime);
+    const auto TickSystem = [DeltaTime](auto* System)
+    {
+        if (System)
         {
-                return;
+            System->Tick(DeltaTime);
         }
+    };
+    TickSystem(MovementSystem);
+    TickSystem(SelectionSystem);
+    TickSystem(CommandSystem);
+    TickSystem(PatrolSystem);
+    TickSystem(SpawnSystem);
+    TickSystem(PreviewSystem);
 
-        EdgeScroll();
-        CameraBounds();
 
-        const float InterpolatedZoom = UKismetMathLibrary::FInterpTo(SpringArm->TargetArmLength, TargetZoom, DeltaTime, ZoomSpeed);
-        SpringArm->TargetArmLength = InterpolatedZoom;
-
-        const FRotator InterpolatedRotation = UKismetMathLibrary::RInterpTo(SpringArm->GetRelativeRotation(), TargetRotation, DeltaTime, CameraSpeed);
-        SpringArm->SetRelativeRotation(InterpolatedRotation);
-
-        bAltIsPressed = Player->GetInputKeyTimeDown(EKeys::LeftAlt) > 0.f || Player->GetInputKeyTimeDown(EKeys::RightAlt) > 0.f;
-
-        if (bIsInSpawnUnits)
-        {
-                PreviewFollowMouse();
-        }
-
-        if (bIsCommandActionHeld)
-        {
-                UpdateCommandPreview();
-        }
-}
-
-void APlayerCamera::UnPossessed()
+void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
 {
-        Super::UnPossessed();
+    Super::SetupPlayerInputComponent(Input);
+    if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(Input))
+    {
+        BindDefaultInputs(EnhancedInput);
+    }
 
-        if (auto* NewPlayer = Cast<APlayerController>(GetController()))
-        {
-                if (auto* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(NewPlayer->GetLocalPlayer()))
-                {
-                        InputSubsystem->RemoveMappingContext(InputMappingContext);
-                }
-        }
-
-        if (PreviewUnit)
-        {
-                PreviewUnit->Destroy();
-                PreviewUnit = nullptr;
-        }
-}
 
 void APlayerCamera::NotifyControllerChanged()
 {
-        if (const auto* PreviousPlayer = Cast<APlayerController>(PreviousController))
+    if (const APlayerController* PreviousPlayer = Cast<APlayerController>(PreviousController))
+    {
+        if (ULocalPlayer* LocalPlayer = PreviousPlayer->GetLocalPlayer())
         {
-                if (auto* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PreviousPlayer->GetLocalPlayer()))
-                {
-                        InputSubsystem->RemoveMappingContext(InputMappingContext);
-                }
+            if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
+            {
+                InputSubsystem->RemoveMappingContext(InputMappingContext);
+            }
         }
+    }
+    CachePlayerController();
+    if (Player.IsValid())
+    {
+        Player->InputYawScale_DEPRECATED = Player->InputPitchScale_DEPRECATED = Player->InputRollScale_DEPRECATED = 1.f;
 
-        if (auto* NewPlayer = Cast<APlayerController>(GetController()))
+        if (ULocalPlayer* LocalPlayer = Player->GetLocalPlayer())
         {
-                NewPlayer->InputYawScale_DEPRECATED = 1.0f;
-                NewPlayer->InputPitchScale_DEPRECATED = 1.0f;
-                NewPlayer->InputRollScale_DEPRECATED = 1.0f;
-
-                if (auto* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(NewPlayer->GetLocalPlayer()))
-                {
-                        FModifyContextOptions Options;
-                        Options.bNotifyUserSettings = true;
-
-                        InputSubsystem->AddMappingContext(InputMappingContext, 0, Options);
-                        UE_LOG(LogTemp, Display, TEXT("InputSubsystem is valid"));
-                        GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Red, TEXT("Adding Jupiter Mapping Context"));
-                }
-                else
-                {
-                        UE_LOG(LogTemp, Warning, TEXT("InputSubsystem is NOT valid"));
-                }
+            if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
+            {
+                FModifyContextOptions Options;
+                Options.bNotifyUserSettings = true;
+                InputSubsystem->AddMappingContext(InputMappingContext, 0, Options);
+            }
         }
+    }
+    Super::NotifyControllerChanged();
 
-        Super::NotifyControllerChanged();
+
+void APlayerCamera::UnPossessed()
+{
+    Super::UnPossessed();
+    if (APlayerController* CurrentController = Cast<APlayerController>(GetController()))
+    {
+        if (ULocalPlayer* LocalPlayer = CurrentController->GetLocalPlayer())
+        {
+            if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
+            {
+                InputSubsystem->RemoveMappingContext(InputMappingContext);
+            }
+        }
+    }
+
+
+void APlayerCamera::InitializeSystems()
+{
+    PreviewSystem = CreateSystem(PreviewSystemClass);
+    if (PreviewSystem)
+    {
+        PreviewSystem->Init(this);
+    }
+
+    MovementSystem = CreateSystem(MovementSystemClass);
+    if (MovementSystem)
+    {
+        MovementSystem->Init(this);
+    }
+
+    CommandSystem = CreateSystem(CommandSystemClass);
+    if (CommandSystem)
+    {
+        CommandSystem->Init(this);
+        if (PreviewSystem)
+        {
+            CommandSystem->SetPreviewSystem(PreviewSystem);
+        }
+    }
+
+    SpawnSystem = CreateSystem(SpawnSystemClass);
+    if (SpawnSystem)
+    {
+        SpawnSystem->Init(this);
+        if (PreviewSystem)
+        {
+            SpawnSystem->SetPreviewSystem(PreviewSystem);
+        }
+        if (CommandSystem)
+        {
+            SpawnSystem->SetCommandSystem(CommandSystem);
+        }
+    }
+
+    PatrolSystem = CreateSystem(PatrolSystemClass);
+    if (PatrolSystem)
+    {
+        PatrolSystem->Init(this);
+        if (CommandSystem)
+        {
+            PatrolSystem->SetCommandSystem(CommandSystem);
+            CommandSystem->SetPatrolSystem(PatrolSystem);
+        }
+    }
+
+    SelectionSystem = CreateSystem(SelectionSystemClass);
+    if (SelectionSystem)
+    {
+        SelectionSystem->Init(this);
+        if (CommandSystem)
+        {
+            SelectionSystem->SetCommandSystem(CommandSystem);
+        }
+        if (SpawnSystem)
+        {
+            SelectionSystem->SetSpawnSystem(SpawnSystem);
+        }
+        if (PatrolSystem)
+        {
+            SelectionSystem->SetPatrolSystem(PatrolSystem);
+            PatrolSystem->SetSelectionSystem(SelectionSystem);
+        }
+    }
+
+    if (CommandSystem && SpawnSystem)
+    {
+        CommandSystem->SetSpawnSystem(SpawnSystem);
+    }
+
+
+void APlayerCamera::BindDefaultInputs(UEnhancedInputComponent* EnhancedInput)
+{
+    if (!EnhancedInput)
+    {
+        return;
+    }
+    EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnMove);
+    EnhancedInput->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnZoom);
+    EnhancedInput->BindAction(EnableRotateAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnEnableRotate);
+    EnhancedInput->BindAction(RotateHorizontalAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnRotateHorizontal);
+    EnhancedInput->BindAction(RotateVerticalAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnRotateVertical);
+    EnhancedInput->BindAction(SelectAction, ETriggerEvent::Started, this, &APlayerCamera::OnSelectionPressed);
+    EnhancedInput->BindAction(SelectAction, ETriggerEvent::Completed, this, &APlayerCamera::OnSelectionReleased);
+    EnhancedInput->BindAction(SelectHoldAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnSelectionHold);
+    EnhancedInput->BindAction(DoubleTapAction, ETriggerEvent::Completed, this, &APlayerCamera::OnSelectAll);
+    EnhancedInput->BindAction(CommandAction, ETriggerEvent::Started, this, &APlayerCamera::OnCommandActionStarted);
+    EnhancedInput->BindAction(CommandAction, ETriggerEvent::Completed, this, &APlayerCamera::OnCommandActionCompleted);
+    EnhancedInput->BindAction(AltCommandAction, ETriggerEvent::Started, this, &APlayerCamera::OnAltPressed);
+    EnhancedInput->BindAction(AltCommandAction, ETriggerEvent::Completed, this, &APlayerCamera::OnAltReleased);
+    EnhancedInput->BindAction(AltCommandHoldAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnAltHold);
+    EnhancedInput->BindAction(PatrolCommandAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnPatrolTriggered);
+    EnhancedInput->BindAction(DeleteCommandAction, ETriggerEvent::Triggered, this, &APlayerCamera::OnDestroySelected);
+    EnhancedInput->BindAction(SpawnUnitAction, ETriggerEvent::Completed, this, &APlayerCamera::OnSpawnTriggered);
+
+
+void APlayerCamera::OnMove(const FInputActionValue& Value)
+{
+    if (MovementSystem)
+    {
+        MovementSystem->HandleMoveInput(Value);
+    }
+}
+
+void APlayerCamera::OnZoom(const FInputActionValue& Value)
+{
+    if (MovementSystem)
+    {
+        MovementSystem->HandleZoomInput(Value);
+    }
+}
+
+void APlayerCamera::OnRotateHorizontal(const FInputActionValue& Value)
+{
+    if (MovementSystem)
+    {
+        MovementSystem->HandleRotateHorizontal(Value);
+    }
+}
+
+void APlayerCamera::OnRotateVertical(const FInputActionValue& Value)
+{
+    if (MovementSystem)
+    {
+        MovementSystem->HandleRotateVertical(Value);
+    }
+}
+
+void APlayerCamera::OnEnableRotate(const FInputActionValue& Value)
+{
+    if (MovementSystem)
+    {
+        MovementSystem->HandleRotateToggle(Value);
+    }
+}
+
+void APlayerCamera::OnSelectionPressed()
+{
+    if (SelectionSystem)
+    {
+        SelectionSystem->HandleSelectionPressed();
+    }
+}
+
+void APlayerCamera::OnSelectionReleased()
+{
+    if (SelectionSystem)
+    {
+        SelectionSystem->HandleSelectionReleased();
+    }
+}
+
+void APlayerCamera::OnSelectionHold(const FInputActionValue& Value)
+{
+    if (SelectionSystem)
+    {
+        SelectionSystem->HandleSelectionHold(Value);
+    }
+}
+
+void APlayerCamera::OnSelectAll()
+{
+    if (SelectionSystem)
+    {
+        SelectionSystem->HandleSelectAll();
+    }
+}
+
+void APlayerCamera::OnCommandActionStarted()
+{
+    if (CommandSystem)
+    {
+        CommandSystem->HandleCommandActionStarted();
+    }
+}
+
+void APlayerCamera::OnCommandActionCompleted()
+{
+    if (CommandSystem)
+    {
+        CommandSystem->HandleCommandActionCompleted();
+    }
+}
+
+void APlayerCamera::OnAltPressed()
+{
+    if (PatrolSystem)
+    {
+        PatrolSystem->HandleAltPressed();
+    }
+}
+
+void APlayerCamera::OnAltReleased()
+{
+    if (PatrolSystem)
+    {
+        PatrolSystem->HandleAltReleased();
+    }
+}
+
+void APlayerCamera::OnAltHold(const FInputActionValue& Value)
+{
+    if (PatrolSystem)
+    {
+        PatrolSystem->HandleAltHold(Value);
+    }
+}
+
+void APlayerCamera::OnPatrolTriggered(const FInputActionValue& Value)
+{
+    if (PatrolSystem)
+    {
+        PatrolSystem->HandlePatrolRadius(Value);
+    }
+}
+
+void APlayerCamera::OnDestroySelected()
+{
+    if (CommandSystem)
+    {
+        CommandSystem->HandleDestroySelected();
+    }
+}
+
+void APlayerCamera::OnSpawnTriggered()
+{
+    if (SpawnSystem)
+    {
+        SpawnSystem->HandleSpawnInput();
+    }
+}
+
+
+void APlayerCamera::Server_DestroyActor_Implementation(const TArray<AActor*>& ActorToDestroy)
+{
+    if (CommandSystem)
+    {
+        CommandSystem->HandleServerDestroyActor(ActorToDestroy);
+    }
+}
+
+void APlayerCamera::CachePlayerController()
+{
+    Player = Cast<APlayerController>(GetInstigatorController());
+    if (!Player.IsValid())
+    {
+        Player = Cast<APlayerController>(GetController());
+    }
 }
 

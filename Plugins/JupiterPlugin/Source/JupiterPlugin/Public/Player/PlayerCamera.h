@@ -1,20 +1,13 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "InputActionValue.h"
-#include "Data/AiData.h"
 #include "GameFramework/Pawn.h"
-#include "Kismet/GameplayStatics.h"
-#include "Player/PlayerCameraRotationPreview.h"
 #include "PlayerCamera.generated.h"
 
-class ASoldierRts;
-class APreviewPoseMesh;
 class UInputAction;
 class UInputMappingContext;
 class UFloatingPawnMovement;
-class ASphereRadius;
-class ASelectionBox;
 class UCameraComponent;
 class USpringArmComponent;
 class UUnitSelectionComponent;
@@ -22,410 +15,163 @@ class UUnitOrderComponent;
 class UUnitFormationComponent;
 class UUnitSpawnComponent;
 class UUnitPatrolComponent;
-enum class ESpawnFormation : uint8;
+class UEnhancedInputComponent;
+class UCameraMovementSystem;
+class UCameraSelectionSystem;
+class UCameraCommandSystem;
+class UCameraPatrolSystem;
+class UCameraSpawnSystem;
+class UCameraPreviewSystem;
 
+/** Lightweight pawn that wires modular camera subsystems and routes inputs. */
 UCLASS()
 class JUPITERPLUGIN_API APlayerCamera : public APawn
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	APlayerCamera();
-	
-	virtual void BeginPlay() override;
+    APlayerCamera();
 
-	virtual void NotifyControllerChanged() override;
-	
-	virtual void CustomInitialized();
-	
-	virtual void Tick(float DeltaTime) override;
+    virtual void BeginPlay() override;
+    virtual void Tick(float DeltaTime) override;
+    virtual void SetupPlayerInputComponent(UInputComponent* Input) override;
+    virtual void NotifyControllerChanged() override;
+    virtual void UnPossessed() override;
 
-	virtual void UnPossessed() override;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TObjectPtr<UFloatingPawnMovement> PawnMovementComponent;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    UUnitSelectionComponent* SelectionComponent;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    UUnitOrderComponent* OrderComponent;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    UUnitFormationComponent* FormationComponent;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    UUnitSpawnComponent* SpawnComponent;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-    UUnitPatrolComponent* PatrolComponent;
-	
-protected:
-//------------------------------------ Inputs ------------------------------------
-#pragma region Inputs
-	
-protected:
-	virtual void SetupPlayerInputComponent(UInputComponent* Input) override;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputMappingContext> InputMappingContext;
-	
-	/*- Input Action -*/
-	
-	//MOVEMENTS
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> MoveAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> ZoomAction;
-
-	//ROTATION
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> EnableRotateAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> RotateHorizontalAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> RotateVerticalAction;
-	
-
-	//SELECTION
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> SelectAction;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> SelectHoldAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> DoubleTap;
-
-	//COMMAND
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> CommandAction;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> AltCommandAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> AltCommandActionTrigger;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> PatrolCommandAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> DeleteCommandAction;
-
-	//SPAWN
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Jupiter Fields", Meta = (DisplayThumbnail = false))
-	TObjectPtr<UInputAction> SpawnUnitAction;
-
-#pragma endregion	
-
-	
-//------------------------------------ Camera ------------------------------------
-#pragma region Camera Components
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-	USceneComponent* SceneComponent;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-	USpringArmComponent* SpringArm;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta = (AllowPrivateAccess = true))
-	UCameraComponent* CameraComponent;
-#pragma endregion
-
-#pragma region Camera Movement
-	
-protected:
-	/** Déplacements de la caméra */
-	UFUNCTION()
-	void Input_OnMove(const FInputActionValue& ActionValue);
-	
-	UFUNCTION(BlueprintCallable)
-	void Input_Zoom(const FInputActionValue& ActionValue);
-
-	UFUNCTION()
-	void CameraBounds();
-
-	/** Rotation de la caméra */
-	UFUNCTION()
-	void Input_RotateHorizontal(const FInputActionValue& ActionValue);
-	
-	UFUNCTION()
-	void Input_RotateVertical(const FInputActionValue& ActionValue);
-
-	UFUNCTION()
-	void Input_EnableRotate(const FInputActionValue& ActionValue);
-	
-
-	/** Gestion du Edge Scroll */
-	UFUNCTION()
-	void EdgeScroll();
-
-	/** Position ciblée de la caméra */
-	UPROPERTY()
-	FVector TargetLocation;
-	
-	UPROPERTY()
-	FRotator TargetRotation;
-	
-	UPROPERTY()
-	float TargetZoom;
-	
-	UPROPERTY()
-	bool CanRotate;
-
-	UFUNCTION()
-	void GetTerrainPosition(FVector& TerrainPosition) const;
-	
-#pragma endregion
-
-#pragma region Camera Settings
-protected:
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float CameraSpeed = 20.0f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float EdgeScrollSpeed = 2.0f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float RotateSpeed = 2.f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float RotatePitchMin = 10.f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float RotatePitchMax = 80.f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float ZoomSpeed = 2.f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float MinZoom = 500.f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	float MaxZoom = 4000.f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Camera")
-	bool CanEdgeScroll = false;
-#pragma endregion
-
-	
-//------------------------------------ Selection ------------------------------------
-#pragma region Selection
-	
-protected:
-	// Left Click
-	UFUNCTION(BlueprintCallable)
-	AActor* GetSelectedObject();
-
-	UFUNCTION()
-	void Input_SquareSelection();
-
-	UFUNCTION()
-	void Input_LeftMouseReleased();
-
-	UFUNCTION()
-	void Input_LeftMouseInputHold(const FInputActionValue& ActionValue);
-
-	UFUNCTION()
-	void HandleLeftMouse(EInputEvent InputEvent, float Value);
-	
-	UFUNCTION()
-	void Input_SelectAllUnitType();
-
-	
-	// Alt Click
-	UFUNCTION(BlueprintCallable)
-	void HandleAltRightMouse(EInputEvent InputEvent, float Value);
-
-	UFUNCTION()
-	void Input_AltFunction();
-
-	UFUNCTION()
-	void Input_AltFunctionRelease();
-
-	UFUNCTION()
-	void Input_AltFunctionHold(const FInputActionValue& ActionValue);
-
-	UFUNCTION()
-	void CreateSelectionBox();
-	
-	UFUNCTION()
-	void CreateSphereRadius();
-
-	//--------
-	template <typename T>
-	TArray<T*> GetAllActorsOfClassInCameraBound(UWorld* World, TSubclassOf<T> ActorsClass);
-
-	
-	// Variables
-	UPROPERTY()
-	APlayerController* Player;
-	
-        UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Mouse")
-        float LeftMouseHoldThreshold = 0.15f;
-
-        UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Mouse")
-        float RotationPreviewHoldTime = 1.f;
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings|Mouse")
-	TSubclassOf<ASelectionBox> SelectionBoxClass;
-	
-	UPROPERTY()
-	ASelectionBox* SelectionBox;
-
-	UPROPERTY()
-	bool BoxSelect;
-	
-	UPROPERTY()
-	FVector LeftMouseHitLocation;
-
-	UPROPERTY()
-	bool MouseProjectionIsGrounded;
-
-	UPROPERTY(BlueprintReadWrite)
-	bool bAltIsPressed = false;
-	
-#pragma endregion
-
-#pragma region Command
-
-	UFUNCTION()
-	void Input_PatrolZone(const FInputActionValue& ActionValue);
-
-	UFUNCTION()
-	void Input_OnDestroySelected();
-
-	UFUNCTION(Server, Reliable)
-	void Server_DestroyActor(const TArray<AActor*>& ActorToDestroy);
-
-	UFUNCTION(BlueprintCallable)
-	void CommandStart();
-
-    UFUNCTION()
-    void HandleCommandActionStarted();
-
-	UFUNCTION(BlueprintCallable)
-	void Command();
-
-	UFUNCTION()
-	FCommandData CreateCommandData(const ECommandType Type, AActor* Enemy = nullptr, float Radius = 0.f) const;
-
-	
-	UPROPERTY(EditAnywhere, Category = "Settings|Command")
-	TSubclassOf<ASphereRadius> SphereRadiusClass;
-	
-	UPROPERTY()
-	ASphereRadius* SphereRadius;
-	
-    UPROPERTY()
-    bool SphereRadiusEnable;
-
-    UPROPERTY()
-    FVector CommandLocation;
-
-    UPROPERTY()
-    bool bIsCommandActionHeld = false;
-
-    UPROPERTY()
-    bool bCommandPreviewVisible = false;
-
-    UPROPERTY()
-    FRotationPreviewState CommandRotationPreview;
-
-    UPROPERTY()
-    int32 CommandPreviewInstanceCount = 0;
-#pragma endregion
-
-#pragma region Spawn Units
+    APlayerController* GetPlayerController() const { return Player.Get(); }
+    UFloatingPawnMovement* GetMovementComponent() const { return PawnMovementComponent; }
+    USpringArmComponent* GetSpringArm() const { return SpringArm; }
+    UCameraComponent* GetCameraComponent() const { return CameraComponent; }
+    UUnitSelectionComponent* GetSelectionComponent() const { return SelectionComponent; }
+    UUnitOrderComponent* GetOrderComponent() const { return OrderComponent; }
+    UUnitFormationComponent* GetFormationComponent() const { return FormationComponent; }
+    UUnitSpawnComponent* GetSpawnComponent() const { return SpawnComponent; }
+    UUnitPatrolComponent* GetPatrolComponent() const { return PatrolComponent; }
+    UCameraPreviewSystem* GetPreviewSystem() const { return PreviewSystem; }
 
 protected:
+    /** Instantiates all modular systems and wires their cross references. */
+    void InitializeSystems();
 
-	UFUNCTION()
-        void CreatePreviewMesh();
-	
-        UFUNCTION()
-        void Input_OnSpawnUnits();
+    /** Utility method that creates a subsystem of the provided class, or the default one. */
+    template <typename TSystem>
+    TSystem* CreateSystem(TSubclassOf<TSystem> SystemClass);
 
-        UFUNCTION()
-        void ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass);
+    /** Registers the default input bindings using the enhanced input component. */
+    void BindDefaultInputs(UEnhancedInputComponent* EnhancedInput);
 
-        UFUNCTION()
-        void HidePreview();
+    void OnMove(const FInputActionValue& Value);              // Forwards movement input to the movement system.
+    void OnZoom(const FInputActionValue& Value);              // Forwards zoom input to the movement system.
+    void OnRotateHorizontal(const FInputActionValue& Value);  // Forwards yaw rotation input to the movement system.
+    void OnRotateVertical(const FInputActionValue& Value);    // Forwards pitch rotation input to the movement system.
+    void OnEnableRotate(const FInputActionValue& Value);      // Toggles camera rotation on or off.
 
-        UFUNCTION()
-        void PreviewFollowMouse();
+    void OnSelectionPressed();                                // Notifies the selection system that selection has started.
+    void OnSelectionReleased();                               // Notifies the selection system that selection has ended.
+    void OnSelectionHold(const FInputActionValue& Value);     // Provides hold updates to the selection system (box select).
+    void OnSelectAll();                                       // Broadcasts the select-all command to the selection system.
 
-        UFUNCTION()
-        void HandleSpawnCountChanged(int32 NewSpawnCount);
+    void OnCommandActionStarted();                            // Signals the command system that a command started.
+    void OnCommandActionCompleted();                          // Signals the command system that a command completed.
 
-        UFUNCTION()
-        void HandleSpawnFormationChanged(ESpawnFormation NewFormation);
+    void OnAltPressed();                                      // Forwards ALT press to the patrol system.
+    void OnAltReleased();                                     // Forwards ALT release to the patrol system.
+    void OnAltHold(const FInputActionValue& Value);           // Delivers ALT hold values to the patrol system.
+    void OnPatrolTriggered(const FInputActionValue& Value);   // Sends patrol radius input to the patrol system.
 
-        UFUNCTION()
-        void HandleCustomFormationDimensionsChanged(FIntPoint NewDimensions);
+    void OnDestroySelected();                                 // Requests the command system to destroy selected actors.
+    void OnSpawnTriggered();                                  // Forwards spawn requests to the spawn system.
 
-        UPROPERTY()
-        bool bIsInSpawnUnits = false;
-
-        UPROPERTY(EditAnywhere, Category = "Settings|Spawn Units")
-        TSubclassOf<APreviewPoseMesh> PreviewUnitsClass;
-
-        UPROPERTY()
-        TObjectPtr<APreviewPoseMesh> PreviewUnit;
-
-        void EnsurePreviewUnit();
-        void UpdatePreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation);
-        void RefreshPreviewInstances();
-        void BuildPreviewFormationOffsets(int32 SpawnCount, float Spacing, TArray<FVector>& OutOffsets) const;
-        int32 GetEffectiveSpawnCount() const;
-        bool HasPreviewUnits() const { return PreviewUnit != nullptr; }
-
-        UPROPERTY()
-        FRotationPreviewState SpawnRotationPreview;
-
-        void UpdateCommandPreview();
-        void BeginCommandRotationPreview(const FVector& MouseLocation);
-        void StopCommandPreview();
-        bool EnsureCommandPreviewMesh(const TArray<AActor*>& SelectedUnits);
-        void BuildCommandPreviewTransforms(const FVector& CenterLocation, const FRotator& FacingRotation, TArray<FTransform>& OutTransforms) const;
-
-#pragma endregion
+    UFUNCTION(Server, Reliable)
+    void Server_DestroyActor(const TArray<AActor*>& ActorToDestroy); // Invoked by the pawn to destroy selected actors on the server.
 
 private:
-    UUnitSelectionComponent* GetSelectionComponentChecked() const;
+    /** Locates and caches the currently associated player controller. */
+    void CachePlayerController();
+
+    TWeakObjectPtr<APlayerController> Player;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Systems", meta=(AllowPrivateAccess="true"))
+    TSubclassOf<UCameraMovementSystem> MovementSystemClass;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Systems", meta=(AllowPrivateAccess="true"))
+    TSubclassOf<UCameraSelectionSystem> SelectionSystemClass;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Systems", meta=(AllowPrivateAccess="true"))
+    TSubclassOf<UCameraCommandSystem> CommandSystemClass;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Systems", meta=(AllowPrivateAccess="true"))
+    TSubclassOf<UCameraPatrolSystem> PatrolSystemClass;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Systems", meta=(AllowPrivateAccess="true"))
+    TSubclassOf<UCameraSpawnSystem> SpawnSystemClass;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Systems", meta=(AllowPrivateAccess="true"))
+    TSubclassOf<UCameraPreviewSystem> PreviewSystemClass;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UFloatingPawnMovement> PawnMovementComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<USceneComponent> SceneComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<USpringArmComponent> SpringArm;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UCameraComponent> CameraComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UUnitSelectionComponent> SelectionComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UUnitOrderComponent> OrderComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UUnitFormationComponent> FormationComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UUnitSpawnComponent> SpawnComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UUnitPatrolComponent> PatrolComponent;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputMappingContext> InputMappingContext;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> MoveAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> ZoomAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> EnableRotateAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> RotateHorizontalAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> RotateVerticalAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> SelectAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> SelectHoldAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> DoubleTapAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> CommandAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> AltCommandAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> AltCommandHoldAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> PatrolCommandAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> DeleteCommandAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
+    TObjectPtr<UInputAction> SpawnUnitAction;
+
+    UPROPERTY()
+    TObjectPtr<UCameraMovementSystem> MovementSystem;
+    UPROPERTY()
+    TObjectPtr<UCameraSelectionSystem> SelectionSystem;
+    UPROPERTY()
+    TObjectPtr<UCameraCommandSystem> CommandSystem;
+    UPROPERTY()
+    TObjectPtr<UCameraPatrolSystem> PatrolSystem;
+    UPROPERTY()
+    TObjectPtr<UCameraSpawnSystem> SpawnSystem;
+    UPROPERTY()
+    TObjectPtr<UCameraPreviewSystem> PreviewSystem;
 };
 
-template <typename T>
-TArray<T*> APlayerCamera::GetAllActorsOfClassInCameraBound(UWorld* World, TSubclassOf<T> ActorsClass)
+template <typename TSystem>
+TSystem* APlayerCamera::CreateSystem(TSubclassOf<TSystem> SystemClass)
 {
-	TArray<T*> ActorsInView;
-	TArray<AActor*> FoundActors;
-	UGameplayStatics::GetAllActorsOfClass(World, ActorsClass, FoundActors);
-
-	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
-	if (PC)
-	{
-		int32 ViewportX, ViewportY;
-		PC->GetViewportSize(ViewportX, ViewportY);
-
-		for (AActor* Actor : FoundActors)
-		{
-			FVector2D ScreenLocation;
-			if (PC->ProjectWorldLocationToScreen(Actor->GetActorLocation(), ScreenLocation))
-			{
-				if (ScreenLocation.X >= 0 && ScreenLocation.X <= ViewportX &&
-					ScreenLocation.Y >= 0 && ScreenLocation.Y <= ViewportY)
-				{
-					if (T* CastedActor = Cast<T>(Actor))
-					{
-						ActorsInView.Add(CastedActor);
-					}
-				}
-			}
-		}
-	}
-	return ActorsInView;
+    const TSubclassOf<TSystem> ClassToUse = SystemClass ? SystemClass : TSystem::StaticClass();
+    return NewObject<TSystem>(this, ClassToUse);
 }
+
