@@ -45,20 +45,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UFloatingPawnMovement> PawnMovementComponent;
 
-        UPROPERTY(EditAnywhere, BlueprintReadOnly)
-        UUnitSelectionComponent* SelectionComponent;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly)
+    UUnitSelectionComponent* SelectionComponent;
 
-        UPROPERTY(EditAnywhere, BlueprintReadOnly)
-        UUnitOrderComponent* OrderComponent;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly)
+    UUnitOrderComponent* OrderComponent;
 
-        UPROPERTY(EditAnywhere, BlueprintReadOnly)
-        UUnitFormationComponent* FormationComponent;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly)
+    UUnitFormationComponent* FormationComponent;
 
-        UPROPERTY(EditAnywhere, BlueprintReadOnly)
-        UUnitSpawnComponent* SpawnComponent;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly)
+    UUnitSpawnComponent* SpawnComponent;
 
-        UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-        UUnitPatrolComponent* PatrolComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+    UUnitPatrolComponent* PatrolComponent;
+	
 protected:
 //------------------------------------ Inputs ------------------------------------
 #pragma region Inputs
@@ -301,10 +302,10 @@ protected:
 	void Server_DestroyActor(const TArray<AActor*>& ActorToDestroy);
 
 	UFUNCTION(BlueprintCallable)
-        void CommandStart();
+	void CommandStart();
 
-        UFUNCTION()
-        void HandleCommandActionStarted();
+    UFUNCTION()
+    void HandleCommandActionStarted();
 
 	UFUNCTION(BlueprintCallable)
 	void Command();
@@ -319,23 +320,23 @@ protected:
 	UPROPERTY()
 	ASphereRadius* SphereRadius;
 	
-        UPROPERTY()
-        bool SphereRadiusEnable;
+    UPROPERTY()
+    bool SphereRadiusEnable;
 
-        UPROPERTY()
-        FVector CommandLocation;
+    UPROPERTY()
+    FVector CommandLocation;
 
-        UPROPERTY()
-        bool bIsCommandActionHeld = false;
+    UPROPERTY()
+    bool bIsCommandActionHeld = false;
 
-        UPROPERTY()
-        bool bCommandPreviewVisible = false;
+    UPROPERTY()
+    bool bCommandPreviewVisible = false;
 
-        UPROPERTY()
-        FRotationPreviewState CommandRotationPreview;
+    UPROPERTY()
+    FRotationPreviewState CommandRotationPreview;
 
-        UPROPERTY()
-        int32 CommandPreviewInstanceCount = 0;
+    UPROPERTY()
+    int32 CommandPreviewInstanceCount = 0;
 #pragma endregion
 
 #pragma region Spawn Units
@@ -394,8 +395,7 @@ protected:
 #pragma endregion
 
 private:
-        /** Lazily resolves the selection component, logging a warning if missing. */
-        UUnitSelectionComponent* GetSelectionComponentChecked() const;
+    UUnitSelectionComponent* GetSelectionComponentChecked() const;
 };
 
 template <typename T>
@@ -419,8 +419,7 @@ TArray<T*> APlayerCamera::GetAllActorsOfClassInCameraBound(UWorld* World, TSubcl
 				if (ScreenLocation.X >= 0 && ScreenLocation.X <= ViewportX &&
 					ScreenLocation.Y >= 0 && ScreenLocation.Y <= ViewportY)
 				{
-					T* CastedActor = Cast<T>(Actor);
-					if (CastedActor)
+					if (T* CastedActor = Cast<T>(Actor))
 					{
 						ActorsInView.Add(CastedActor);
 					}
