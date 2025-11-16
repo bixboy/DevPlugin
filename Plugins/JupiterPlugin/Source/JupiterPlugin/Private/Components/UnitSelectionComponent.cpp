@@ -67,6 +67,11 @@ void UUnitSelectionComponent::BeginPlay()
 
     if (!OwnerController.IsValid())
         OwnerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+
+	if (OwnerController.IsValid() && OwnerController->IsLocalController())
+	{
+		CreateHud();
+	}
 }
 
 void UUnitSelectionComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
