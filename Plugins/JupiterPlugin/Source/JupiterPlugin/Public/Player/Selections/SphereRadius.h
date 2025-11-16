@@ -6,6 +6,7 @@
 
 class UUnitSelectionComponent;
 class USphereComponent;
+class UDecalComponent;
 
 UCLASS()
 class JUPITERPLUGIN_API ASphereRadius : public AActor
@@ -16,37 +17,40 @@ public:
 	ASphereRadius();
 	virtual void Tick(float DeltaTime) override;
 
+	void Start(FVector Position, FRotator Rotation);
+
+	void End();
+
+	float GetRadius() const { return CurrentRadius; }
+
 protected:
 	virtual void BeginPlay() override;
 
-	UFUNCTION()
-	float Adjust() const;
-
-public:
-	UFUNCTION()
-	void Start(FVector Position, const FRotator Rotation);
-	UFUNCTION()
-	void End();
-
-	UFUNCTION()
-	float GetRadius() const;
-
-	UPROPERTY()
-	FVector StartLocation;
-	UPROPERTY()
-	FRotator StartRotation;
+	float ComputeRadius();
 
 private:
-	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (AllowPrivateAccess = true))
-	UDecalComponent* Decal;
-	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (AllowPrivateAccess = true))
+
+	// --- Components ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	USphereComponent* SphereComponent;
 
-	UPROPERTY()
-	bool SphereEnable;
-	UPROPERTY()
-	float CurrentRadius;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UDecalComponent* DecalComponent;
 
-        UPROPERTY()
-        UUnitSelectionComponent* SelectionComponent;
+	// --- Cached gameplay references ---
+	UPROPERTY()
+	UUnitSelectionComponent* SelectionComponent = nullptr;
+
+	// --- Internal state ---
+	UPROPERTY()
+	FVector StartLocation = FVector::ZeroVector;
+
+	UPROPERTY()
+	FRotator StartRotation = FRotator::ZeroRotator;
+
+	UPROPERTY()
+	float CurrentRadius = 0.f;
+
+	UPROPERTY()
+	bool bActive = false;
 };
