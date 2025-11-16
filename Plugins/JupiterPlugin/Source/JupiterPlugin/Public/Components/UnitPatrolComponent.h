@@ -2,31 +2,47 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "InputCoreTypes.h"
 #include "Data/AiData.h"
 #include "UnitPatrolComponent.generated.h"
 
-class APlayerCamera;
-class APlayerController;
-class UUnitSelectionComponent;
+class ULineBatchComponent;
 class UUnitOrderComponent;
+class UUnitSelectionComponent;
 
+/** Structure représentant une route de patrouille (répliquée). */
 USTRUCT(BlueprintType)
 struct FPatrolRoute
 {
     GENERATED_BODY()
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    TArray<AActor*> AssignedUnits;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    TArray<FVector> PatrolPoints;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    bool bIsLoop = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FVector> PatrolPoints;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsLoop = false;
 };
 
-/** Component responsible for handling unit patrol creation and debug rendering. */
-UCLASS(ClassGroup = (RTS), meta = (BlueprintSpawnableComponent))
+/** Cache local de rendu spline pour chaque route active. */
+USTRUCT()
+struct FPatrolRouteVisCache
+{
+    GENERATED_BODY()
+
+    TArray<FVector> ElevatedPoints;
+    TArray<FVector> SplineSamples;
+    uint32 GeometryHash = 0;
+    bool bLoopCached = false;
+    FColor BaseColor = FColor::White;
+
+    void Reset()
+    {
+        ElevatedPoints.Reset();
+        SplineSamples.Reset();
+        GeometryHash = 0;
+        bLoopCached = false;
+        BaseColor = FColor::White;
+    }
+};
+
+UCLASS(ClassGroup=(RTS), meta=(BlueprintSpawnableComponent))
 class JUPITERPLUGIN_API UUnitPatrolComponent : public UActorComponent
 {
     GENERATED_BODY()
@@ -37,123 +53,90 @@ public:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    /** Called when the player presses the right mouse button. Returns true when the event was consumed. */
-    bool HandleRightClickPressed(bool bAltDown);
-
-    /** Called when the player releases the right mouse button. Returns true when the event was consumed. */
-    bool HandleRightClickReleased(bool bAltDown);
-
-    /** Handles left mouse interactions. Returns true when the component consumed the event. */
+    /** Handles left mouse button events forwarded by the player camera. */
     bool HandleLeftClick(EInputEvent InputEvent);
 
-    /** Returns true when a patrol is currently being edited. */
-    bool IsCreatingPatrol() const { return bIsCreatingPatrol; }
+    /** Handles the right mouse button being pressed. */
+    bool HandleRightClickPressed(bool bAltDown);
+
+    /** Handles the right mouse button being released. */
+    bool HandleRightClickReleased(bool bAltDown);
 
 protected:
-    //------------------------------------ Initialization ------------------------------------
-    void CacheDependencies();
+    // === Internal Helpers ===
+    void EnsureLineBatchComponent();
+    void UpdateRouteVisuals(float DeltaSeconds);
+    void DrawActiveRouteVisualizations();
+    void DrawRouteVisualizationCached(const TArray<FVector>& Points, bool bLoop, const FColor& BaseColor, bool bAnimate, FPatrolRouteVisCache& Cache);
+
+    void DrawPolylineWithGlow(const TArray<FVector>& Samples, const FLinearColor& CoreColor, float BaseThickness, bool bAnimate) const;
+    void DrawPointsHalo(const TArray<FVector>& Points, const FColor& BaseColor) const;
+    void DrawDirectionArrows(const TArray<FVector>& Samples, const FColor& Color) const;
+
+    void BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples) const;
+    static FVector EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T);
+    static uint32 HashPointsLight(const TArray<FVector>& Points, bool bLoop);
+
     bool IsLocallyControlled() const;
+    bool HasAuthority() const;
 
-    //------------------------------------ Input Handling ------------------------------------
-    bool StartPatrolCreation();
-    bool ConfirmPatrolCreation();
-    bool TryAddPatrolPoint();
-    void CancelPatrolCreation();
-
-    //------------------------------------ Patrol Management ------------------------------------
-    void RegisterPatrolRoute(const FPatrolRoute& NewRoute);
-    void IssuePatrolCommands(FPatrolRoute& Route);
-    void RemoveUnitsFromRoutes(const TArray<AActor*>& UnitsToRemove);
-    void CleanupActiveRoutes();
-    void RefreshSelectionCache(const TArray<AActor*>& SelectedActors);
-    bool SelectionContainsRouteUnits(const FPatrolRoute& Route) const;
-    bool TryGetCursorLocation(FVector& OutLocation) const;
-    APlayerController* ResolveOwningController() const;
-
-    //------------------------------------ Debug Drawing ------------------------------------
-    void DrawPendingRoute() const;
-    void DrawActiveRoutes() const;
-    void DrawRoute(const TArray<FVector>& Points, bool bLoop, const FColor& Color) const;
-
-    UFUNCTION()
-    void HandleSelectionChanged(const TArray<AActor*>& SelectedActors);
-
-    UFUNCTION()
-    void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& CommandData);
-
-protected:
-    /** Cached reference to the owning player camera pawn. */
-    UPROPERTY()
-    TObjectPtr<APlayerCamera> CachedPlayerCamera;
-
-    /** Cached reference to the selection component that provides cursor projection. */
-    UPROPERTY()
-    TObjectPtr<UUnitSelectionComponent> CachedSelectionComponent;
-
-    /** Cached reference to the order component to react to manual orders. */
-    UPROPERTY()
-    TObjectPtr<UUnitOrderComponent> CachedOrderComponent;
-
-    /** All confirmed patrol routes currently active. */
-    UPROPERTY()
+    // === Data ===
+    UPROPERTY(ReplicatedUsing=OnRep_ActivePatrolRoutes)
     TArray<FPatrolRoute> ActivePatrolRoutes;
 
-    /** Currently selected units used for visualising patrols. */
+    UFUNCTION() void OnRep_ActivePatrolRoutes();
+
+    UPROPERTY(Transient) TObjectPtr<ULineBatchComponent> LineBatchComponent = nullptr;
+    UPROPERTY() TArray<FPatrolRouteVisCache> RoutesVisCache;
+
+    float GlobalVisualTime = 0.f;
+    float VisualRefreshTimer = 0.f;
+    bool bVisualsDirty = true;
+
+    // === Dependencies ===
     UPROPERTY()
-    TArray<TWeakObjectPtr<AActor>> CachedSelection;
+    TObjectPtr<UUnitOrderComponent> OrderComponent = nullptr;
 
-    /** Temporary patrol points while the player is editing a patrol. */
     UPROPERTY()
-    TArray<FVector> PendingPatrolPoints;
+    TObjectPtr<UUnitSelectionComponent> SelectionComponent = nullptr;
 
-    /** Units assigned to the patrol currently being edited. */
-    UPROPERTY()
-    TArray<TWeakObjectPtr<AActor>> PendingAssignedUnits;
+    // === Input Helpers ===
+    UFUNCTION()
+    void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& IssuedCommand);
 
-    /** When true a patrol is currently being created. */
-    UPROPERTY()
-    bool bIsCreatingPatrol = false;
+    void RefreshRoutesFromSelection();
+    void ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes);
 
-    /** Tracks whether the last alt+click should confirm on release even if alt is no longer pressed. */
-    UPROPERTY()
-    bool bPendingConfirmationClick = false;
-
-    /** True while waiting for the release associated with a left-click cancel to be consumed. */
-    UPROPERTY()
-    bool bConsumePendingLeftRelease = false;
-
-    /** Cached cursor position used for drawing preview lines. */
-    UPROPERTY()
-    FVector CachedCursorLocation = FVector::ZeroVector;
-
-    /** Tracks whether the cached cursor location is valid for preview rendering. */
-    UPROPERTY()
-    bool bHasCursorLocation = false;
-
-    //------------------------------------ Settings ------------------------------------
-    /** Distance threshold (in uu) used to detect loop closures. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
-    float LoopClosureThreshold = 200.f;
-
-    /** Radius of the debug spheres drawn for patrol points. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
-    float DebugPointRadius = 40.f;
-
-    /** Thickness of the debug lines used to visualise patrol paths. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol", meta = (ClampMin = "0.0"))
-    float DebugLineThickness = 3.f;
-
-    /** Colour applied to pending patrol debug visuals. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
-    FColor PendingRouteColor = FColor::Yellow;
-
-    /** Colour applied to confirmed patrol routes when one of their units is selected. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
+    // === Settings ===
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
     FColor ActiveRouteColor = FColor::Cyan;
 
-    /** When true, a line preview towards the current cursor location is drawn while editing a patrol. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Patrol")
-    bool bDrawCursorPreview = true;
-};
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
+    float VisualZOffset = 12.f;
 
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
+    bool bAnimateActiveRoutes = true;
+
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
+    float VisualRefreshInterval = 0.05f;
+
+    // Pulsations dynamiques
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float ColorPulseSpeed = 2.4f;
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float LineWaveSpeed = 2.6f;
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float LineWaveAmplitude = 1.6f;
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float PointPulseSpeed = 2.1f;
+
+    // Glow
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") int32 GlowPasses = 2;
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float GlowSize = 6.f;
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float GlowAlpha = 0.25f;
+
+    // Arrows
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float ArrowEveryUU = 600.f;
+
+    // Style
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float DebugPointRadius = 40.f;
+    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float DebugLineThickness = 3.f;
+};

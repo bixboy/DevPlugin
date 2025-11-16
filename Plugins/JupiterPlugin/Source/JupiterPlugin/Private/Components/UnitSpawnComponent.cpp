@@ -1,8 +1,8 @@
 #include "Components/UnitSpawnComponent.h"
-
 #include "Components/UnitSelectionComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Units/SoldierRts.h"
+
 
 UUnitSpawnComponent::UUnitSpawnComponent()
 {
@@ -16,21 +16,17 @@ void UUnitSpawnComponent::BeginPlay()
 
     SelectionComponent = GetOwner() ? GetOwner()->FindComponentByClass<UUnitSelectionComponent>() : nullptr;
 
-    if (UnitsPerSpawn <= 0)
-        UnitsPerSpawn = 1;
+    UnitsPerSpawn = FMath::Max(1, UnitsPerSpawn);
+    CustomFormationDimensions.X = FMath::Max(1, CustomFormationDimensions.X);
+    CustomFormationDimensions.Y = FMath::Max(1, CustomFormationDimensions.Y);
 
-    if (CustomFormationDimensions.X <= 0)
-        CustomFormationDimensions.X = 1;
-
-    if (CustomFormationDimensions.Y <= 0)
-        CustomFormationDimensions.Y = 1;
-
-    if (GetOwner() && GetOwner()->HasAuthority() && !UnitToSpawn && DefaultUnitClass)
+    if (GetOwner()->HasAuthority() && !UnitToSpawn && DefaultUnitClass)
     {
         UnitToSpawn = DefaultUnitClass;
         OnRep_UnitToSpawn();
     }
 }
+
 
 void UUnitSpawnComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -42,9 +38,12 @@ void UUnitSpawnComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
     DOREPLIFETIME_CONDITION(UUnitSpawnComponent, CustomFormationDimensions, COND_OwnerOnly);
 }
 
+// ------------------------------------------------------------
+// Set Unit Class
+// ------------------------------------------------------------
 void UUnitSpawnComponent::SetUnitToSpawn(TSubclassOf<ASoldierRts> NewUnitClass)
 {
-    if (GetOwner() && GetOwner()->HasAuthority())
+    if (GetOwner()->HasAuthority())
     {
         UnitToSpawn = NewUnitClass;
         OnRep_UnitToSpawn();
@@ -55,40 +54,55 @@ void UUnitSpawnComponent::SetUnitToSpawn(TSubclassOf<ASoldierRts> NewUnitClass)
     }
 }
 
+// ------------------------------------------------------------
+// SpawnUnits From Mouse
+// ------------------------------------------------------------
 void UUnitSpawnComponent::SpawnUnits()
 {
     if (!SelectionComponent)
         return;
 
-    const FHitResult HitResult = SelectionComponent->GetMousePositionOnTerrain();
+    const FHitResult Hit = SelectionComponent->GetMousePositionOnTerrain();
 
-    if (bRequireGroundHit && !HitResult.bBlockingHit)
+    if (bRequireGroundHit && !Hit.bBlockingHit)
         return;
 
-    const FVector SpawnLocation = HitResult.bBlockingHit ? HitResult.Location : HitResult.TraceEnd;
+    const FVector SpawnLocation = Hit.bBlockingHit ? Hit.Location : Hit.TraceEnd;
 
     SpawnUnitsWithTransform(SpawnLocation, FRotator::ZeroRotator);
 }
 
+// ------------------------------------------------------------
+// SpawnUnits (with transform)
+// ------------------------------------------------------------
 void UUnitSpawnComponent::SpawnUnitsWithTransform(const FVector& SpawnLocation, const FRotator& SpawnRotation)
 {
-    if (GetOwner() && GetOwner()->HasAuthority())
-        ServerSpawnUnits(SpawnLocation, SpawnRotation);
+    if (!UnitToSpawn)
+        return;
+
+    if (GetOwner()->HasAuthority())
+    {
+	    ServerSpawnUnits(SpawnLocation, SpawnRotation);
+    }
     else
-        ServerSpawnUnits(SpawnLocation, SpawnRotation);
+    {
+    	ServerSpawnUnits(SpawnLocation, SpawnRotation);   
+    }
 }
 
+// ------------------------------------------------------------
+// UnitsPerSpawn
+// ------------------------------------------------------------
 void UUnitSpawnComponent::SetUnitsPerSpawn(int32 NewSpawnCount)
 {
     NewSpawnCount = FMath::Max(1, NewSpawnCount);
 
     if (SpawnFormation == ESpawnFormation::Custom)
     {
-        const int32 DesiredCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
-        NewSpawnCount = DesiredCount;
+        NewSpawnCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
     }
 
-    if (GetOwner() && GetOwner()->HasAuthority())
+    if (GetOwner()->HasAuthority())
     {
         if (UnitsPerSpawn != NewSpawnCount)
         {
@@ -102,9 +116,28 @@ void UUnitSpawnComponent::SetUnitsPerSpawn(int32 NewSpawnCount)
     }
 }
 
+// ------------------------------------------------------------
+// BuildSpawnFormationOffsets
+// ------------------------------------------------------------
+void UUnitSpawnComponent::BuildSpawnFormationOffsets(int32 Count, float Spacing, TArray<FVector>& OutOffsets, const FRotator& Facing) const
+{
+    GenerateFormationOffsets(OutOffsets, Count, Spacing);
+
+    if (OutOffsets.IsEmpty())
+        return;
+
+    // Apply facing rotation once (cheap)
+    const FQuat Rot = FRotator(0.f, Facing.Yaw, 0.f).Quaternion();
+    for (FVector& V : OutOffsets)
+        V = Rot.RotateVector(V);
+}
+
+// ------------------------------------------------------------
+// SetSpawnFormation
+// ------------------------------------------------------------
 void UUnitSpawnComponent::SetSpawnFormation(ESpawnFormation NewFormation)
 {
-    if (GetOwner() && GetOwner()->HasAuthority())
+    if (GetOwner()->HasAuthority())
     {
         if (SpawnFormation != NewFormation)
         {
@@ -120,12 +153,15 @@ void UUnitSpawnComponent::SetSpawnFormation(ESpawnFormation NewFormation)
     UpdateSpawnCountFromCustomFormation();
 }
 
+// ------------------------------------------------------------
+// SetCustomFormationDimensions
+// ------------------------------------------------------------
 void UUnitSpawnComponent::SetCustomFormationDimensions(FIntPoint NewDimensions)
 {
     NewDimensions.X = FMath::Max(1, NewDimensions.X);
     NewDimensions.Y = FMath::Max(1, NewDimensions.Y);
 
-    if (GetOwner() && GetOwner()->HasAuthority())
+    if (GetOwner()->HasAuthority())
     {
         if (CustomFormationDimensions != NewDimensions)
         {
@@ -141,25 +177,27 @@ void UUnitSpawnComponent::SetCustomFormationDimensions(FIntPoint NewDimensions)
     UpdateSpawnCountFromCustomFormation();
 }
 
+// ------------------------------------------------------------
+// SERVER IMPLEMENTATIONS
+// ------------------------------------------------------------
 void UUnitSpawnComponent::ServerSetUnitClass_Implementation(TSubclassOf<ASoldierRts> NewUnitClass)
 {
     UnitToSpawn = NewUnitClass;
     OnRep_UnitToSpawn();
 }
 
-void UUnitSpawnComponent::ServerSetUnitsPerSpawn_Implementation(int32 NewSpawnCount)
+void UUnitSpawnComponent::ServerSetUnitsPerSpawn_Implementation(int32 NewCount)
 {
-    NewSpawnCount = FMath::Max(1, NewSpawnCount);
+    NewCount = FMath::Max(1, NewCount);
 
     if (SpawnFormation == ESpawnFormation::Custom)
     {
-        const int32 DesiredCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
-        NewSpawnCount = DesiredCount;
+        NewCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
     }
 
-    if (UnitsPerSpawn != NewSpawnCount)
+    if (UnitsPerSpawn != NewCount)
     {
-        UnitsPerSpawn = NewSpawnCount;
+        UnitsPerSpawn = NewCount;
         OnRep_UnitsPerSpawn();
     }
 }
@@ -194,38 +232,40 @@ void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLo
     if (!UnitToSpawn)
         return;
 
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    SpawnParams.Owner = GetOwner();
-
     if (UWorld* World = GetWorld())
     {
-        const int32 SpawnCount = FMath::Max(UnitsPerSpawn, 1);
-        const float Spacing = FMath::Max(FormationSpacing, 0.f);
+        const int32 Count = FMath::Max(UnitsPerSpawn, 1);
+        const float Spacing = FMath::Max(FormationSpacing, 0.0f);
 
-        TArray<FVector> SpawnOffsets;
-        GenerateSpawnOffsets(SpawnOffsets, SpawnCount, Spacing, SpawnRotation);
+        TArray<FVector> Offsets;
+        GenerateFormationOffsets(Offsets, Count, Spacing);
 
-        const FRotator AppliedRotation(0.f, SpawnRotation.Yaw, 0.f);
+        const FRotator FinalRot(0.f, SpawnRotation.Yaw, 0.f);
 
-        bool bSpawnedAnyUnit = false;
+        FActorSpawnParameters Params;
+        Params.Owner = GetOwner();
+        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-        for (int32 Index = 0; Index < SpawnOffsets.Num(); ++Index)
+        bool bSpawned = false;
+
+        for (const FVector& Offset : Offsets)
         {
-            const FVector FormationLocation = SpawnLocation + SpawnOffsets[Index];
+            const FVector FinalPos = SpawnLocation + Offset;
 
-            ASoldierRts* SpawnedUnit = World->SpawnActor<ASoldierRts>(UnitToSpawn, FormationLocation, AppliedRotation, SpawnParams);
-
-            bSpawnedAnyUnit |= (SpawnedUnit != nullptr);
+            ASoldierRts* Spawned = World->SpawnActor<ASoldierRts>(UnitToSpawn, FinalPos, FinalRot, Params);
+            bSpawned |= (Spawned != nullptr);
         }
 
-        if (!bNotifyOnServerOnly && bSpawnedAnyUnit)
+        if (bSpawned && !bNotifyOnServerOnly)
         {
             OnUnitClassChanged.Broadcast(UnitToSpawn);
         }
     }
 }
 
+// ------------------------------------------------------------
+// REPLICATION NOTIFY
+// ------------------------------------------------------------
 void UUnitSpawnComponent::OnRep_UnitToSpawn()
 {
     OnUnitClassChanged.Broadcast(UnitToSpawn);
@@ -246,155 +286,129 @@ void UUnitSpawnComponent::OnRep_CustomFormationDimensions()
     OnCustomFormationDimensionsChanged.Broadcast(CustomFormationDimensions);
 }
 
+// ------------------------------------------------------------
+// Custom formation auto-correction
+// ------------------------------------------------------------
 void UUnitSpawnComponent::UpdateSpawnCountFromCustomFormation()
 {
     if (SpawnFormation != ESpawnFormation::Custom)
         return;
 
-    const int32 DesiredCount = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
+    const int32 Desired = FMath::Max(1, CustomFormationDimensions.X * CustomFormationDimensions.Y);
 
-    if (UnitsPerSpawn == DesiredCount)
-        return;
-
-    SetUnitsPerSpawn(DesiredCount);
+    if (UnitsPerSpawn != Desired)
+        SetUnitsPerSpawn(Desired);
 }
 
-void UUnitSpawnComponent::GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing, const FRotator& Rotation) const
+// ------------------------------------------------------------
+// Generate offsets for formation
+// ------------------------------------------------------------
+void UUnitSpawnComponent::GenerateFormationOffsets(TArray<FVector>& OutOffsets, int32 Count, float Spacing) const
 {
     OutOffsets.Reset();
-    if (SpawnCount <= 0)
-    {
+    if (Count <= 0)
         return;
-    }
 
-    OutOffsets.Reserve(SpawnCount);
+    OutOffsets.Reserve(Count);
+    const float HalfStep = Spacing * 0.5f;
 
     switch (SpawnFormation)
     {
         case ESpawnFormation::Line:
         {
-            const float HalfWidth = (SpawnCount - 1) * 0.5f * Spacing;
-            for (int32 Index = 0; Index < SpawnCount; ++Index)
-            {
-                const float OffsetX = (Index * Spacing) - HalfWidth;
-                OutOffsets.Add(FVector(OffsetX, 0.f, 0.f));
-            }
+            const float Half = (Count - 1) * HalfStep;
+            for (int32 i = 0; i < Count; ++i)
+                OutOffsets.Add(FVector(i * Spacing - Half, 0, 0));
+        		
             break;
         }
+
         case ESpawnFormation::Column:
         {
-            const float HalfHeight = (SpawnCount - 1) * 0.5f * Spacing;
-            for (int32 Index = 0; Index < SpawnCount; ++Index)
-            {
-                const float OffsetY = (Index * Spacing) - HalfHeight;
-                OutOffsets.Add(FVector(0.f, OffsetY, 0.f));
-            }
+            const float Half = (Count - 1) * HalfStep;
+            for (int32 i = 0; i < Count; ++i)
+                OutOffsets.Add(FVector(0, i * Spacing - Half, 0));
+        		
             break;
         }
+
         case ESpawnFormation::Wedge:
         {
-            int32 UnitsPlaced = 0;
-            int32 Row = 0;
-            while (UnitsPlaced < SpawnCount)
+            int32 Placed = 0;
+            for (int32 Row = 0; Placed < Count; ++Row)
             {
-                const int32 UnitsInRow = FMath::Min(Row + 1, SpawnCount - UnitsPlaced);
-                const float RowHalfWidth = (UnitsInRow - 1) * 0.5f * Spacing;
-                const float RowOffsetY = Row * Spacing;
-                for (int32 IndexInRow = 0; IndexInRow < UnitsInRow; ++IndexInRow)
-                {
-                    const float OffsetX = (IndexInRow * Spacing) - RowHalfWidth;
-                    OutOffsets.Add(FVector(OffsetX, RowOffsetY, 0.f));
-                }
+                const int32 RowCount = FMath::Min(Row + 1, Count - Placed);
+                const float Half = (RowCount - 1) * HalfStep;
 
-                UnitsPlaced += UnitsInRow;
-                ++Row;
+                for (int32 c = 0; c < RowCount; ++c)
+                    OutOffsets.Add(FVector(c * Spacing - Half, Row * Spacing, 0));
+
+                Placed += RowCount;
             }
             break;
         }
+
         case ESpawnFormation::Blob:
         {
             OutOffsets.Add(FVector::ZeroVector);
 
-            if (SpawnCount > 1)
+            if (Count > 1)
             {
-                FRandomStream RandomStream;
-                RandomStream.Initialize(FMath::Rand());
+                const float MaxRadius = Spacing * FMath::Sqrt(static_cast<float>(Count));
+                FRandomStream R(FMath::Rand());
 
-                const float MaxRadius = (Spacing <= 0.f) ? 0.f : Spacing * FMath::Sqrt(static_cast<float>(SpawnCount));
-
-                for (int32 Index = 1; Index < SpawnCount; ++Index)
+                for (int32 i = 1; i < Count; ++i)
                 {
-                    const float Angle = RandomStream.FRandRange(0.f, 2.f * PI);
-                    const float Radius = (MaxRadius > 0.f) ? RandomStream.FRandRange(0.f, MaxRadius) : 0.f;
-                    const float OffsetX = Radius * FMath::Cos(Angle);
-                    const float OffsetY = Radius * FMath::Sin(Angle);
-                    OutOffsets.Add(FVector(OffsetX, OffsetY, 0.f));
+                    const float Angle = R.FRandRange(0.f, 2 * PI);
+                    const float Radius = R.FRandRange(0.f, MaxRadius);
+                    OutOffsets.Add(FVector(Radius * FMath::Cos(Angle), Radius * FMath::Sin(Angle), 0.f));
                 }
             }
+
+            // Recenter
+            FVector Avg = FVector::ZeroVector;
+            for (const FVector& V : OutOffsets)
+                Avg += V;
+
+            Avg /= OutOffsets.Num();
+
+            for (FVector& V : OutOffsets)
+                V -= FVector(Avg.X, Avg.Y, 0);
+
             break;
         }
+
         case ESpawnFormation::Custom:
         {
-            const int32 Columns = FMath::Max(1, CustomFormationDimensions.X);
-            const int32 Rows = FMath::Max(1, CustomFormationDimensions.Y);
-            const float HalfWidth = (Columns - 1) * 0.5f * Spacing;
-            const float HalfHeight = (Rows - 1) * 0.5f * Spacing;
+            const int32 W = CustomFormationDimensions.X;
+            const int32 H = CustomFormationDimensions.Y;
+            const float HW = (W - 1) * HalfStep;
+            const float HH = (H - 1) * HalfStep;
 
-            for (int32 Index = 0; Index < SpawnCount; ++Index)
+            for (int32 i = 0; i < Count; ++i)
             {
-                const int32 Column = Index % Columns;
-                const int32 RowIndex = Index / Columns;
-
-                const float OffsetX = (Column * Spacing) - HalfWidth;
-                const float OffsetY = (RowIndex * Spacing) - HalfHeight;
-                OutOffsets.Add(FVector(OffsetX, OffsetY, 0.f));
+                const int32 X = i % W;
+                const int32 Y = i / W;
+                OutOffsets.Add(FVector(X * Spacing - HW, Y * Spacing - HH, 0));
             }
             break;
         }
-        case ESpawnFormation::Square:
-        default:
-        {
-            const int32 Columns = FMath::Max(1, FMath::CeilToInt(FMath::Sqrt(static_cast<float>(SpawnCount))));
-            const int32 Rows = FMath::Max(1, FMath::CeilToInt(static_cast<float>(SpawnCount) / static_cast<float>(Columns)));
-            const float HalfWidth = (Columns - 1) * 0.5f * Spacing;
-            const float HalfHeight = (Rows - 1) * 0.5f * Spacing;
 
-            for (int32 Index = 0; Index < SpawnCount; ++Index)
+        default: // Square
+        {
+            const int32 W = FMath::CeilToInt(FMath::Sqrt(static_cast<float>(Count)));
+            const int32 H = FMath::CeilToInt(float(Count) / W);
+            const float HW = (W - 1) * HalfStep;
+            const float HH = (H - 1) * HalfStep;
+
+            for (int32 i = 0; i < Count; ++i)
             {
-                const int32 Column = Index % Columns;
-                const int32 RowIndex = Index / Columns;
-
-                const float OffsetX = (Column * Spacing) - HalfWidth;
-                const float OffsetY = (RowIndex * Spacing) - HalfHeight;
-                OutOffsets.Add(FVector(OffsetX, OffsetY, 0.f));
+                const int32 X = i % W;
+                const int32 Y = i / W;
+                OutOffsets.Add(FVector(X * Spacing - HW, Y * Spacing - HH, 0));
             }
+        		
             break;
-        }
-    }
-
-    if (OutOffsets.Num() > 0 && (SpawnFormation == ESpawnFormation::Wedge || SpawnFormation == ESpawnFormation::Blob))
-    {
-        FVector AverageOffset = FVector::ZeroVector;
-        for (const FVector& Offset : OutOffsets)
-        {
-            AverageOffset += Offset;
-        }
-
-        AverageOffset /= static_cast<float>(OutOffsets.Num());
-
-        for (FVector& Offset : OutOffsets)
-        {
-            Offset -= FVector(AverageOffset.X, AverageOffset.Y, 0.f);
-        }
-    }
-
-    if (!OutOffsets.IsEmpty())
-    {
-        const FQuat RotationQuat = FRotator(0.f, Rotation.Yaw, 0.f).Quaternion();
-        for (FVector& Offset : OutOffsets)
-        {
-            Offset = RotationQuat.RotateVector(Offset);
         }
     }
 }
-

@@ -1,95 +1,127 @@
 ﻿#include "Player/Selections/SphereRadius.h"
-#include "Player/PlayerControllerRts.h"
+
 #include "Components/DecalComponent.h"
 #include "Components/UnitSelectionComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 
+// ------------------------------------------------------------
+// Constructor
+// ------------------------------------------------------------
 ASphereRadius::ASphereRadius()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	
+
+	// Root collision volume
 	SphereComponent = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComponent"));
-	SphereComponent->SetSphereRadius(1.f);
-	SphereComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	SphereComponent->SetCollisionResponseToAllChannels(ECR_Overlap);
-	SphereComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	SphereComponent->InitSphereRadius(1.f);
+	SphereComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SphereComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	RootComponent = SphereComponent;
-	
-	Decal = CreateDefaultSubobject<UDecalComponent>(TEXT("Decal"));
-	Decal->SetupAttachment(RootComponent);
-	
-	SphereEnable = false;
+
+	// Visual decal
+	DecalComponent = CreateDefaultSubobject<UDecalComponent>(TEXT("Decal"));
+	DecalComponent->SetupAttachment(RootComponent);
+	DecalComponent->SetVisibility(false);
+
+	bActive = false;
 }
 
+
+// ------------------------------------------------------------
+// BeginPlay
+// ------------------------------------------------------------
 void ASphereRadius::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	if(Decal)
-		Decal->SetVisibility(false);
-	
+
 	SetActorEnableCollision(false);
-    if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
-    {
-        SelectionComponent = OwnerPawn->FindComponentByClass<UUnitSelectionComponent>();
-    }
+
+	// Cache selection component (faster than searching every tick)
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		if (APawn* Pawn = PC->GetPawn())
+		{
+			SelectionComponent = Pawn->FindComponentByClass<UUnitSelectionComponent>();
+		}
+	}
 }
 
+
+// ------------------------------------------------------------
+// Tick
+// ------------------------------------------------------------
 void ASphereRadius::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	
-	if(SphereEnable)
-		CurrentRadius = Adjust();
+
+	if (bActive)
+	{
+		CurrentRadius = ComputeRadius();
+	}
 }
 
-float ASphereRadius::Adjust() const
+
+// ------------------------------------------------------------
+// Compute radius (core behaviour)
+// ------------------------------------------------------------
+float ASphereRadius::ComputeRadius()
 {
-	if (!SelectionComponent || !SphereComponent || !Decal) return 0.f;
+	if (!SelectionComponent || !DecalComponent)
+		return 0.f;
 
-	const FVector CurrentMouseLocOnTerrain = SelectionComponent->GetMousePositionOnTerrain().Location;
-	const FVector EndPoint = FVector(CurrentMouseLocOnTerrain.X, CurrentMouseLocOnTerrain.Y, 0.0f);
+	// Mouse → terrain hit
+	const FHitResult Hit = SelectionComponent->GetMousePositionOnTerrain();
+	const FVector EndPoint(Hit.Location.X, Hit.Location.Y, 0.f);
 
-	FVector NewLocation = UKismetMathLibrary::VLerp(StartLocation, EndPoint, 0.5f);
-	SphereComponent->SetWorldLocation(NewLocation);
+	// Mid-point for correct ground positioning of the decal
+	const FVector NewLocation = (StartLocation + EndPoint) * 0.5f;
+	SetActorLocation(NewLocation);
 
-	float NewScale = FVector::Distance(FVector(NewLocation.X, NewLocation.Y, 0.0f), EndPoint);
-	//SphereComponent->SetSphereRadius(NewScale);
+	// 2D distance → sphere radius
+	const FVector A2D(NewLocation.X, NewLocation.Y, 0.f);
+	const FVector B2D(EndPoint.X, EndPoint.Y, 0.f);
+	const float Radius = FVector::Distance(A2D, B2D);
 
-	FVector DecalSize = FVector(NewScale * 2.0f, NewScale * 2.0f, NewScale * 2.0f);
-	Decal->DecalSize = DecalSize;
+	// Update decal scale
+	DecalComponent->DecalSize = FVector(Radius * 2.f, Radius * 2.f, Radius * 2.f);
 
-	return NewScale;
+	return Radius;
 }
 
-void ASphereRadius::Start(FVector Position, const FRotator Rotation)
-{
-	if(!Decal) return;
 
-	StartLocation = FVector(Position.X, Position.Y, 0.0f);
-	StartRotation = FRotator(0.f, Rotation.Yaw, 0.0f);
+// ------------------------------------------------------------
+// Start preview
+// ------------------------------------------------------------
+void ASphereRadius::Start(FVector Position, FRotator Rotation)
+{
+	if (!DecalComponent)
+		return;
+
+	StartLocation = FVector(Position.X, Position.Y, 0.f);
+	StartRotation = FRotator(0.f, Rotation.Yaw, 0.f);
 
 	SetActorLocation(StartLocation);
 	SetActorRotation(StartRotation);
+
 	SetActorEnableCollision(true);
-	
-	Decal->SetVisibility(true);
-	SphereEnable = true;
+	DecalComponent->SetVisibility(true);
+
+	bActive = true;
 }
 
+
+// ------------------------------------------------------------
+// End preview
+// ------------------------------------------------------------
 void ASphereRadius::End()
 {
-	if(!Decal) return;
+	if (!DecalComponent)
+		return;
 
-	SphereEnable = false;
+	bActive = false;
+
 	SetActorEnableCollision(false);
-	Decal->SetVisibility(false);
+	DecalComponent->SetVisibility(false);
 }
-
-float ASphereRadius::GetRadius() const
-{
-	return CurrentRadius;
-}
-

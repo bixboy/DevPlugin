@@ -1,11 +1,8 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "PlayerCameraRotationPreview.generated.h"
 
-/**
- * Shared state container used to manage delayed rotation previews for commands and spawning.
- */
+
 USTRUCT(BlueprintType)
 struct FRotationPreviewState
 {

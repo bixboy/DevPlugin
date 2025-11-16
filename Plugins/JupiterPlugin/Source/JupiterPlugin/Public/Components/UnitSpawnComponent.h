@@ -10,18 +10,19 @@ class ASoldierRts;
 UENUM(BlueprintType)
 enum class ESpawnFormation : uint8
 {
-    Square     UMETA(DisplayName = "Square"),
-    Line       UMETA(DisplayName = "Line"),
-    Column     UMETA(DisplayName = "Column"),
-    Wedge      UMETA(DisplayName = "Wedge"),
-    Blob       UMETA(DisplayName = "Blob"),
-    Custom     UMETA(DisplayName = "Custom")
+    Square,
+    Line,
+    Column,
+    Wedge,
+    Blob,
+    Custom
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSpawnUnitClassChangedSignature, TSubclassOf<ASoldierRts>, NewUnitClass);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSpawnCountChangedSignature, int32, NewSpawnCount);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSpawnCountChangedSignature, int32, NewCount);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSpawnFormationChangedSignature, ESpawnFormation, NewFormation);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCustomFormationDimensionsChangedSignature, FIntPoint, NewDimensions);
+
 
 UCLASS(ClassGroup = (RTS), meta = (BlueprintSpawnableComponent))
 class JUPITERPLUGIN_API UUnitSpawnComponent : public UActorComponent
@@ -34,111 +35,99 @@ public:
     virtual void BeginPlay() override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
-    void SetUnitToSpawn(TSubclassOf<ASoldierRts> NewUnitClass);
+    // -------------------------------
+    // Public API
+    // -------------------------------
+    UFUNCTION(BlueprintCallable)
+    void SetUnitToSpawn(TSubclassOf<ASoldierRts> NewUnit);
 
-    UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
+    UFUNCTION(BlueprintCallable)
     void SpawnUnits();
 
-    UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
-    void SpawnUnitsWithTransform(const FVector& SpawnLocation, const FRotator& SpawnRotation);
+    UFUNCTION(BlueprintCallable)
+    void SpawnUnitsWithTransform(const FVector& Location, const FRotator& Rotation);
 
-    UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
-    void SetUnitsPerSpawn(int32 NewSpawnCount);
+    UFUNCTION(BlueprintCallable)
+    void SetUnitsPerSpawn(int32 NewCount);
 
-    UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
-    int32 GetUnitsPerSpawn() const { return UnitsPerSpawn; }
-
-    UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
-    TSubclassOf<ASoldierRts> GetUnitToSpawn() const { return UnitToSpawn; }
-
-    UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
-    float GetFormationSpacing() const { return FormationSpacing; }
-
-    UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
+    UFUNCTION(BlueprintCallable)
     void SetSpawnFormation(ESpawnFormation NewFormation);
 
-    UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
-    ESpawnFormation GetSpawnFormation() const { return SpawnFormation; }
-
-    UFUNCTION(BlueprintCallable, Category = "RTS|Spawn")
+    UFUNCTION(BlueprintCallable)
     void SetCustomFormationDimensions(FIntPoint NewDimensions);
 
-    UFUNCTION(BlueprintPure, Category = "RTS|Spawn")
-    FIntPoint GetCustomFormationDimensions() const { return CustomFormationDimensions; }
+    UFUNCTION(BlueprintPure)
+    int32 GetUnitsPerSpawn() const { return UnitsPerSpawn; }
 
-    UPROPERTY(BlueprintAssignable, Category = "RTS|Spawn")
+    UFUNCTION(BlueprintPure)
+    TSubclassOf<ASoldierRts> GetUnitToSpawn() const { return UnitToSpawn; }
+
+	UFUNCTION(BlueprintPure)
+	float GetFormationSpacing() const { return FormationSpacing; }
+
+	UFUNCTION(BlueprintPure)
+	ESpawnFormation GetSpawnFormation() const { return SpawnFormation; }
+
+	FIntPoint GetCustomFormationDimensions() const { return CustomFormationDimensions; }
+
+    UFUNCTION(BlueprintCallable)
+    void BuildSpawnFormationOffsets(int32 Count, float Spacing, TArray<FVector>& OutOffsets, const FRotator& Facing) const;
+
+public:
+    // Events
+    UPROPERTY(BlueprintAssignable)
     FOnSpawnUnitClassChangedSignature OnUnitClassChanged;
 
-    UPROPERTY(BlueprintAssignable, Category = "RTS|Spawn")
+    UPROPERTY(BlueprintAssignable)
     FOnSpawnCountChangedSignature OnSpawnCountChanged;
 
-    UPROPERTY(BlueprintAssignable, Category = "RTS|Spawn")
+    UPROPERTY(BlueprintAssignable)
     FOnSpawnFormationChangedSignature OnSpawnFormationChanged;
 
-    UPROPERTY(BlueprintAssignable, Category = "RTS|Spawn")
+    UPROPERTY(BlueprintAssignable)
     FOnCustomFormationDimensionsChangedSignature OnCustomFormationDimensionsChanged;
 
 protected:
-    UFUNCTION(Server, Reliable)
-    void ServerSetUnitClass(TSubclassOf<ASoldierRts> NewUnitClass);
-
-    UFUNCTION(Server, Reliable)
-    void ServerSpawnUnits(const FVector& SpawnLocation, const FRotator& SpawnRotation);
-
-    UFUNCTION(Server, Reliable)
-    void ServerSetUnitsPerSpawn(int32 NewSpawnCount);
-
-    UFUNCTION(Server, Reliable)
-    void ServerSetSpawnFormation(ESpawnFormation NewFormation);
-
-    UFUNCTION(Server, Reliable)
-    void ServerSetCustomFormationDimensions(FIntPoint NewDimensions);
-
-    UFUNCTION()
-    void OnRep_UnitToSpawn();
-
-    UFUNCTION()
-    void OnRep_UnitsPerSpawn();
-
-    UFUNCTION()
-    void OnRep_SpawnFormation();
-
-    UFUNCTION()
-    void OnRep_CustomFormationDimensions();
-
-    void UpdateSpawnCountFromCustomFormation();
-    void GenerateSpawnOffsets(TArray<FVector>& OutOffsets, int32 SpawnCount, float Spacing, const FRotator& Rotation) const;
+    // Server RPCs
+    UFUNCTION(Server, Reliable) void ServerSetUnitClass(TSubclassOf<ASoldierRts> NewUnit);
+    UFUNCTION(Server, Reliable) void ServerSpawnUnits(const FVector& Location, const FRotator& Rotation);
+    UFUNCTION(Server, Reliable) void ServerSetUnitsPerSpawn(int32 NewCount);
+    UFUNCTION(Server, Reliable) void ServerSetSpawnFormation(ESpawnFormation NewFormation);
+    UFUNCTION(Server, Reliable) void ServerSetCustomFormationDimensions(FIntPoint NewDimensions);
 
 protected:
-    UPROPERTY()
-    TObjectPtr<UUnitSelectionComponent> SelectionComponent;
+    // Rep notifies
+    UFUNCTION() void OnRep_UnitToSpawn();
+    UFUNCTION() void OnRep_UnitsPerSpawn();
+    UFUNCTION() void OnRep_SpawnFormation();
+    UFUNCTION() void OnRep_CustomFormationDimensions();
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Spawn")
-    bool bRequireGroundHit = true;
+    // Helpers
+    void UpdateSpawnCountFromCustomFormation();
+    void GenerateFormationOffsets(TArray<FVector>& OutOffsets, int32 Count, float Spacing) const;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Spawn")
-    float SpawnTraceTolerance = 50.f;
+protected:
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Spawn")
-    bool bNotifyOnServerOnly = false;
+    UPROPERTY() TObjectPtr<UUnitSelectionComponent> SelectionComponent;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Spawn")
-    TSubclassOf<ASoldierRts> DefaultUnitClass;
+    UPROPERTY(EditAnywhere) bool bRequireGroundHit = true;
+    UPROPERTY(EditAnywhere) float SpawnTraceTolerance = 50.f;
+    UPROPERTY(EditAnywhere) bool bNotifyOnServerOnly = false;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_UnitsPerSpawn, Category = "RTS|Spawn", meta = (ClampMin = "1"))
+    UPROPERTY(EditAnywhere) TSubclassOf<ASoldierRts> DefaultUnitClass;
+
+    UPROPERTY(EditAnywhere, ReplicatedUsing = OnRep_UnitsPerSpawn, meta=(ClampMin=1))
     int32 UnitsPerSpawn = 1;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Spawn", meta = (ClampMin = "0"))
+    UPROPERTY(EditAnywhere, meta=(ClampMin=0))
     float FormationSpacing = 150.f;
 
     UPROPERTY(ReplicatedUsing = OnRep_UnitToSpawn)
     TSubclassOf<ASoldierRts> UnitToSpawn;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_SpawnFormation, Category = "RTS|Spawn")
+    UPROPERTY(EditAnywhere, ReplicatedUsing = OnRep_SpawnFormation)
     ESpawnFormation SpawnFormation = ESpawnFormation::Square;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_CustomFormationDimensions, Category = "RTS|Spawn", meta = (ClampMin = "1"))
+    UPROPERTY(EditAnywhere, ReplicatedUsing = OnRep_CustomFormationDimensions, meta=(ClampMin=1))
     FIntPoint CustomFormationDimensions = FIntPoint(3, 3);
 };
-
