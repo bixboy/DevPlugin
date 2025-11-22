@@ -64,6 +64,20 @@ void ASphereRadius::Tick(float DeltaTime)
 
 
 // ------------------------------------------------------------
+// Set Radius (Nouvelle fonction)
+// ------------------------------------------------------------
+void ASphereRadius::SetRadius(float NewRadius)
+{
+	CurrentRadius = NewRadius;
+
+	if (DecalComponent)
+	{
+		DecalComponent->DecalSize = FVector(NewRadius, NewRadius, NewRadius);
+	}
+}
+
+
+// ------------------------------------------------------------
 // Compute radius (core behaviour)
 // ------------------------------------------------------------
 float ASphereRadius::ComputeRadius()

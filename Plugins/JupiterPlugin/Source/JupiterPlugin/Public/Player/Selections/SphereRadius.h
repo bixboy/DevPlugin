@@ -21,6 +21,8 @@ public:
 
 	void End();
 
+	void SetRadius(float NewRadius);
+
 	float GetRadius() const { return CurrentRadius; }
 
 protected:

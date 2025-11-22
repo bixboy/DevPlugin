@@ -245,14 +245,6 @@ bool UCommandComponent::IsOrientated() const
 
 void UCommandComponent::SetMoveMarker_Implementation(const FVector Location, const FCommandData CommandData)
 {
-	if (!MoveMarker)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveMarker is null"));
-		return;
-	}
-	
-	UE_LOG(LogTemp, Warning, TEXT("MoveMarker is Valid"));
-
 	if (CommandData.RequestingController && CommandData.RequestingController->IsLocalController())
 		ShowMoveMarker(true);
 	

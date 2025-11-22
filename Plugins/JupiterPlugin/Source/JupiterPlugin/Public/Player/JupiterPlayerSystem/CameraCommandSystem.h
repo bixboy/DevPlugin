@@ -1,12 +1,19 @@
 ﻿#pragma once
+
 #include "CoreMinimal.h"
 #include "CameraSystemBase.h"
-#include "InputActionValue.h"
 #include "CameraCommandSystem.generated.h"
-
 
 class ASphereRadius;
 
+UENUM(BlueprintType)
+enum class ECommandMode : uint8
+{
+    None,
+    MoveRotation,   // Clic droit maintenu (Flèche direction)
+    PatrolCircle,   // Alt + Clic droit maintenu + Slide (Cercle zone)
+    PatrolPathing   // Mode actif (on est en train de placer des points)
+};
 
 UCLASS()
 class JUPITERPLUGIN_API UCameraCommandSystem : public UCameraSystemBase
@@ -17,82 +24,89 @@ public:
     virtual void Init(APlayerCamera* InOwner) override;
     virtual void Tick(float DeltaTime) override;
 
-    // Command (Right-click)
+    // --- Inputs Handlers ---
+    // Clic Droit
     void HandleCommandActionStarted();
     void HandleCommandActionCompleted();
 
-    // Patrol (Alt + Right-click)
+    // Alt
     void HandleAltPressed();
     void HandleAltReleased();
-    void HandleAltHold(const FInputActionValue& Value);
+    
+    // NOTE : J'ai supprimé HandleAltHold car on gère maintenant le hold dans le Tick 
+    // pour différencier proprement le "Slide" du "Click"
 
-    // Destroy
+    // --- Actions ---
     void HandleDestroySelected();
     void HandleServerDestroyActor(const TArray<AActor*>& ActorsToDestroy);
 
-    // Link systems
+    // --- Link systems ---
     void SetPreviewSystem(class UCameraPreviewSystem* InPreview) { PreviewSystem = InPreview; }
     void SetSpawnSystem(class UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
 
+    // --- Getters / State Checks ---
+    bool IsBuildingPatrolPath() const { return bIsBuildingPatrolPath; }
+    bool IsAltDown() const;
+
 protected:
-    // --- Command issuing ---
+    // --- Core Logic Helpers ---
+    void ExecuteFinalCommand(const FHitResult& HitResult);
+    
+    // Helpers pour l'exécution des ordres (Envoi au Component)
     void IssueMoveCommand(const FVector& TargetLocation, const FRotator& Facing);
     void IssueAttackCommand(AActor* TargetActor);
-    void IssuePatrolCommand(float Radius, const FVector& Center);
+    void IssuePatrolCircleCommand(float Radius, const FVector& Center);
+    void IssuePatrolPathCommand();
 
-    void IssueFinalCommand(const FHitResult& HitResult);
-
-    // --- Patrol helpers ---
-    void StartPatrolRadius(const FVector& Center);
-    void StopPatrolRadius();
-    void UpdatePatrolRadius(const FVector& MouseLocation);
-
-    // --- Rotation preview ---
-    bool TryActivateRotationPreview(float CurrentTime, float Threshold, const FVector& InitialLocation, const FVector& MouseLocation);
-    void BeginRotationPreview(float CurrentTime, const FVector& Center, const FRotator& BaseYaw);
+    // Helpers visuels & calculs
     void UpdateRotationPreview(const FVector& MouseLocation);
-    void StopRotationPreview();
+    void UpdateCircleRadius(const FVector& MouseLocation);
+    
+    // Helpers Patrouille par points
+    void AddPatrolWaypoint(const FVector& Location);
+    void ResetPatrolPath();
 
-    // --- Helpers ---
+    // Helpers Raycast
     bool GetMouseHitOnTerrain(FHitResult& OutHit) const;
     AActor* GetHoveredActor() const;
 
 protected:
-
-    // Base preview systems
+    // --- Systems References ---
+    UPROPERTY()
     UCameraPreviewSystem* PreviewSystem = nullptr;
+
+    UPROPERTY()
     UCameraSpawnSystem* SpawnSystem = nullptr;
 
-    // --- Rotation preview ---
-    bool bIsCommandHeld = false;
-    bool bRotationPreviewActive = false;
-    bool bRotationHoldTriggered = false;
-
-    float RotationHoldStartTime = 0.f;
-    float RotationHoldThreshold = 0.25f;
-
-    FVector RotationCenter = FVector::ZeroVector;
-    FVector InitialDirection = FVector::ForwardVector;
-
-    FRotator BaseRotation = FRotator::ZeroRotator;
-    FRotator CurrentRotation = FRotator::ZeroRotator;
-
-    FVector CommandStartLocation = FVector::ZeroVector;
-
-    // --- Patrol ---
-    bool bAltPressed = false;
-    bool bPatrolActive = false;
-    bool bIsCreatingPatrol = false;
-
-public:
-    void CancelPatrolCreation();
-    bool IsCreatingPatrol() const { return bIsCreatingPatrol; }
-
-    UPROPERTY(EditAnywhere)
+    // --- Settings ---
+    UPROPERTY(EditDefaultsOnly, Category = "Settings|Command")
     TSubclassOf<ASphereRadius> SphereRadiusClass;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Settings|Command")
+    float RotationHoldThreshold = 0.20f; // Temps avant d'afficher la flèche
+
+    UPROPERTY(EditDefaultsOnly, Category = "Settings|Command")
+    float DragThreshold = 10.0f; // Distance souris avant de considérer un "Slide"
+
+    // --- State Machine Data ---
+    ECommandMode CurrentMode = ECommandMode::None;
+    
+    bool bIsRightClickDown = false;
+    bool bIsAltDown = false;
+    
+    float ClickStartTime = 0.0f;        // Pour calculer la durée du maintien
+    FVector CommandStartLocation;       // Où la souris était au début du clic
+
+    // --- Rotation Data ---
+    FRotator BaseRotation = FRotator::ZeroRotator;
+    FRotator CurrentRotation = FRotator::ZeroRotator; // Rotation calculée
+
+    // --- Patrol Data ---
+    bool bIsBuildingPatrolPath = false; // Est-on en train de placer des points ?
+    
+    UPROPERTY(VisibleAnywhere, Category = "Debug|Patrol")
+    TArray<FVector> PatrolWaypoints;    // Liste des points de passage
 
     UPROPERTY()
     ASphereRadius* SphereRadius = nullptr;
-
-    float PatrolHoldThreshold = 0.25f;
 };

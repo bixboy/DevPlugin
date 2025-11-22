@@ -149,7 +149,7 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
 
         Bind(AltCommandAction, ETriggerEvent::Started, CmdSys, &UCameraCommandSystem::HandleAltPressed);
         Bind(AltCommandAction, ETriggerEvent::Completed, CmdSys, &UCameraCommandSystem::HandleAltReleased);
-        Bind(AltCommandHoldAction, ETriggerEvent::Triggered, CmdSys, &UCameraCommandSystem::HandleAltHold);
+        //Bind(AltCommandHoldAction, ETriggerEvent::Triggered, CmdSys, &UCameraCommandSystem::HandleAltHold);
 
         Bind(DeleteAction, ETriggerEvent::Triggered, CmdSys, &UCameraCommandSystem::HandleDestroySelected);
     }
