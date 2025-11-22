@@ -4,9 +4,10 @@
 #include "Components/ActorComponent.h"
 #include "InputCoreTypes.h"
 #include "Data/AiData.h"
+#include "Data/PatrolData.h"
 #include "UnitPatrolComponent.generated.h"
 
-class ULineBatchComponent;
+class UPatrolVisualizerComponent;
 class UUnitOrderComponent;
 class UUnitSelectionComponent;
 
@@ -14,129 +15,163 @@ class UUnitSelectionComponent;
 USTRUCT(BlueprintType)
 struct FPatrolRoute
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FVector> PatrolPoints;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsLoop = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FVector> PatrolPoints;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsLoop = false;
 };
 
-/** Cache local de rendu spline pour chaque route active. */
-USTRUCT()
-struct FPatrolRouteVisCache
-{
-    GENERATED_BODY()
-
-    TArray<FVector> ElevatedPoints;
-    TArray<FVector> SplineSamples;
-    uint32 GeometryHash = 0;
-    bool bLoopCached = false;
-    FColor BaseColor = FColor::White;
-
-    void Reset()
-    {
-        ElevatedPoints.Reset();
-        SplineSamples.Reset();
-        GeometryHash = 0;
-        bLoopCached = false;
-        BaseColor = FColor::White;
-    }
-};
-
+/**
+ * Component managing patrol logic and integration.
+ * Delegates visualization to UPatrolVisualizerComponent for better separation of concerns.
+ */
 UCLASS(ClassGroup=(RTS), meta=(BlueprintSpawnableComponent))
 class JUPITERPLUGIN_API UUnitPatrolComponent : public UActorComponent
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    UUnitPatrolComponent();
+	UUnitPatrolComponent();
 
-    virtual void BeginPlay() override;
-    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    /** Handles left mouse button events forwarded by the player camera. */
-    bool HandleLeftClick(EInputEvent InputEvent);
+	// ============================================================
+	// INPUT HANDLING
+	// ============================================================
 
-    /** Handles the right mouse button being pressed. */
-    bool HandleRightClickPressed(bool bAltDown);
+	/** Handles left mouse button events forwarded by the player camera. */
+	bool HandleLeftClick(EInputEvent InputEvent);
 
-    /** Handles the right mouse button being released. */
-    bool HandleRightClickReleased(bool bAltDown);
+	/** Handles the right mouse button being pressed. */
+	bool HandleRightClickPressed(bool bAltDown);
+
+	/** Handles the right mouse button being released. */
+	bool HandleRightClickReleased(bool bAltDown);
+
+	// ============================================================
+	// PATROL PREVIEW SYSTEM
+	// ============================================================
+
+	/** Start creating a patrol route preview */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+	void StartPatrolPreview(const FVector& StartPoint);
+
+	/** Add a waypoint to the preview */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+	void AddPreviewWaypoint(const FVector& Point);
+
+	/** Update the last waypoint position (for mouse following) */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+	void UpdatePreviewCursor(const FVector& CursorPosition);
+
+	/** Commit the preview as an active route */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+	void CommitPatrolPreview(bool bLoop);
+
+	/** Cancel the current preview */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+	void CancelPatrolPreview();
+
+	/** Check if currently in preview mode */
+	UFUNCTION(BlueprintPure, Category = "RTS|Patrol")
+	bool IsInPreviewMode() const { return bIsCreatingPreview; }
+
+	// ============================================================
+	// PATROL MANAGEMENT
+	// ============================================================
+
+	/** Get current active patrol routes */
+	UFUNCTION(BlueprintPure, Category = "RTS|Patrol")
+	const TArray<FPatrolRoute>& GetActiveRoutes() const { return ActivePatrolRoutes; }
+
+	/** Manually set patrol routes (for testing/debugging) */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+	void SetPatrolRoutes(const TArray<FPatrolRoute>& NewRoutes);
+
+	/** Clear all patrol routes */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+	void ClearAllRoutes();
 
 protected:
-    // === Internal Helpers ===
-    void EnsureLineBatchComponent();
-    void UpdateRouteVisuals(float DeltaSeconds);
-    void DrawActiveRouteVisualizations();
-    void DrawRouteVisualizationCached(const TArray<FVector>& Points, bool bLoop, const FColor& BaseColor, bool bAnimate, FPatrolRouteVisCache& Cache);
+	// ============================================================
+	// INTERNAL HELPERS
+	// ============================================================
 
-    void DrawPolylineWithGlow(const TArray<FVector>& Samples, const FLinearColor& CoreColor, float BaseThickness, bool bAnimate) const;
-    void DrawPointsHalo(const TArray<FVector>& Points, const FColor& BaseColor) const;
-    void DrawDirectionArrows(const TArray<FVector>& Samples, const FColor& Color) const;
+	/** Ensure visualizer component exists */
+	void EnsureVisualizerComponent();
 
-    void BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples) const;
-    static FVector EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T);
-    static uint32 HashPointsLight(const TArray<FVector>& Points, bool bLoop);
+	/** Update visualization to match current routes */
+	void UpdateVisualization();
 
-    bool IsLocallyControlled() const;
-    bool HasAuthority() const;
+	/** Convert FPatrolRoute to FPatrolRouteExtended for visualization */
+	static FPatrolRouteExtended ConvertToExtended(const FPatrolRoute& Route, const FLinearColor& Color = FLinearColor::Blue);
 
-    // === Data ===
-    UPROPERTY(ReplicatedUsing=OnRep_ActivePatrolRoutes)
-    TArray<FPatrolRoute> ActivePatrolRoutes;
+	/** Check if this component is locally controlled */
+	bool IsLocallyControlled() const;
 
-    UFUNCTION() void OnRep_ActivePatrolRoutes();
+	/** Check if this component has authority */
+	bool HasAuthority() const;
 
-    UPROPERTY(Transient) TObjectPtr<ULineBatchComponent> LineBatchComponent = nullptr;
-    UPROPERTY() TArray<FPatrolRouteVisCache> RoutesVisCache;
+	// ============================================================
+	// EVENT HANDLERS
+	// ============================================================
 
-    float GlobalVisualTime = 0.f;
-    float VisualRefreshTimer = 0.f;
-    bool bVisualsDirty = true;
+	/** Handle orders dispatched to units */
+	UFUNCTION()
+	void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& IssuedCommand);
 
-    // === Dependencies ===
-    UPROPERTY()
-    TObjectPtr<UUnitOrderComponent> OrderComponent = nullptr;
+	/** Refresh routes based on current selection */
+	void RefreshRoutesFromSelection();
 
-    UPROPERTY()
-    TObjectPtr<UUnitSelectionComponent> SelectionComponent = nullptr;
+	/** Apply new routes (with equivalence check) */
+	void ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes);
 
-    // === Input Helpers ===
-    UFUNCTION()
-    void HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& IssuedCommand);
+	// ============================================================
+	// DATA - REPLICATED
+	// ============================================================
 
-    void RefreshRoutesFromSelection();
-    void ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes);
+	/** Active patrol routes (replicated to clients) */
+	UPROPERTY(ReplicatedUsing=OnRep_ActivePatrolRoutes)
+	TArray<FPatrolRoute> ActivePatrolRoutes;
 
-    // === Settings ===
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
-    FColor ActiveRouteColor = FColor::Cyan;
+	UFUNCTION()
+	void OnRep_ActivePatrolRoutes();
 
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
-    float VisualZOffset = 12.f;
+	// ============================================================
+	// DATA - LOCAL
+	// ============================================================
 
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
-    bool bAnimateActiveRoutes = true;
+	/** Visualizer component for rendering routes */
+	UPROPERTY(Transient)
+	TObjectPtr<UPatrolVisualizerComponent> PatrolVisualizer = nullptr;
 
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX")
-    float VisualRefreshInterval = 0.05f;
+	/** Preview route being created */
+	UPROPERTY()
+	FPatrolRouteExtended PreviewRoute;
 
-    // Pulsations dynamiques
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float ColorPulseSpeed = 2.4f;
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float LineWaveSpeed = 2.6f;
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float LineWaveAmplitude = 1.6f;
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float PointPulseSpeed = 2.1f;
+	/** Is currently creating a preview route */
+	UPROPERTY()
+	bool bIsCreatingPreview = false;
 
-    // Glow
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") int32 GlowPasses = 2;
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float GlowSize = 6.f;
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float GlowAlpha = 0.25f;
+	/** Dependencies */
+	UPROPERTY()
+	TObjectPtr<UUnitOrderComponent> OrderComponent = nullptr;
 
-    // Arrows
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float ArrowEveryUU = 600.f;
+	UPROPERTY()
+	TObjectPtr<UUnitSelectionComponent> SelectionComponent = nullptr;
 
-    // Style
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float DebugPointRadius = 40.f;
-    UPROPERTY(EditAnywhere, Category="RTS|Patrol|VFX") float DebugLineThickness = 3.f;
+	// ============================================================
+	// SETTINGS (exposed for per-instance customization)
+	// ============================================================
+
+	/** Color for this unit's active routes */
+	UPROPERTY(EditAnywhere, Category = "RTS|Patrol|Visuals")
+	FLinearColor RouteColor = FLinearColor(0.0f, 1.0f, 1.0f);
+
+	/** Whether to auto-create visualizer component */
+	UPROPERTY(EditAnywhere, Category = "RTS|Patrol")
+	bool bAutoCreateVisualizer = true;
 };

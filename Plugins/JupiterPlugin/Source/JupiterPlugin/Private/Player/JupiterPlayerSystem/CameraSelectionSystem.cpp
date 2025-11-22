@@ -61,6 +61,13 @@ void UCameraSelectionSystem::HandleSelectionPressed()
 
 	GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, "Selection Started");
 	
+    // Check if we are creating a patrol route
+    if (CommandSystem && CommandSystem->IsCreatingPatrol())
+    {
+        CommandSystem->CancelPatrolCreation();
+        return; // Do not proceed with selection
+    }
+
     FHitResult Hit;
     if (!GetMouseHit(Hit))
     {

@@ -80,6 +80,7 @@ void UCameraMovementSystem::Tick(float DeltaTime)
 
 void UCameraMovementSystem::HandleMoveInput(const FInputActionValue& Value)
 {
+	GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Red, "MoveInput");
     PendingMoveInput = Value.Get<FVector2D>();
 }
 

@@ -82,6 +82,11 @@ protected:
     // --- Patrol ---
     bool bAltPressed = false;
     bool bPatrolActive = false;
+    bool bIsCreatingPatrol = false;
+
+public:
+    void CancelPatrolCreation();
+    bool IsCreatingPatrol() const { return bIsCreatingPatrol; }
 
     UPROPERTY(EditAnywhere)
     TSubclassOf<ASphereRadius> SphereRadiusClass;

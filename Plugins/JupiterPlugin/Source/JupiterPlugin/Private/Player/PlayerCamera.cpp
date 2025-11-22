@@ -54,6 +54,14 @@ void APlayerCamera::BeginPlay()
         Mode.SetHideCursorDuringCapture(false);
         Player->SetInputMode(Mode);
         Player->bShowMouseCursor = true;
+
+        if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(Player->GetLocalPlayer()))
+        {
+            if (InputMapping)
+            {
+                Subsystem->AddMappingContext(InputMapping, 0);
+            }
+        }
     }
 
     InitializeSystems();
@@ -90,6 +98,9 @@ void APlayerCamera::Tick(float DeltaTime)
 // ---------------------------------------------------------
 void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
 {
+    // Ensure systems are initialized BEFORE binding inputs
+    InitializeSystems();
+
     Super::SetupPlayerInputComponent(Input);
 
     auto* EIC = Cast<UEnhancedInputComponent>(Input);
@@ -164,19 +175,19 @@ void APlayerCamera::NotifyControllerChanged()
 // ---------------------------------------------------------
 void APlayerCamera::InitializeSystems()
 {
-    if (PreviewSystemClass)
+    if (PreviewSystemClass && !PreviewSystem)
     {
         PreviewSystem = CreateSystem<UCameraPreviewSystem>(PreviewSystemClass);
         PreviewSystem->Init(this);
     }
 
-    if (MovementSystemClass)
+    if (MovementSystemClass && !MovementSystem)
     {
         MovementSystem = CreateSystem<UCameraMovementSystem>(MovementSystemClass);
         MovementSystem->Init(this);
     }
 
-    if (CommandSystemClass)
+    if (CommandSystemClass && !CommandSystem)
     {
         CommandSystem = CreateSystem<UCameraCommandSystem>(CommandSystemClass);
         CommandSystem->Init(this);
@@ -185,7 +196,7 @@ void APlayerCamera::InitializeSystems()
         	CommandSystem->SetPreviewSystem(PreviewSystem);
     }
 
-    if (SpawnSystemClass)
+    if (SpawnSystemClass && !SpawnSystem)
     {
         SpawnSystem = CreateSystem<UCameraSpawnSystem>(SpawnSystemClass);
         SpawnSystem->Init(this);
@@ -194,7 +205,7 @@ void APlayerCamera::InitializeSystems()
     }
 	
 
-    if (SelectionSystemClass)
+    if (SelectionSystemClass && !SelectionSystem)
     {
         SelectionSystem = CreateSystem<UCameraSelectionSystem>(SelectionSystemClass);
         SelectionSystem->Init(this);
