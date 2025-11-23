@@ -8,9 +8,7 @@
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
 
-// ------------------------------------------------------------
-// INIT
-// ------------------------------------------------------------
+
 void UCameraCommandSystem::Init(APlayerCamera* InOwner)
 {
     Super::Init(InOwner);
@@ -28,9 +26,7 @@ void UCameraCommandSystem::Init(APlayerCamera* InOwner)
     }
 }
 
-// ------------------------------------------------------------
-// TICK : Gestion des États + DEBUG VISUEL
-// ------------------------------------------------------------
+
 void UCameraCommandSystem::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -38,7 +34,6 @@ void UCameraCommandSystem::Tick(float DeltaTime)
     // --- A. VISUALISATION DEBUG (Patrol Path) ---
     if (bIsBuildingPatrolPath)
     {
-        // 1. Dessiner les lignes entre les points existants
         if (PatrolWaypoints.Num() > 0)
         {
             for (int i = 0; i < PatrolWaypoints.Num() - 1; i++)
@@ -46,11 +41,10 @@ void UCameraCommandSystem::Tick(float DeltaTime)
                 DrawDebugLine(GetWorld(), PatrolWaypoints[i], PatrolWaypoints[i+1], FColor::Green, false, -1.0f, 0, 3.0f);
                 DrawDebugSphere(GetWorld(), PatrolWaypoints[i], 15.0f, 8, FColor::Green, false, -1.0f, 0, 1.0f);
             }
-            // Marquer le dernier point validé
+        	
             DrawDebugSphere(GetWorld(), PatrolWaypoints.Last(), 15.0f, 8, FColor::Green, false, -1.0f, 0, 1.0f);
         }
 
-        // 2. Dessiner la ligne élastique vers la souris (Preview du prochain point)
         FHitResult Hit;
         if(GetMouseHitOnTerrain(Hit))
         {
@@ -58,7 +52,6 @@ void UCameraCommandSystem::Tick(float DeltaTime)
             DrawDebugLine(GetWorld(), StartPos, Hit.Location, FColor::Yellow, false, -1.0f, 0, 2.0f);
             DrawDebugSphere(GetWorld(), Hit.Location, 10.0f, 8, FColor::Yellow, false, -1.0f, 0, 1.0f);
             
-            // Afficher le status texte à côté de la souris pour le debug
             FString StatusText = FString::Printf(TEXT("PATROL BUILDER\nPoints: %d\n[R-Click] Add Point\n[Alt+R-Click] Finish"), PatrolWaypoints.Num());
             DrawDebugString(GetWorld(), Hit.Location + FVector(0,0,100), StatusText, nullptr, FColor::White, 0.0f, true);
         }
@@ -76,11 +69,8 @@ void UCameraCommandSystem::Tick(float DeltaTime)
         // CAS 1 : ALT + CLIC MAINTENU
         if (IsAltDown())
         {
-            // Si on est déjà en train de construire un chemin point par point, 
-            // on INTERDIT de passer en mode "Cercle" (Slide) pour éviter de casser la logique.
             if (!bIsBuildingPatrolPath)
             {
-                // Si on bouge la souris significativement -> Mode Cercle
                 if (DistMoved > DragThreshold || CurrentMode == ECommandMode::PatrolCircle)
                 {
                     CurrentMode = ECommandMode::PatrolCircle;
@@ -88,18 +78,16 @@ void UCameraCommandSystem::Tick(float DeltaTime)
                 }
             }
         }
-        // CAS 2 : CLIC MAINTENU (SANS ALT) -> ROTATION PREVIEW
+        // CAS 2 : ROTATION PREVIEW
         else 
         {
-            // Si on maintient assez longtemps -> Mode Rotation
             if (TimeHeld > RotationHoldThreshold || CurrentMode == ECommandMode::MoveRotation)
             {
                 CurrentMode = ECommandMode::MoveRotation;
                 UpdateRotationPreview(Hit.Location);
 
-                // VISUALISATION DEBUG (Rotation Arrow)
                 FVector Start = CommandStartLocation;
-                FVector End = Start + CurrentRotation.Vector() * 200.0f; // 200 units long arrow
+                FVector End = Start + CurrentRotation.Vector() * 200.0f;
                 DrawDebugDirectionalArrow(GetWorld(), Start, End, 20.0f, FColor::Cyan, false, -1.0f, 0, 5.0f);
             }
         }
@@ -133,11 +121,11 @@ void UCameraCommandSystem::HandleCommandActionStarted()
     {
         CommandStartLocation = Hit.Location;
         
-        // Reset rotation de base
         if (GetOwner()->GetCameraComponent())
         {
             BaseRotation = FRotator(0.f, GetOwner()->GetCameraComponent()->GetComponentRotation().Yaw, 0.f);
         }
+    	
         CurrentRotation = BaseRotation;
     }
 }
@@ -146,18 +134,20 @@ void UCameraCommandSystem::HandleCommandActionCompleted()
 {
     bIsRightClickDown = false;
     
-    // 1. Fin du mode CERCLE (Alt + Drag)
+    // 1. Fin du mode CERCLE
     if (CurrentMode == ECommandMode::PatrolCircle)
     {
         float Radius = (SphereRadius) ? SphereRadius->GetRadius() : 500.f;
         IssuePatrolCircleCommand(Radius, CommandStartLocation);
         
-        if (SphereRadius) SphereRadius->End();
+        if (SphereRadius)
+        	SphereRadius->End();
+    	
         CurrentMode = ECommandMode::None;
         return;
     }
 
-    // 2. Fin du mode ROTATION (Hold Right Click)
+    // 2. Fin du mode ROTATION 
     if (CurrentMode == ECommandMode::MoveRotation)
     {
         IssueMoveCommand(CommandStartLocation, CurrentRotation);
@@ -165,7 +155,7 @@ void UCameraCommandSystem::HandleCommandActionCompleted()
         return;
     }
 
-    // 3. Sinon, c'était un CLIC RAPIDE -> On délègue à ExecuteFinalCommand
+    // 3. On délègue à ExecuteFinalCommand
     FHitResult Hit;
     if (GetMouseHitOnTerrain(Hit))
     {
@@ -176,22 +166,18 @@ void UCameraCommandSystem::HandleCommandActionCompleted()
 }
 
 // ------------------------------------------------------------
-// LOGIC CORE : GESTION DES ETATS DE PATROUILLE
+// GESTION DES ETATS DE PATROUILLE
 // ------------------------------------------------------------
 
 void UCameraCommandSystem::ExecuteFinalCommand(const FHitResult& HitResult)
 {
-    // Debug Log pour suivre l'action
     UE_LOG(LogTemp, Log, TEXT("ExecuteFinalCommand - Alt: %d, BuildingPatrol: %d"), IsAltDown(), bIsBuildingPatrolPath);
-
-    // --- MODE PATROUILLE PAR POINTS ---
-    
-    // Cas A : Alt + Clic (Rapide) -> Soit on COMMENCE, soit on FINIT
+	
+    // Cas A : Soit on COMMENCE, soit on FINIT
     if (IsAltDown())
     {
         if (!bIsBuildingPatrolPath)
         {
-            // START : On commence une nouvelle patrouille
             UE_LOG(LogTemp, Warning, TEXT(">>> START PATROL CREATION <<<"));
             
             bIsBuildingPatrolPath = true;
@@ -200,31 +186,24 @@ void UCameraCommandSystem::ExecuteFinalCommand(const FHitResult& HitResult)
         }
         else
         {
-            // END : On termine la patrouille
             UE_LOG(LogTemp, Warning, TEXT(">>> FINISH PATROL CREATION <<<"));
             
-            // On ajoute le point final (là où on a cliqué pour finir)
-            AddPatrolWaypoint(HitResult.Location);
-            
-            // On envoie l'ordre aux unités
             IssuePatrolPathCommand(); 
-            
-            // On nettoie
             ResetPatrolPath();        
         }
         return;
     }
 
-    // Cas B : Clic Droit (Rapide, SANS Alt) -> Soit on AJOUTE UN POINT, soit on BOUGE
+    // Cas B : Soit on AJOUTE UN POINT, soit on BOUGE
     if (bIsBuildingPatrolPath)
     {
-        // On est en mode construction, le clic droit sert à ajouter des points intermédiaires
         UE_LOG(LogTemp, Log, TEXT(">>> ADD WAYPOINT (%d) <<<"), PatrolWaypoints.Num() + 1);
+    	
         AddPatrolWaypoint(HitResult.Location);
         return;
     }
 
-    // Cas C : Clic Droit Standard (Move ou Attack normal)
+    // Cas C : Move ou Attack normal
     AActor* Target = GetHoveredActor();
     if (Target && Target->Implements<USelectable>())
     {
@@ -237,7 +216,7 @@ void UCameraCommandSystem::ExecuteFinalCommand(const FHitResult& HitResult)
 }
 
 // ------------------------------------------------------------
-// ISSUE COMMANDS (Envoi des ordres)
+// ISSUE COMMANDS
 // ------------------------------------------------------------
 
 void UCameraCommandSystem::IssueMoveCommand(const FVector& TargetLocation, const FRotator& Facing)
@@ -281,8 +260,6 @@ void UCameraCommandSystem::IssuePatrolCircleCommand(float Radius, const FVector&
     );
 
     Data.Radius = Radius;
-    // Optionnel si ton enum le supporte : Data.PatrolType = EPatrolType::Circle; 
-
     GetOrderComponent()->IssueOrder(Data);
 }
 
@@ -307,14 +284,31 @@ void UCameraCommandSystem::IssuePatrolPathCommand()
         FRotator::ZeroRotator,
         ECommandType::CommandPatrol
     );
-
-    // --- CORRECTION CRITIQUE ---
-    // On remplit le tableau de points pour que UnitPatrolComponent puisse le lire
-    Data.PatrolPath = PatrolWaypoints; 
-    Data.bPatrolLoop = true; // Par défaut, on boucle
+	
+    const float DistFirstToLast = FVector::Dist(PatrolWaypoints[0], PatrolWaypoints.Last());
+    const float LoopThreshold = 150.0f;
+    
+    const bool bIsLoop = (DistFirstToLast < LoopThreshold);
+    Data.bPatrolLoop = bIsLoop;
+    
+    if (bIsLoop)
+    {
+        Data.PatrolPath.Reserve(PatrolWaypoints.Num() - 1);
+        for (int i = 0; i < PatrolWaypoints.Num() - 1; i++)
+        {
+            Data.PatrolPath.Add(PatrolWaypoints[i]);
+        }
+    }
+    else
+    {
+        Data.PatrolPath = PatrolWaypoints;
+    }
     // ---------------------------
 
-    UE_LOG(LogTemp, Warning, TEXT("Issuing Patrol Order with %d waypoints."), Data.PatrolPath.Num());
+    UE_LOG(LogTemp, Warning, TEXT("Issuing Patrol Order with %d waypoints. Loop: %s (Dist to start: %.1f)"), 
+        Data.PatrolPath.Num(), 
+        Data.bPatrolLoop ? TEXT("YES") : TEXT("NO"),
+        DistFirstToLast);
 
     GetOrderComponent()->IssueOrder(Data);
 }
@@ -347,11 +341,11 @@ void UCameraCommandSystem::UpdateRotationPreview(const FVector& MouseLocation)
 
 void UCameraCommandSystem::AddPatrolWaypoint(const FVector& Location)
 {
-    // Évite d'ajouter des points trop proches (double clic accidentel)
     if (PatrolWaypoints.Num() > 0 && FVector::DistSquared(PatrolWaypoints.Last(), Location) < 100.0f)
     {
         return;
     }
+	
     PatrolWaypoints.Add(Location);
 }
 
@@ -363,7 +357,9 @@ void UCameraCommandSystem::ResetPatrolPath()
 
 void UCameraCommandSystem::HandleDestroySelected()
 {
-    if (!GetSelectionComponent()) return;
+    if (!GetSelectionComponent())
+    	return;
+	
     HandleServerDestroyActor(GetSelectionComponent()->GetSelectedActors());
 }
 
@@ -384,10 +380,12 @@ bool UCameraCommandSystem::GetMouseHitOnTerrain(FHitResult& OutHit) const
 
 AActor* UCameraCommandSystem::GetHoveredActor() const
 {
-    if (!GetOwner() || !GetWorldSafe()) return nullptr;
+    if (!GetOwner() || !GetWorldSafe())
+    	return nullptr;
 
     APlayerController* PC = GetOwner()->GetPlayerController();
-    if (!PC) return nullptr;
+    if (!PC)
+    	return nullptr;
 
     FVector WL, WD;
     if (PC->DeprojectMousePositionToWorld(WL, WD))
@@ -402,18 +400,6 @@ AActor* UCameraCommandSystem::GetHoveredActor() const
             return Hit.GetActor();
         }
     }
+	
     return nullptr;
-}
-
-bool UCameraCommandSystem::IsAltDown() const
-{
-    if (bIsAltDown) return true;
-
-    if (GetOwner() && GetOwner()->GetPlayerController())
-    {
-        return GetOwner()->GetPlayerController()->IsInputKeyDown(EKeys::LeftAlt) || 
-               GetOwner()->GetPlayerController()->IsInputKeyDown(EKeys::RightAlt);
-    }
-
-    return false;
 }

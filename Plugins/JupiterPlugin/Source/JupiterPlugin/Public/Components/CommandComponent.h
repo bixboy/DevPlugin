@@ -75,7 +75,7 @@ private:
 	UFUNCTION()
 	FTransform GetPositionTransform(const FVector Position) const;
 
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	FCommandData CurrentCommand;
 
 #pragma endregion

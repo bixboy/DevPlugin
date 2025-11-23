@@ -98,7 +98,6 @@ void APlayerCamera::Tick(float DeltaTime)
 // ---------------------------------------------------------
 void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
 {
-    // Ensure systems are initialized BEFORE binding inputs
     InitializeSystems();
 
     Super::SetupPlayerInputComponent(Input);
@@ -107,7 +106,6 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
     if (!EIC)
         return;
 
-    // Raccourci propre
     auto Bind = [&](UInputAction* Action, ETriggerEvent Event, auto Obj, auto Func)
     {
         if (Action)
@@ -149,7 +147,6 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
 
         Bind(AltCommandAction, ETriggerEvent::Started, CmdSys, &UCameraCommandSystem::HandleAltPressed);
         Bind(AltCommandAction, ETriggerEvent::Completed, CmdSys, &UCameraCommandSystem::HandleAltReleased);
-        //Bind(AltCommandHoldAction, ETriggerEvent::Triggered, CmdSys, &UCameraCommandSystem::HandleAltHold);
 
         Bind(DeleteAction, ETriggerEvent::Triggered, CmdSys, &UCameraCommandSystem::HandleDestroySelected);
     }

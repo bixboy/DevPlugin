@@ -40,16 +40,16 @@ protected:
 	UFUNCTION()
 	bool RemoveSoldierInternal(ASoldierRts* Soldier);
 
-	UFUNCTION(BlueprintCallable, Category="Settinsg")
+	UFUNCTION(BlueprintCallable, Category="Settings")
 	void PrintSoldierCount() const;
 
     UPROPERTY()
     TArray<ASoldierRts*> Soldiers;
 
-    UPROPERTY(EditAnywhere, Category="Settinsg")
+    UPROPERTY(EditAnywhere, Category="Settings|Manager")
     float DetectionInterval = 0.25f;
 
-    UPROPERTY(EditAnywhere, Category="Settinsg")
+    UPROPERTY(EditAnywhere, Category="Settings|Manager")
     int32 NumBuckets = 4;
 
     int32 CurrentBucketIndex = 0;

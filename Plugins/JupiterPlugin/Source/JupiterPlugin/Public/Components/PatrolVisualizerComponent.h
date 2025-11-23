@@ -1,5 +1,4 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Data/PatrolData.h"
@@ -7,206 +6,118 @@
 
 class ULineBatchComponent;
 class UCameraComponent;
+class UInstancedStaticMeshComponent;
+class UTextRenderComponent;
+class UPatrolSystemSettings;
+struct FPatrolRouteExtended;
 
-/** Cache entry for optimized spline rendering */
+
 USTRUCT()
 struct FPatrolVisualizationCache
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	/** Elevated waypoint positions (with Z offset applied) */
-	TArray<FVector> ElevatedPoints;
+    TArray<FVector> ElevatedPoints;
+    TArray<FVector> SplineSamples;
+    FBox RouteBounds = FBox(ForceInit);
+    
+    uint32 GeometryHash = 0;
+    bool bLoopCached = false;
+    EPatrolVisualizationState State = EPatrolVisualizationState::Active;
+    float LastAccessTime = 0.f;
 
-	/** Smooth spline samples for rendering */
-	TArray<FVector> SplineSamples;
-
-	/** Hash of the geometry for cache invalidation */
-	uint32 GeometryHash = 0;
-
-	/** Cached loop state */
-	bool bLoopCached = false;
-
-	/** Current visualization state */
-	EPatrolVisualizationState State = EPatrolVisualizationState::Active;
-
-	/** Cached color */
-	FLinearColor CachedColor = FLinearColor::White;
-
-	/** Bounds of this route for culling */
-	FBox RouteBounds = FBox(ForceInit);
-
-	/** Last time this cache was accessed */
-	float LastAccessTime = 0.f;
-
-	void Reset()
-	{
-		ElevatedPoints.Reset();
-		SplineSamples.Reset();
-		GeometryHash = 0;
-		bLoopCached = false;
-		State = EPatrolVisualizationState::Active;
-		CachedColor = FLinearColor::White;
-		RouteBounds.Init();
-		LastAccessTime = 0.f;
-	}
+    void Reset()
+    {
+        ElevatedPoints.Reset();
+        SplineSamples.Reset();
+        RouteBounds.Init();
+        GeometryHash = 0;
+        bLoopCached = false;
+        State = EPatrolVisualizationState::Active;
+        LastAccessTime = 0.f;
+    }
 };
 
-/**
- * Component responsible for visualizing patrol routes.
- * Separated from UnitPatrolComponent to follow single-responsibility principle.
- * Handles all rendering, LOD, culling, and visual effects.
- */
+
 UCLASS(ClassGroup=(RTS), meta=(BlueprintSpawnableComponent))
 class JUPITERPLUGIN_API UPatrolVisualizerComponent : public UActorComponent
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	UPatrolVisualizerComponent();
+    UPatrolVisualizerComponent();
 
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	// ============================================================
-	// PUBLIC API
-	// ============================================================
+    // --- Public API ---
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    void UpdateVisualization(const TArray<FPatrolRouteExtended>& Routes);
 
-	/** Update visualization with new routes */
-	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
-	void UpdateVisualization(const TArray<FPatrolRouteExtended>& Routes);
-
-	/** Clear all visualizations */
-	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
-	void ClearVisualization();
-
-	/** Set the quality level for visualization */
-	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
-	void SetVisualizationQuality(EPatrolVisualQuality Quality);
-
-	/** Get current quality level */
-	UFUNCTION(BlueprintPure, Category = "RTS|Patrol")
-	EPatrolVisualQuality GetVisualizationQuality() const { return CurrentQuality; }
-
-	/** Enable/disable visualization */
-	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
-	void SetVisualizationEnabled(bool bEnabled);
-
-	/** Check if visualization is enabled */
-	UFUNCTION(BlueprintPure, Category = "RTS|Patrol")
-	bool IsVisualizationEnabled() const { return bVisualizationEnabled; }
-
-	/** Force refresh of all visuals */
-	UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
-	void ForceRefresh();
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    void SetVisibility(bool bVisible);
 
 protected:
-	// ============================================================
-	// CORE RENDERING
-	// ============================================================
+	
+    // --- Core ---
+    void EnsureComponents(const UPatrolSystemSettings* Settings);
+    void UpdateRouteVisuals(float DeltaSeconds);
+    void RenderActiveRoutes(const UPatrolSystemSettings* Settings);
+    void RenderRouteCached(const FPatrolRouteExtended& Route, int32 CacheIndex, const UPatrolSystemSettings* Settings);
 
-	/** Ensure line batch component is created and ready */
-	void EnsureLineBatchComponent();
+    // --- Drawing Helpers ---
+    void DrawSplinePolyline(const TArray<FVector>& Samples, const FLinearColor& Color, float Thickness, bool bDashed = false);
+    void DrawDashedPolyline(const TArray<FVector>& Samples, const FLinearColor& Color, float Thickness);
+    void DrawWaypoints(const TArray<FVector>& Points, const FLinearColor& Color, bool bShowNumbers, const FPatrolRouteExtended& Route, const UPatrolSystemSettings* Settings);
+    void DrawDirectionArrows(const TArray<FVector>& Samples, const FLinearColor& Color, const UPatrolSystemSettings* Settings);
 
-	/** Main rendering update */
-	void UpdateRouteVisuals(float DeltaSeconds);
+    // --- Geometry ---
+    void BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples, const UPatrolSystemSettings* Settings);
+    static FVector EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T);
+    static uint32 HashGeometry(const TArray<FVector>& Points, bool bLoop);
+    static FBox CalculateRouteBounds(const TArray<FVector>& Points);
 
-	/** Render all active routes */
-	void RenderActiveRoutes();
+    // --- LOD & Utilities ---
+    void UpdateLOD(const UPatrolSystemSettings* Settings);
+    bool ShouldCullRoute(const FBox& RouteBounds, const UPatrolSystemSettings* Settings) const;
+    float GetDistanceToCamera() const;
+    UCameraComponent* GetViewCamera() const;
 
-	/** Render a single route with caching */
-	void RenderRouteCached(const FPatrolRouteExtended& Route, int32 CacheIndex);
+    // --- Visual Helpers ---
+    FLinearColor GetRouteColor(const FPatrolRouteExtended& Route, EPatrolVisualizationState State, const UPatrolSystemSettings* Settings) const;
+    FLinearColor ApplyColorAnimation(const FLinearColor& BaseColor, float Time, const UPatrolSystemSettings* Settings) const;
+    bool ShouldAnimate(const UPatrolSystemSettings* Settings) const;
 
-	/** Draw the spline polyline with glow effects */
-	void DrawSplinePolyline(const TArray<FVector>& Samples, const FLinearColor& Color, float Thickness, bool bAnimated);
+protected:
+    // --- Data ---
+    UPROPERTY()
+    TArray<FPatrolRouteExtended> CurrentRoutes;
 
-	/** Draw waypoint markers */
-	void DrawWaypoints(const TArray<FVector>& Points, const FLinearColor& Color, bool bShowNumbers);
+    UPROPERTY()
+    TArray<FPatrolVisualizationCache> VisualizationCache;
 
-	/** Draw direction arrows along the route */
-	void DrawDirectionArrows(const TArray<FVector>& Samples, const FLinearColor& Color);
+    // --- Components ---
+    UPROPERTY(Transient)
+    TObjectPtr<ULineBatchComponent> LineBatchComponent = nullptr;
 
-	// ============================================================
-	// GEOMETRY GENERATION
-	// ============================================================
+    UPROPERTY(Transient)
+    TObjectPtr<UInstancedStaticMeshComponent> WaypointISM = nullptr;
 
-	/** Build smooth spline samples from waypoints */
-	void BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples);
+    UPROPERTY(Transient)
+    TObjectPtr<UInstancedStaticMeshComponent> ArrowISM = nullptr;
 
-	/** Evaluate Catmull-Rom spline */
-	static FVector EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T);
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UTextRenderComponent>> TextLabelPool;
 
-	/** Calculate hash for geometry cache validation */
-	static uint32 HashGeometry(const TArray<FVector>& Points, bool bLoop);
+    // --- State ---
+    int32 ActiveTextLabels = 0;
+    float GlobalAnimationTime = 0.f;
+    float RefreshTimer = 0.f;
+    bool bVisualsDirty = true;
+    int32 CurrentLODLevel = 0;
+    float LastCameraDistance = 0.f;
 
-	/** Calculate bounds for a route */
-	static FBox CalculateRouteBounds(const TArray<FVector>& Points);
-
-	// ============================================================
-	// LOD & CULLING
-	// ============================================================
-
-	/** Update LOD based on camera distance */
-	void UpdateLOD();
-
-	/** Get camera for LOD calculations */
-	UCameraComponent* GetViewCamera() const;
-
-	/** Check if route should be culled */
-	bool ShouldCullRoute(const FBox& RouteBounds) const;
-
-	/** Get distance to camera for LOD purposes */
-	float GetDistanceToCamera() const;
-
-	// ============================================================
-	// HELPERS
-	// ============================================================
-
-	/** Get color based on route state and settings */
-	FLinearColor GetRouteColor(const FPatrolRouteExtended& Route, EPatrolVisualizationState State) const;
-
-	/** Apply animation to color */
-	FLinearColor ApplyColorAnimation(const FLinearColor& BaseColor, float DeltaTime) const;
-
-	/** Check if animations are enabled */
-	bool ShouldAnimate() const;
-
-	// ============================================================
-	// DATA
-	// ============================================================
-
-	/** Current routes to visualize */
-	UPROPERTY()
-	TArray<FPatrolRouteExtended> CurrentRoutes;
-
-	/** Visualization cache for each route */
-	UPROPERTY()
-	TArray<FPatrolVisualizationCache> VisualizationCache;
-
-	/** Line batch component for rendering */
 	UPROPERTY(Transient)
-	TObjectPtr<ULineBatchComponent> LineBatchComponent = nullptr;
-
-	/** Current visualization quality level */
-	UPROPERTY()
 	EPatrolVisualQuality CurrentQuality = EPatrolVisualQuality::High;
-
-	/** Is visualization enabled */
-	UPROPERTY()
-	bool bVisualizationEnabled = true;
-
-	/** Global animation time */
-	float GlobalAnimationTime = 0.f;
-
-	/** Timer for refresh throttling */
-	float RefreshTimer = 0.f;
-
-	/** Dirty flag for forced refresh */
-	bool bVisualsDirty = true;
-
-	/** Current LOD level (0 = highest quality) */
-	int32 CurrentLODLevel = 0;
-
-	/** Last known camera distance for LOD */
-	float LastCameraDistance = 0.f;
 };

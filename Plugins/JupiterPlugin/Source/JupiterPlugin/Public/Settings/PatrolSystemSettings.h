@@ -146,6 +146,26 @@ public:
 	float ArrowHeadAngle = 22.5f;
 
 	// ============================================================
+	// ASSET SETTINGS
+	// ============================================================
+
+	/** Mesh to use for waypoints (default: Sphere) */
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "StaticMesh"))
+	FSoftObjectPath WaypointMesh;
+
+	/** Mesh to use for direction arrows (default: Cone) */
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "StaticMesh"))
+	FSoftObjectPath ArrowMesh;
+
+	/** Material to use for waypoints (optional override) */
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "MaterialInterface"))
+	FSoftObjectPath WaypointMaterial;
+
+	/** Material to use for arrows (optional override) */
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "MaterialInterface"))
+	FSoftObjectPath ArrowMaterial;
+
+	// ============================================================
 	// PERFORMANCE SETTINGS
 	// ============================================================
 

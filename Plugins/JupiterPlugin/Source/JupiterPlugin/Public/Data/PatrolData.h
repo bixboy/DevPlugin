@@ -5,7 +5,6 @@
 
 /**
  * Quality levels for patrol route visualization.
- * Allows performance tuning on different platforms.
  */
 UENUM(BlueprintType)
 enum class EPatrolVisualQuality : uint8
@@ -16,6 +15,7 @@ enum class EPatrolVisualQuality : uint8
 	Ultra    UMETA(DisplayName = "Ultra - Maximum Quality")
 };
 
+
 /**
  * Extended patrol route structure with additional visual and behavioral properties.
  */
@@ -24,38 +24,31 @@ struct FPatrolRouteExtended
 {
 	GENERATED_BODY()
 
-	/** Array of patrol waypoints */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")
 	TArray<FVector> PatrolPoints;
 
-	/** Whether the patrol route loops back to the start */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")
 	bool bIsLoop = false;
 
-	/** Optional name for this patrol route */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")
 	FName RouteName = NAME_None;
 
-	/** Custom color for this specific route */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol|Visuals")
-	FLinearColor RouteColor = FLinearColor(0.0f, 1.0f, 1.0f); // Cyan
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol|Visuals")
+	FLinearColor RouteColor = FLinearColor(0.0f, 1.0f, 1.0f);
 
-	/** Time to wait at each waypoint (0 = no wait) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol|Behavior", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol|Behavior", meta = (ClampMin = "0.0"))
 	float WaitTimeAtWaypoints = 0.f;
 
-	/** Whether to show direction arrows along the route */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol|Visuals")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol|Visuals")
 	bool bShowDirectionArrows = true;
 
-	/** Whether to show waypoint numbers */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol|Visuals")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol|Visuals")
 	bool bShowWaypointNumbers = true;
 
-	/** Priority for rendering (higher priority routes are rendered first) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol|Visuals", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol|Visuals", meta = (ClampMin = "0"))
 	int32 RenderPriority = 0;
 };
+
 
 /**
  * Visualization state for patrol routes.
@@ -63,15 +56,11 @@ struct FPatrolRouteExtended
 UENUM(BlueprintType)
 enum class EPatrolVisualizationState : uint8
 {
-	/** Route is hidden */
 	Hidden,
 	
-	/** Route is in preview mode (being created/edited) */
 	Preview,
 	
-	/** Route is active and confirmed */
 	Active,
 	
-	/** Route is selected/highlighted */
 	Selected
 };

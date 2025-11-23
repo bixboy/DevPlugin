@@ -3,6 +3,7 @@
 #include "Units/SoldierRts.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Net/UnrealNetwork.h"
 
 // Setup
 #pragma region Setup
@@ -10,6 +11,7 @@
 UCommandComponent::UCommandComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	SetIsReplicatedByDefault(true);
 }
 
 void UCommandComponent::BeginPlay()
@@ -26,6 +28,13 @@ void UCommandComponent::BeginPlay()
 	}
 
 	InitializeMovementComponent();
+}
+
+void UCommandComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UCommandComponent, CurrentCommand);
 }
 
 void UCommandComponent::OnComponentDestroyed(bool bDestroyingHierarchy)

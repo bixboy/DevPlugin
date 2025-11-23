@@ -6,6 +6,7 @@
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/Pawn.h"
 
+
 UUnitPatrolComponent::UUnitPatrolComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -21,17 +22,19 @@ void UUnitPatrolComponent::BeginPlay()
 	if (!OwnerActor)
 		return;
 
-	// Find dependencies
 	SelectionComponent = OwnerActor->FindComponentByClass<UUnitSelectionComponent>();
 	OrderComponent = OwnerActor->FindComponentByClass<UUnitOrderComponent>();
 
-	// Subscribe to order events
 	if (OrderComponent)
 	{
 		OrderComponent->OnOrdersDispatched.AddDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
 	}
 
-	// Create visualizer if needed and on client
+	if (SelectionComponent)
+	{
+		SelectionComponent->OnSelectionChanged.AddDynamic(this, &UUnitPatrolComponent::OnSelectionChanged);
+	}
+
 	if (IsLocallyControlled() && bAutoCreateVisualizer)
 	{
 		EnsureVisualizerComponent();
@@ -40,14 +43,18 @@ void UUnitPatrolComponent::BeginPlay()
 
 void UUnitPatrolComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// Unsubscribe from events
 	if (OrderComponent)
 	{
 		OrderComponent->OnOrdersDispatched.RemoveDynamic(this, &UUnitPatrolComponent::HandleOrdersDispatched);
 		OrderComponent = nullptr;
 	}
 
-	// Clean up visualizer
+	if (SelectionComponent)
+	{
+		SelectionComponent->OnSelectionChanged.RemoveDynamic(this, &UUnitPatrolComponent::OnSelectionChanged);
+		SelectionComponent = nullptr;
+	}
+
 	if (PatrolVisualizer)
 	{
 		PatrolVisualizer->DestroyComponent();
@@ -61,11 +68,9 @@ void UUnitPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// Only tick on local client for visualization
 	if (!IsLocallyControlled())
 		return;
 
-	// Ensure visualizer exists
 	if (bAutoCreateVisualizer)
 	{
 		EnsureVisualizerComponent();
@@ -76,125 +81,6 @@ void UUnitPatrolComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UUnitPatrolComponent, ActivePatrolRoutes);
-}
-
-// ============================================================
-// INPUT HANDLING
-// ============================================================
-
-bool UUnitPatrolComponent::HandleLeftClick(EInputEvent InputEvent)
-{
-	if (!IsLocallyControlled())
-		return false;
-
-	if (InputEvent == IE_Released)
-	{
-		RefreshRoutesFromSelection();
-	}
-
-	return false;
-}
-
-bool UUnitPatrolComponent::HandleRightClickPressed(bool /*bAltDown*/)
-{
-	return false;
-}
-
-bool UUnitPatrolComponent::HandleRightClickReleased(bool /*bAltDown*/)
-{
-	if (!IsLocallyControlled())
-		return false;
-
-	RefreshRoutesFromSelection();
-	return false;
-}
-
-// ============================================================
-// PATROL PREVIEW SYSTEM
-// ============================================================
-
-void UUnitPatrolComponent::StartPatrolPreview(const FVector& StartPoint)
-{
-	if (!IsLocallyControlled())
-		return;
-
-	bIsCreatingPreview = true;
-	
-	PreviewRoute = FPatrolRouteExtended();
-	PreviewRoute.PatrolPoints.Add(StartPoint);
-	PreviewRoute.RouteColor = FLinearColor(1.0f, 1.0f, 0.0f, 0.6f); // Yellow preview
-
-	UpdateVisualization();
-}
-
-void UUnitPatrolComponent::AddPreviewWaypoint(const FVector& Point)
-{
-	if (!IsLocallyControlled() || !bIsCreatingPreview)
-		return;
-
-	PreviewRoute.PatrolPoints.Add(Point);
-	UpdateVisualization();
-}
-
-void UUnitPatrolComponent::UpdatePreviewCursor(const FVector& CursorPosition)
-{
-	if (!IsLocallyControlled() || !bIsCreatingPreview)
-		return;
-
-	// Update the last point to follow cursor (for smooth preview)
-	if (PreviewRoute.PatrolPoints.Num() > 0)
-	{
-		PreviewRoute.PatrolPoints.Last() = CursorPosition;
-		UpdateVisualization();
-	}
-}
-
-void UUnitPatrolComponent::CommitPatrolPreview(bool bLoop)
-{
-	if (!IsLocallyControlled() || !bIsCreatingPreview)
-		return;
-
-	// Convert preview to actual route
-	FPatrolRoute NewRoute;
-	NewRoute.PatrolPoints = PreviewRoute.PatrolPoints;
-	NewRoute.bIsLoop = bLoop;
-
-	// Apply the route
-	TArray<FPatrolRoute> Routes;
-	Routes.Add(NewRoute);
-	ApplyRoutes(Routes);
-
-	// Clear preview state
-	bIsCreatingPreview = false;
-	PreviewRoute = FPatrolRouteExtended();
-	
-	UpdateVisualization();
-}
-
-void UUnitPatrolComponent::CancelPatrolPreview()
-{
-	if (!IsLocallyControlled())
-		return;
-
-	bIsCreatingPreview = false;
-	PreviewRoute = FPatrolRouteExtended();
-	
-	UpdateVisualization();
-}
-
-// ============================================================
-// PATROL MANAGEMENT
-// ============================================================
-
-void UUnitPatrolComponent::SetPatrolRoutes(const TArray<FPatrolRoute>& NewRoutes)
-{
-	ApplyRoutes(NewRoutes);
-}
-
-void UUnitPatrolComponent::ClearAllRoutes()
-{
-	TArray<FPatrolRoute> EmptyRoutes;
-	ApplyRoutes(EmptyRoutes);
 }
 
 // ============================================================
@@ -210,17 +96,14 @@ void UUnitPatrolComponent::EnsureVisualizerComponent()
 	if (!Owner)
 		return;
 
-	// Check if one already exists
 	PatrolVisualizer = Owner->FindComponentByClass<UPatrolVisualizerComponent>();
-	
 	if (!PatrolVisualizer)
 	{
-		// Create new visualizer component
 		PatrolVisualizer = NewObject<UPatrolVisualizerComponent>(Owner, UPatrolVisualizerComponent::StaticClass(), TEXT("PatrolVisualizer"));
 		if (PatrolVisualizer)
 		{
 			PatrolVisualizer->RegisterComponent();
-			UpdateVisualization(); // Initial update
+			UpdateVisualization();
 		}
 	}
 }
@@ -235,16 +118,8 @@ void UUnitPatrolComponent::UpdateVisualization()
 	if (!PatrolVisualizer)
 		return;
 
-	// Build extended routes for visualization
 	TArray<FPatrolRouteExtended> ExtendedRoutes;
 
-	// Add preview route if in creation mode
-	if (bIsCreatingPreview && PreviewRoute.PatrolPoints.Num() >= 2)
-	{
-		ExtendedRoutes.Add(PreviewRoute);
-	}
-
-	// Add active routes
 	for (const FPatrolRoute& Route : ActivePatrolRoutes)
 	{
 		if (Route.PatrolPoints.Num() >= 2)
@@ -253,7 +128,11 @@ void UUnitPatrolComponent::UpdateVisualization()
 		}
 	}
 
-	// Update visualizer
+	if (ExtendedRoutes.Num() > 0)
+	{
+		PatrolVisualizer->SetVisibility(true);
+	}
+	
 	PatrolVisualizer->UpdateVisualization(ExtendedRoutes);
 }
 
@@ -286,7 +165,6 @@ bool UUnitPatrolComponent::HasAuthority() const
 
 void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& IssuedCommand)
 {
-	// Clear routes if non-patrol command
 	if (IssuedCommand.Type != ECommandType::CommandPatrol)
 	{
 		if (!ActivePatrolRoutes.IsEmpty())
@@ -297,7 +175,6 @@ void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& Affecte
 		return;
 	}
 
-	// Build new routes from affected units
 	TArray<FPatrolRoute> NewRoutes;
 	NewRoutes.Reserve(AffectedUnits.Num());
 
@@ -316,16 +193,22 @@ void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& Affecte
 		NewRoutes.Add(Route);
 	}
 
-	// Fallback: use issued command if no valid routes from units
 	if (NewRoutes.IsEmpty() && IssuedCommand.PatrolPath.Num() >= 2)
 	{
 		FPatrolRoute Route;
 		Route.PatrolPoints = IssuedCommand.PatrolPath;
+		// NOTE: If the user reports "Loop persistence" issues, check the Input/UI logic that creates 'IssuedCommand'.
+		// The 'bPatrolLoop' flag might not be resetting correctly in the PlayerController or HUD between commands.
 		Route.bIsLoop = IssuedCommand.bPatrolLoop;
 		NewRoutes.Add(Route);
 	}
 
 	ApplyRoutes(NewRoutes);
+}
+
+void UUnitPatrolComponent::OnSelectionChanged(const TArray<AActor*>& SelectedActors)
+{
+	RefreshRoutesFromSelection();
 }
 
 void UUnitPatrolComponent::RefreshRoutesFromSelection()
@@ -392,13 +275,11 @@ namespace
 
 void UUnitPatrolComponent::ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes)
 {
-	// Avoid unnecessary updates
 	if (AreRoutesEquivalent(ActivePatrolRoutes, NewRoutes))
 		return;
 
 	ActivePatrolRoutes = NewRoutes;
 	
-	// Update visualization on local client
 	if (IsLocallyControlled())
 	{
 		UpdateVisualization();
@@ -407,7 +288,6 @@ void UUnitPatrolComponent::ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes)
 
 void UUnitPatrolComponent::OnRep_ActivePatrolRoutes()
 {
-	// Routes replicated from server - update visualization
 	if (IsLocallyControlled())
 	{
 		UpdateVisualization();
