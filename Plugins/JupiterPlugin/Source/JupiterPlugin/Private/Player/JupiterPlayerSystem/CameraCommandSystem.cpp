@@ -7,6 +7,8 @@
 #include "DrawDebugHelpers.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
+#include "Components/PatrolVisualizerComponent.h"
+#include "Data/PatrolData.h"
 
 
 void UCameraCommandSystem::Init(APlayerCamera* InOwner)
@@ -24,6 +26,11 @@ void UCameraCommandSystem::Init(APlayerCamera* InOwner)
             SphereRadius->SetActorHiddenInGame(true);
         }
     }
+
+	if (GetOwner())
+	{
+		PatrolVisualizer = GetOwner()->GetComponentByClass<UPatrolVisualizerComponent>();
+	}
 }
 
 
@@ -31,30 +38,10 @@ void UCameraCommandSystem::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // --- A. VISUALISATION DEBUG (Patrol Path) ---
+    // --- A. UPDATE PATROL PREVIEW ---
     if (bIsBuildingPatrolPath)
     {
-        if (PatrolWaypoints.Num() > 0)
-        {
-            for (int i = 0; i < PatrolWaypoints.Num() - 1; i++)
-            {
-                DrawDebugLine(GetWorld(), PatrolWaypoints[i], PatrolWaypoints[i+1], FColor::Green, false, -1.0f, 0, 3.0f);
-                DrawDebugSphere(GetWorld(), PatrolWaypoints[i], 15.0f, 8, FColor::Green, false, -1.0f, 0, 1.0f);
-            }
-        	
-            DrawDebugSphere(GetWorld(), PatrolWaypoints.Last(), 15.0f, 8, FColor::Green, false, -1.0f, 0, 1.0f);
-        }
-
-        FHitResult Hit;
-        if(GetMouseHitOnTerrain(Hit))
-        {
-            FVector StartPos = (PatrolWaypoints.Num() > 0) ? PatrolWaypoints.Last() : CommandStartLocation;
-            DrawDebugLine(GetWorld(), StartPos, Hit.Location, FColor::Yellow, false, -1.0f, 0, 2.0f);
-            DrawDebugSphere(GetWorld(), Hit.Location, 10.0f, 8, FColor::Yellow, false, -1.0f, 0, 1.0f);
-            
-            FString StatusText = FString::Printf(TEXT("PATROL BUILDER\nPoints: %d\n[R-Click] Add Point\n[Alt+R-Click] Finish"), PatrolWaypoints.Num());
-            DrawDebugString(GetWorld(), Hit.Location + FVector(0,0,100), StatusText, nullptr, FColor::White, 0.0f, true);
-        }
+        UpdatePatrolPreview();
     }
 
     // --- B. LOGIQUE INPUT MAINTENU ---
@@ -353,6 +340,36 @@ void UCameraCommandSystem::ResetPatrolPath()
 {
     bIsBuildingPatrolPath = false;
     PatrolWaypoints.Empty();
+    ClearPatrolPreview();
+}
+
+void UCameraCommandSystem::UpdatePatrolPreview()
+{
+    if (!PatrolVisualizer || PatrolWaypoints.Num() == 0)
+        return;
+    
+    // Créer une route de prévisualisation
+    FPatrolRouteExtended PreviewRoute;
+    PreviewRoute.PatrolPoints = PatrolWaypoints;
+    PreviewRoute.bIsLoop = false; // Toujours false pendant la création
+    PreviewRoute.RouteColor = FLinearColor(1.0f, 0.8f, 0.0f); // Orange/jaune pour preview
+    PreviewRoute.bShowWaypointNumbers = true;
+    PreviewRoute.bShowDirectionArrows = false;
+    
+    // Passer au visualizer avec un tableau contenant UNE seule route
+    TArray<FPatrolRouteExtended> Routes;
+    Routes.Add(PreviewRoute);
+    
+    PatrolVisualizer->UpdateVisualization(Routes);
+}
+
+void UCameraCommandSystem::ClearPatrolPreview()
+{
+    if (!PatrolVisualizer)
+        return;
+    
+    TArray<FPatrolRouteExtended> EmptyRoutes;
+    PatrolVisualizer->UpdateVisualization(EmptyRoutes);
 }
 
 void UCameraCommandSystem::HandleDestroySelected()

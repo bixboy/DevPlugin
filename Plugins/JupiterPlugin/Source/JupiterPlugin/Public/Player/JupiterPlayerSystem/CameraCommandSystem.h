@@ -5,6 +5,7 @@
 #include "CameraCommandSystem.generated.h"
 
 class ASphereRadius;
+class UPatrolVisualizerComponent;
 
 UENUM(BlueprintType)
 enum class ECommandMode : uint8
@@ -54,6 +55,9 @@ protected:
     
     void AddPatrolWaypoint(const FVector& Location);
     void ResetPatrolPath();
+    
+    void UpdatePatrolPreview();
+    void ClearPatrolPreview();
 
     bool GetMouseHitOnTerrain(FHitResult& OutHit) const;
     AActor* GetHoveredActor() const;
@@ -65,6 +69,9 @@ protected:
 
     UPROPERTY()
     UCameraSpawnSystem* SpawnSystem = nullptr;
+
+    UPROPERTY()
+    UPatrolVisualizerComponent* PatrolVisualizer = nullptr;
 
     // --- Settings ---
     UPROPERTY(EditDefaultsOnly, Category = "Settings|Command")
