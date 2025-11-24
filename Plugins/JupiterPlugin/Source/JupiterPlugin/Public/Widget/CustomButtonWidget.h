@@ -31,6 +31,9 @@ public:
     UFUNCTION(BlueprintCallable)
     void SetButtonTexture(UTexture2D* NewTexture);
 
+    UFUNCTION(BlueprintCallable)
+    void SetButtonColor(FLinearColor NewColor);
+
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Button")
     int ButtonIndex;
 

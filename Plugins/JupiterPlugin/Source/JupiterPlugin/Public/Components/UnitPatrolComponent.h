@@ -16,10 +16,31 @@ struct FPatrolRoute
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FGuid PatrolID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FVector> PatrolPoints;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bIsLoop = false;
+	EPatrolType PatrolType = EPatrolType::Loop;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RouteName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FLinearColor RouteColor = FLinearColor::Blue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float WaitTime = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bShowArrows = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bShowNumbers = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<TObjectPtr<AActor>> AssignedUnits;
 };
 
 
@@ -38,6 +59,27 @@ public:
 
 	UFUNCTION()
 	const TArray<FPatrolRoute>& GetActiveRoutes() const { return ActivePatrolRoutes; }
+
+	UFUNCTION(Server, Reliable)
+	void Server_UpdatePatrolRoute(int32 Index, const FPatrolRoute& NewRoute);
+
+	UFUNCTION(Server, Reliable)
+	void Server_UpdateUnitPatrol(AActor* Unit, const FPatrolRoute& NewRoute);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RemovePatrolRoute(int32 Index);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RemovePatrolRouteForUnit(AActor* Unit);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ReversePatrolRoute(int32 Index);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ReversePatrolRouteForUnit(AActor* Unit);
+
+	UFUNCTION(BlueprintCallable)
+	bool GetPatrolRouteForUnit(AActor* Unit, FPatrolRoute& OutRoute) const;
 
 protected:
 	// ============================================================
@@ -77,6 +119,10 @@ protected:
 
 	UFUNCTION()
 	void OnRep_ActivePatrolRoutes();
+
+	// Cache for extra patrol data (Color, Name, etc.) keyed by Unit
+	UPROPERTY()
+	TMap<AActor*, FPatrolRoute> UnitRouteCache;
 
 	// ============================================================
 	// DATA - LOCAL

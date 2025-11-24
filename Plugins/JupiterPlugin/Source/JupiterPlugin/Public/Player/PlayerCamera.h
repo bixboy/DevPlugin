@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "PlayerCamera.generated.h"
 
+class ASphereRadius;
 class APreviewPoseMesh;
 class ASelectionBox;
 class UFloatingPawnMovement;
@@ -26,6 +27,7 @@ class UCameraSelectionSystem;
 class UCameraCommandSystem;
 class UCameraSpawnSystem;
 class UCameraPreviewSystem;
+
 
 UCLASS()
 class JUPITERPLUGIN_API APlayerCamera : public APawn
@@ -53,6 +55,7 @@ public:
 	
 	FORCEINLINE const FRotator& GetTargetRotation() const { return TargetRotation; }
 	FORCEINLINE TSubclassOf<ASelectionBox> GetSelectionBoxClass() { return SelectionBoxClass; }
+	FORCEINLINE TSubclassOf<APreviewPoseMesh> GetPreviewMeshClass() { return PreviewMeshClass; }
 
 	FORCEINLINE UUnitSpawnComponent* GetSpawnComponent() { return SpawnComponent; }
 	FORCEINLINE UUnitFormationComponent* GetFormationComponent() { return FormationComponent; }
@@ -162,7 +165,7 @@ protected:
     UPROPERTY()
 	UCameraPreviewSystem* PreviewSystem;
 
-    // Class references (editable)
+    // Class references
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
 	TSubclassOf<UCameraMovementSystem> MovementSystemClass;
 	
@@ -181,17 +184,15 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Settings|Class|Other")
 	TSubclassOf<ASelectionBox> SelectionBoxClass;
 
+	UPROPERTY(EditAnywhere, Category="Settings|Class|Other")
+	TSubclassOf<APreviewPoseMesh> PreviewMeshClass;
+
 private:
     TWeakObjectPtr<APlayerController> Player;
 
 public:
-
-	UPROPERTY(EditAnywhere, Category="Settings|Class|Other")
-	TSubclassOf<APreviewPoseMesh> PreviewMeshClass;
 	
-	// ------------------------------------------------------------
-	// Camera Settings
-	// ------------------------------------------------------------
+	// -------- Camera Settings --------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
 	float CameraSpeed = 20.f;
 
@@ -215,10 +216,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
 	bool CanEdgeScroll = true;
-
-	// ------------------------------------------------------------
-	// Camera State
-	// ------------------------------------------------------------
+	
+	// -------- Camera State --------
 	UPROPERTY()
 	FVector TargetLocation = FVector::ZeroVector;
 
@@ -227,6 +226,20 @@ public:
 
 	UPROPERTY()
 	float TargetZoom = 3000.f;
+	
+	// -------- Commandes Settings --------
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Settings|Commands")
+	TSubclassOf<ASphereRadius> SphereRadiusClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Settings|Commands")
+	float RotationHoldThreshold = 0.20f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Settings|Commands")
+	float DragThreshold = 10.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Settings|Commands")
+	float LoopThreshold = 150.f;
+
 
 	
 	// ---------------------------------------------------------

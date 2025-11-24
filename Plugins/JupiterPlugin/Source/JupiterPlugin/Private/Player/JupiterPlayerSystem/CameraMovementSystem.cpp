@@ -158,7 +158,6 @@ void UCameraMovementSystem::UpdateTerrainFollow()
         return;
 
     APlayerCamera* Cam = GetOwner();
-
     FVector Pos = Cam->GetActorLocation();
 
     FHitResult Hit;
@@ -182,6 +181,7 @@ void UCameraMovementSystem::ClampCameraPitch()
     APlayerCamera* Cam = GetOwner();
 
     float NewPitch = Cam->TargetRotation.Pitch;
+	
     if (NewPitch < (Cam->RotatePitchMax * -1.f))
     {
 	    NewPitch = (Cam->RotatePitchMax * -1.f);

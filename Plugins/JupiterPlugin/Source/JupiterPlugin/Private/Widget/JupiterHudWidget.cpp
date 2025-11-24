@@ -6,6 +6,8 @@
 #include "Widget/Formations/FormationSelectorWidget.h"
 #include "Widget/Behaviors/SelectBehaviorWidget.h"
 #include "Widget/UnitsSelection/UnitsSelectionWidget.h"
+#include "Widget/Patrol/PatrolEditorWidget.h"
+#include "Components/UnitPatrolComponent.h"
 
 
 void UJupiterHudWidget::NativeOnInitialized()
@@ -91,6 +93,12 @@ void UJupiterHudWidget::SetUnitsSelectionWidget(bool bEnabled) const
 		UnitsSelector->SetVisibility(bEnabled ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
+void UJupiterHudWidget::SetPatrolEditorWidget(bool bEnabled) const
+{
+	if (PatrolEditor)
+		PatrolEditor->SetVisibility(bEnabled ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+}
+
 void UJupiterHudWidget::InitializedJupiterHud(APawn* PawnLinked)
 {
 	if(!PawnLinked) return;
@@ -100,8 +108,10 @@ void UJupiterHudWidget::InitializedJupiterHud(APawn* PawnLinked)
 		return;
 
 	SetFormationSelectionWidget(false);
+	SetFormationSelectionWidget(false);
 	SetBehaviorSelectionWidget(false);
 	SetUnitsSelectionWidget(true);
+	SetPatrolEditorWidget(false);
 
 
     if (SelectionComponent)
@@ -118,11 +128,38 @@ void UJupiterHudWidget::OnSelectionUpdated()
 		if (SelectionComponent->GetSelectedActors().IsEmpty())
 		{
 			SetBehaviorSelectionWidget(false);
+			SetPatrolEditorWidget(false);
 			return;
 		}
 
 		SetBehaviorSelectionWidget(true);
 		SetFormationSelectionWidget(SelectionComponent->HasGroupSelection());
+
+		// Update Patrol Editor
+		bool bShowPatrol = false;
+		if (SelectionComponent->GetSelectedActors().Num() == 1)
+		{
+			AActor* SelectedActor = SelectionComponent->GetSelectedActors()[0];
+			if (SelectedActor)
+			{
+				UUnitPatrolComponent* PatrolComp = SelectedActor->FindComponentByClass<UUnitPatrolComponent>();
+				if (PatrolComp)
+				{
+					UE_LOG(LogTemp, Log, TEXT("[PatrolEditor] Found PatrolComponent, NumRoutes: %d"), PatrolComp->GetActiveRoutes().Num());
+					if (PatrolEditor)
+					{
+						UE_LOG(LogTemp, Log, TEXT("[PatrolEditor] Calling SetupWithComponent"));
+						PatrolEditor->SetupWithComponent(PatrolComp);
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[PatrolEditor] PatrolEditor widget is NULL!"));
+					}
+					bShowPatrol = true;
+				}
+			}
+		}
+		SetPatrolEditorWidget(bShowPatrol);
 
 		int Selected = SelectionComponent->GetSelectedActors().Num();
 		FString Text = FString::FromInt(Selected);

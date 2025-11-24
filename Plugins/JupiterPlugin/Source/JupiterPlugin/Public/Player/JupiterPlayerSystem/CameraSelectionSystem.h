@@ -42,8 +42,6 @@ private:
 	void ResetSelectionState();
 
 private:
-
-	// Internal state
 	bool bMouseGrounded = false;
 	bool bBoxSelect = false;
 
@@ -51,14 +49,12 @@ private:
 
 	float LeftMouseHoldThreshold = 0.15f;
 
-	// Support systems
 	UPROPERTY()
 	UCameraCommandSystem* CommandSystem = nullptr;
 	
 	UPROPERTY()
 	UCameraSpawnSystem*  SpawnSystem = nullptr;
 
-	// Actors
 	UPROPERTY()
 	ASelectionBox* SelectionBox = nullptr;
 };

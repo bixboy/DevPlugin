@@ -43,6 +43,8 @@ void UUnitSpawnComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 // ------------------------------------------------------------
 void UUnitSpawnComponent::SetUnitToSpawn(TSubclassOf<ASoldierRts> NewUnitClass)
 {
+    UE_LOG(LogTemp, Warning, TEXT("[UnitSpawnComponent] SetUnitToSpawn called - Unit: %s, HasAuthority: %s"), NewUnitClass ? *NewUnitClass->GetName() : TEXT("NULL"), GetOwner()->HasAuthority() ? TEXT("Yes") : TEXT("No"));
+
     if (GetOwner()->HasAuthority())
     {
         UnitToSpawn = NewUnitClass;
@@ -268,6 +270,7 @@ void UUnitSpawnComponent::ServerSpawnUnits_Implementation(const FVector& SpawnLo
 // ------------------------------------------------------------
 void UUnitSpawnComponent::OnRep_UnitToSpawn()
 {
+    UE_LOG(LogTemp, Warning, TEXT("[UnitSpawnComponent] OnRep_UnitToSpawn - Broadcasting event for unit: %s"), UnitToSpawn ? *UnitToSpawn->GetName() : TEXT("NULL"));
     OnUnitClassChanged.Broadcast(UnitToSpawn);
 }
 

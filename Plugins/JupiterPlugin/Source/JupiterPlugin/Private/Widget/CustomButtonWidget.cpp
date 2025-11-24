@@ -1,4 +1,17 @@
 #include "Widget/CustomButtonWidget.h"
+#include "Components/Button.h"
+#include "Components/TextBlock.h"
+#include "Components/Image.h"
+#include "Components/Border.h"
+#include "Components/ScaleBox.h"
+
+void UCustomButtonWidget::SetButtonColor(FLinearColor NewColor)
+{
+	FillColor = NewColor;
+	bOverride_FillColor = true;
+	bEnableFill = true;
+	UpdateButtonVisuals(true);
+}
 
 #include "Components/Border.h"
 #include "Components/Button.h"

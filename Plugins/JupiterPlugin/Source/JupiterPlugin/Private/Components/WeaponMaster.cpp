@@ -28,19 +28,11 @@ void UWeaponMaster::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 void UWeaponMaster::SetAiOwner(ASoldierRts* NewOwner)
 {
-	if (!GetOwner()->HasAuthority())
+	if (GetOwner()->HasAuthority())
 	{
-		SetAiOwner_Server(NewOwner);
-		return;
+		AiOwner = NewOwner;
+		ControlledByAi = true;
 	}
-
-	AiOwner = NewOwner;
-	ControlledByAi = true;
-}
-
-void UWeaponMaster::SetAiOwner_Server_Implementation(ASoldierRts* NewOwner)
-{
-	SetAiOwner(NewOwner);
 }
 
 #pragma endregion

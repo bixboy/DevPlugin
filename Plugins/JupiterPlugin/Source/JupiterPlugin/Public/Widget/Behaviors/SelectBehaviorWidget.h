@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Data/AiData.h"
 #include "SelectBehaviorWidget.generated.h"
 
 class UComboBoxString;

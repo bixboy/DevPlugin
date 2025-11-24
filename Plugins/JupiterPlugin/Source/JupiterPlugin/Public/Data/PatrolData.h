@@ -4,6 +4,17 @@
 #include "PatrolData.generated.h"
 
 /**
+ * Type of patrol behavior.
+ */
+UENUM(BlueprintType)
+enum class EPatrolType : uint8
+{
+	Once        UMETA(DisplayName = "Once"),
+	Loop        UMETA(DisplayName = "Loop"),
+	PingPong    UMETA(DisplayName = "Ping Pong")
+};
+
+/**
  * Quality levels for patrol route visualization.
  */
 UENUM(BlueprintType)
@@ -28,7 +39,7 @@ struct FPatrolRouteExtended
 	TArray<FVector> PatrolPoints;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")
-	bool bIsLoop = false;
+	EPatrolType PatrolType = EPatrolType::Loop;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")
 	FName RouteName = NAME_None;

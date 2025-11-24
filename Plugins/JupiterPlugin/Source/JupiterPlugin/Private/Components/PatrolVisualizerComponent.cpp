@@ -150,7 +150,7 @@ void UPatrolVisualizerComponent::RenderRouteCached(const FPatrolRouteExtended& R
 
     FPatrolVisualizationCache& Cache = VisualizationCache[CacheIndex];
 
-    const uint32 NewHash = HashGeometry(Route.PatrolPoints, Route.bIsLoop);
+    const uint32 NewHash = HashGeometry(Route.PatrolPoints, Route.PatrolType);
     if (NewHash != Cache.GeometryHash)
     {
         Cache.ElevatedPoints.Reset(Route.PatrolPoints.Num());
@@ -159,10 +159,10 @@ void UPatrolVisualizerComponent::RenderRouteCached(const FPatrolRouteExtended& R
             Cache.ElevatedPoints.Add(Point + FVector(0, 0, Settings->VisualZOffset));
         }
 
-        BuildSplineSamples(Cache.ElevatedPoints, Route.bIsLoop, Cache.SplineSamples, Settings);
+        BuildSplineSamples(Cache.ElevatedPoints, Route.PatrolType, Cache.SplineSamples, Settings);
         Cache.RouteBounds = CalculateRouteBounds(Cache.ElevatedPoints);
         Cache.GeometryHash = NewHash;
-        Cache.bLoopCached = Route.bIsLoop;
+        Cache.PatrolTypeCached = Route.PatrolType;
     }
 
     if (Settings->bEnableFrustumCulling && ShouldCullRoute(Cache.RouteBounds, Settings))
@@ -289,11 +289,11 @@ void UPatrolVisualizerComponent::DrawWaypoints(const TArray<FVector>& Points, co
         const FVector& Point = Points[i];
         
         FLinearColor PointColor = Color;
-        if (i == 0 && !Route.bIsLoop)
+        if (i == 0 && Route.PatrolType != EPatrolType::Loop)
         {
 	        PointColor = FLinearColor::Green;
         }
-        else if (i == Points.Num() - 1 && !Route.bIsLoop)
+        else if (i == Points.Num() - 1 && Route.PatrolType != EPatrolType::Loop)
         {
 	        PointColor = FLinearColor::Red;
         }
@@ -494,7 +494,7 @@ void UPatrolVisualizerComponent::UpdateLOD(const UPatrolSystemSettings* Settings
 // GEOMETRY
 // ------------------------------------------------------------
 
-void UPatrolVisualizerComponent::BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples, const UPatrolSystemSettings* Settings)
+void UPatrolVisualizerComponent::BuildSplineSamples(const TArray<FVector>& Points, EPatrolType Type, TArray<FVector>& OutSamples, const UPatrolSystemSettings* Settings)
 {
     OutSamples.Reset();
     const int32 NumPoints = Points.Num();
@@ -505,11 +505,12 @@ void UPatrolVisualizerComponent::BuildSplineSamples(const TArray<FVector>& Point
     }
 
     const int32 SamplesPerSegment = Settings->SplineSamplesPerSegment;
-    const int32 NumSegments = bLoop ? NumPoints : NumPoints - 1;
+    const bool bIsLoop = (Type == EPatrolType::Loop);
+    const int32 NumSegments = bIsLoop ? NumPoints : NumPoints - 1;
 
-    auto WrapIndex = [NumPoints, bLoop](int32 Index) -> int32
+    auto WrapIndex = [NumPoints, bIsLoop](int32 Index) -> int32
     {
-        return bLoop ? (Index % NumPoints + NumPoints) % NumPoints : FMath::Clamp(Index, 0, NumPoints - 1);
+        return bIsLoop ? (Index % NumPoints + NumPoints) % NumPoints : FMath::Clamp(Index, 0, NumPoints - 1);
     };
 
     OutSamples.Reserve(NumSegments * SamplesPerSegment + 1);
@@ -534,7 +535,7 @@ void UPatrolVisualizerComponent::BuildSplineSamples(const TArray<FVector>& Point
             OutSamples.Add(SamplePoint);
         }
     }
-    OutSamples.Add(Points[bLoop ? 0 : NumPoints - 1]);
+    OutSamples.Add(Points[bIsLoop ? 0 : NumPoints - 1]);
 }
 
 FVector UPatrolVisualizerComponent::EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T)
@@ -544,7 +545,7 @@ FVector UPatrolVisualizerComponent::EvaluateCatmullRom(const FVector& P0, const 
     return 0.5f * ((2.f * P1) + (-P0 + P2) * T + (2.f * P0 - 5.f * P1 + 4.f * P2 - P3) * T2 + (-P0 + 3.f * P1 - 3.f * P2 + P3) * T3);
 }
 
-uint32 UPatrolVisualizerComponent::HashGeometry(const TArray<FVector>& Points, bool bLoop)
+uint32 UPatrolVisualizerComponent::HashGeometry(const TArray<FVector>& Points, EPatrolType Type)
 {
     if (Points.IsEmpty()) return 0u;
     
@@ -555,7 +556,7 @@ uint32 UPatrolVisualizerComponent::HashGeometry(const TArray<FVector>& Points, b
         Hash = Hash * 16777619u ^ static_cast<uint32>(P.Y);
     }
 	
-    Hash = Hash * 16777619u ^ (bLoop ? 1 : 0);
+    Hash = Hash * 16777619u ^ (uint8)Type;
     return Hash;
 }
 

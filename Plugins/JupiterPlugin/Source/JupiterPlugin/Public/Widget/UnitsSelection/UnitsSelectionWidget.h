@@ -16,6 +16,8 @@ class UUnitSpawnComponent;
 class UUnitSpawnCountWidget;
 class UUnitSpawnFormationWidget;
 class UUnitSpawnAxisWidget;
+class UWidgetSwitcher;
+class UPatrolEditorWidget;
 
 UCLASS()
 class JUPITERPLUGIN_API UUnitsSelectionWidget : public UUserWidget
@@ -104,6 +106,28 @@ protected:
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
     UUnitSpawnAxisWidget* SpawnAxisWidget;
+
+    /* -------- Navigation & Pages -------- */
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    class UWidgetSwitcher* ContentSwitcher;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    UCustomButtonWidget* Btn_OpenSpawnPage;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    UCustomButtonWidget* Btn_OpenPatrolPage;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+    class UPatrolEditorWidget* PatrolEditorPage;
+
+    UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+    UWidget* SpawnPageContainer;
+
+    UFUNCTION()
+    void OnOpenSpawnPage(UCustomButtonWidget* Button, int Index);
+
+    UFUNCTION()
+    void OnOpenPatrolPage(UCustomButtonWidget* Button, int Index);
 
     UPROPERTY()
     TArray<UUnitsEntryWidget*> EntryList;

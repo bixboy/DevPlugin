@@ -21,8 +21,6 @@ public:
 
 	UFUNCTION()
 	void SetAiOwner(ASoldierRts* NewOwner);
-	UFUNCTION(Server, Reliable)
-	void SetAiOwner_Server(ASoldierRts* NewOwner);
 
 protected:
 	/*- Function -*/

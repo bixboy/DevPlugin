@@ -15,22 +15,23 @@ void UCameraCommandSystem::Init(APlayerCamera* InOwner)
 {
     Super::Init(InOwner);
 
-    if (GetWorldSafe() && SphereRadiusClass)
+	if (!GetOwner() || !GetWorldSafe())
+		return;
+	
+    FActorSpawnParameters Params;
+    Params.Owner = GetOwner();
+    
+    SphereRadius = GetWorldSafe()->SpawnActor<ASphereRadius>(GetOwner()->SphereRadiusClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
+    if (SphereRadius)
     {
-        FActorSpawnParameters Params;
-        Params.Owner = GetOwner();
-        
-        SphereRadius = GetWorldSafe()->SpawnActor<ASphereRadius>(SphereRadiusClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
-        if (SphereRadius)
-        {
-            SphereRadius->SetActorHiddenInGame(true);
-        }
+        SphereRadius->SetActorHiddenInGame(true);
     }
 
-	if (GetOwner())
-	{
-		PatrolVisualizer = GetOwner()->GetComponentByClass<UPatrolVisualizerComponent>();
-	}
+	
+	PatrolVisualizer = GetOwner()->GetComponentByClass<UPatrolVisualizerComponent>();
+	RotationHoldThreshold = GetOwner()->RotationHoldThreshold;
+	DragThreshold = GetOwner()->DragThreshold;
+	LoopThreshold = GetOwner()->LoopThreshold;
 }
 
 
@@ -48,7 +49,8 @@ void UCameraCommandSystem::Tick(float DeltaTime)
     if (bIsRightClickDown)
     {
         FHitResult Hit;
-        if (!GetMouseHitOnTerrain(Hit)) return;
+        if (!GetMouseHitOnTerrain(Hit))
+         return;
         
         float TimeHeld = GetWorldSafe()->GetTimeSeconds() - ClickStartTime;
         float DistMoved = FVector::Dist2D(CommandStartLocation, Hit.Location);
@@ -208,7 +210,8 @@ void UCameraCommandSystem::ExecuteFinalCommand(const FHitResult& HitResult)
 
 void UCameraCommandSystem::IssueMoveCommand(const FVector& TargetLocation, const FRotator& Facing)
 {
-    if (!GetOrderComponent()) return;
+    if (!GetOrderComponent())
+     return;
 
     FCommandData Data(
         GetOwner()->GetPlayerController(),
@@ -222,7 +225,8 @@ void UCameraCommandSystem::IssueMoveCommand(const FVector& TargetLocation, const
 
 void UCameraCommandSystem::IssueAttackCommand(AActor* TargetActor)
 {
-    if (!GetOrderComponent()) return;
+    if (!GetOrderComponent()) 
+    return;
 
     FCommandData Data(
         GetOwner()->GetPlayerController(),
@@ -237,7 +241,8 @@ void UCameraCommandSystem::IssueAttackCommand(AActor* TargetActor)
 
 void UCameraCommandSystem::IssuePatrolCircleCommand(float Radius, const FVector& Center)
 {
-    if (!GetOrderComponent()) return;
+    if (!GetOrderComponent()) 
+    return;
 
     FCommandData Data(
         GetOwner()->GetPlayerController(),
@@ -264,7 +269,6 @@ void UCameraCommandSystem::IssuePatrolPathCommand()
         return;
     }
 
-    // Utilise le premier point comme destination immédiate
     FCommandData Data(
         GetOwner()->GetPlayerController(),
         PatrolWaypoints[0],
@@ -273,9 +277,8 @@ void UCameraCommandSystem::IssuePatrolPathCommand()
     );
 	
     const float DistFirstToLast = FVector::Dist(PatrolWaypoints[0], PatrolWaypoints.Last());
-    const float LoopThreshold = 150.0f;
-    
     const bool bIsLoop = (DistFirstToLast < LoopThreshold);
+	
     Data.bPatrolLoop = bIsLoop;
     
     if (bIsLoop)
@@ -348,15 +351,13 @@ void UCameraCommandSystem::UpdatePatrolPreview()
     if (!PatrolVisualizer || PatrolWaypoints.Num() == 0)
         return;
     
-    // Créer une route de prévisualisation
     FPatrolRouteExtended PreviewRoute;
     PreviewRoute.PatrolPoints = PatrolWaypoints;
-    PreviewRoute.bIsLoop = false; // Toujours false pendant la création
-    PreviewRoute.RouteColor = FLinearColor(1.0f, 0.8f, 0.0f); // Orange/jaune pour preview
+    PreviewRoute.PatrolType = EPatrolType::Once;
+    PreviewRoute.RouteColor = FLinearColor(1.0f, 0.8f, 0.0f);
     PreviewRoute.bShowWaypointNumbers = true;
     PreviewRoute.bShowDirectionArrows = false;
     
-    // Passer au visualizer avec un tableau contenant UNE seule route
     TArray<FPatrolRouteExtended> Routes;
     Routes.Add(PreviewRoute);
     
@@ -384,13 +385,16 @@ void UCameraCommandSystem::HandleServerDestroyActor(const TArray<AActor*>& Actor
 {
     for (AActor* A : ActorsToDestroy)
     {
-        if (A) A->Destroy();
+        if (A)
+        	A->Destroy();
     }
 }
 
 bool UCameraCommandSystem::GetMouseHitOnTerrain(FHitResult& OutHit) const
 {
-    if (!GetSelectionComponent()) return false;
+    if (!GetSelectionComponent())
+    	return false;
+	
     OutHit = GetSelectionComponent()->GetMousePositionOnTerrain();
     return OutHit.bBlockingHit;
 }

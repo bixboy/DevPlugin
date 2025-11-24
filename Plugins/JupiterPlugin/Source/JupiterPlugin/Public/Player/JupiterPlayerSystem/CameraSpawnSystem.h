@@ -35,6 +35,16 @@ private:
 	bool EnsurePreviewActor();
 	int32 GetEffectiveSpawnCount() const;
 
+	// Event callbacks
+	UFUNCTION()
+	void OnUnitClassChanged(TSubclassOf<ASoldierRts> NewUnitClass);
+
+	UFUNCTION()
+	void OnSpawnCountChanged(int32 NewCount);
+
+	UFUNCTION()
+	void OnFormationChanged(ESpawnFormation NewFormation);
+
 private:
 
 	UPROPERTY()

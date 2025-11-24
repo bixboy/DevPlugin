@@ -72,16 +72,18 @@ protected:
 
     UPROPERTY()
     UPatrolVisualizerComponent* PatrolVisualizer = nullptr;
+	
 
     // --- Settings ---
-    UPROPERTY(EditDefaultsOnly, Category = "Settings|Command")
-    TSubclassOf<ASphereRadius> SphereRadiusClass;
+    UPROPERTY()
+    float RotationHoldThreshold;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Settings|Command")
-    float RotationHoldThreshold = 0.20f;
+    UPROPERTY()
+    float DragThreshold;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Settings|Command")
-    float DragThreshold = 10.0f;
+	UPROPERTY()
+	float LoopThreshold;
+	
 
     // --- State Machine Data ---
     ECommandMode CurrentMode = ECommandMode::None;

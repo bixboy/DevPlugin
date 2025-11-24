@@ -6,17 +6,13 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Player/JupiterPlayerSystem/CameraSpawnSystem.h"
 
-// ------------------------------------------
-// INIT
-// ------------------------------------------
+
 void UCameraPreviewSystem::Init(APlayerCamera* InOwner)
 {
 	Super::Init(InOwner);
 }
 
-// ------------------------------------------
-// TICK
-// ------------------------------------------
+
 void UCameraPreviewSystem::Tick(float DeltaTime)
 {
 	// (Optional interpolation)
@@ -31,12 +27,17 @@ bool UCameraPreviewSystem::EnsurePreviewActor()
 		return true;
 
 	if (!SpawnSystem || !GetOwner())
+	{
+		UE_LOG(LogTemp, Error, TEXT("[CameraPreviewSystem] EnsurePreviewActor failed - SpawnSystem: %s, Owner: %s"),
+			SpawnSystem ? TEXT("Valid") : TEXT("NULL"), GetOwner() ? TEXT("Valid") : TEXT("NULL"));
+		
 		return false;
+	}
 
-	TSubclassOf<APreviewPoseMesh> PreviewClass = GetOwner()->PreviewMeshClass;
+	TSubclassOf<APreviewPoseMesh> PreviewClass = GetOwner()->GetPreviewMeshClass();
 	if (!PreviewClass)
 		return false;
-
+	
 	return InternalCreatePreviewActor(PreviewClass);
 }
 

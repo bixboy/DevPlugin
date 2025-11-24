@@ -12,6 +12,8 @@
 #include "Widget/CustomButtonWidget.h"
 #include "Data/UnitsSelectionDataAsset.h"
 #include "Algo/Sort.h"
+#include "Components/WidgetSwitcher.h"
+#include "Widget/Patrol/PatrolEditorWidget.h"
 
 #define LOCTEXT_NAMESPACE "UnitsSelectionWidget"
 
@@ -48,8 +50,50 @@ void UUnitsSelectionWidget::NativeOnInitialized()
         CurrentSearchText.ToLowerInline();
     }
 
+    if (Btn_OpenSpawnPage)
+        Btn_OpenSpawnPage->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnOpenSpawnPage);
+
+    if (Btn_OpenPatrolPage)
+        Btn_OpenPatrolPage->OnButtonClicked.AddDynamic(this, &UUnitsSelectionWidget::OnOpenPatrolPage);
+
+    // Default to spawn page
+    OnOpenSpawnPage(Btn_OpenSpawnPage, 0);
+
     OnShowUnitSelectionPressed();
     SetupUnitsList();
+}
+
+void UUnitsSelectionWidget::OnOpenSpawnPage(UCustomButtonWidget* Button, int Index)
+{
+    if (ContentSwitcher)
+    {
+        ContentSwitcher->SetActiveWidgetIndex(0);
+    }
+    
+    if (Btn_OpenSpawnPage)
+        Btn_OpenSpawnPage->ToggleButtonIsSelected(true);
+        
+    if (Btn_OpenPatrolPage)
+        Btn_OpenPatrolPage->ToggleButtonIsSelected(false);
+}
+
+void UUnitsSelectionWidget::OnOpenPatrolPage(UCustomButtonWidget* Button, int Index)
+{
+    if (ContentSwitcher)
+    {
+        ContentSwitcher->SetActiveWidgetIndex(1);
+    }
+    
+    if (Btn_OpenSpawnPage)
+        Btn_OpenSpawnPage->ToggleButtonIsSelected(false);
+        
+    if (Btn_OpenPatrolPage)
+        Btn_OpenPatrolPage->ToggleButtonIsSelected(true);
+    
+    if (PatrolEditorPage)
+    {
+        PatrolEditorPage->SetupGlobal();
+    }
 }
 
 void UUnitsSelectionWidget::NativeDestruct()

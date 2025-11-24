@@ -196,9 +196,13 @@ void APlayerCamera::InitializeSystems()
     if (SpawnSystemClass && !SpawnSystem)
     {
         SpawnSystem = CreateSystem<UCameraSpawnSystem>(SpawnSystemClass);
-        SpawnSystem->Init(this);
         SpawnSystem->SetPreviewSystem(PreviewSystem);
         SpawnSystem->SetCommandSystem(CommandSystem);
+        
+        if (PreviewSystem)
+            PreviewSystem->SetSpawnSystem(SpawnSystem);
+        
+        SpawnSystem->Init(this);
     }
 	
 

@@ -22,7 +22,7 @@ struct FPatrolVisualizationCache
     FBox RouteBounds = FBox(ForceInit);
     
     uint32 GeometryHash = 0;
-    bool bLoopCached = false;
+    EPatrolType PatrolTypeCached = EPatrolType::Once;
     EPatrolVisualizationState State = EPatrolVisualizationState::Active;
     float LastAccessTime = 0.f;
 
@@ -32,7 +32,7 @@ struct FPatrolVisualizationCache
         SplineSamples.Reset();
         RouteBounds.Init();
         GeometryHash = 0;
-        bLoopCached = false;
+        PatrolTypeCached = EPatrolType::Once;
         State = EPatrolVisualizationState::Active;
         LastAccessTime = 0.f;
     }
@@ -73,9 +73,9 @@ protected:
     void DrawDirectionArrows(const TArray<FVector>& Samples, const FLinearColor& Color, const UPatrolSystemSettings* Settings);
 
     // --- Geometry ---
-    void BuildSplineSamples(const TArray<FVector>& Points, bool bLoop, TArray<FVector>& OutSamples, const UPatrolSystemSettings* Settings);
+    void BuildSplineSamples(const TArray<FVector>& Points, EPatrolType Type, TArray<FVector>& OutSamples, const UPatrolSystemSettings* Settings);
     static FVector EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T);
-    static uint32 HashGeometry(const TArray<FVector>& Points, bool bLoop);
+    static uint32 HashGeometry(const TArray<FVector>& Points, EPatrolType Type);
     static FBox CalculateRouteBounds(const TArray<FVector>& Points);
 
     // --- LOD & Utilities ---

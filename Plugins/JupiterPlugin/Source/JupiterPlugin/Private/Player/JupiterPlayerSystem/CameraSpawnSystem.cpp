@@ -14,9 +14,6 @@
 #include "Player/JupiterPlayerSystem/CameraPreviewSystem.h"
 
 
-// ------------------------------------------------------------
-// INIT
-// ------------------------------------------------------------
 void UCameraSpawnSystem::Init(APlayerCamera* InOwner)
 {
     Super::Init(InOwner);
@@ -25,16 +22,20 @@ void UCameraSpawnSystem::Init(APlayerCamera* InOwner)
         return;
 
     SpawnRotationPreview.Reset(FRotator::ZeroRotator);
-
+	
     if (UUnitSpawnComponent* Spawn = GetSpawnComponent())
     {
-        ShowUnitPreview(Spawn->GetUnitToSpawn());
+        Spawn->OnUnitClassChanged.AddDynamic(this, &UCameraSpawnSystem::OnUnitClassChanged);
+        Spawn->OnSpawnCountChanged.AddDynamic(this, &UCameraSpawnSystem::OnSpawnCountChanged);
+        Spawn->OnSpawnFormationChanged.AddDynamic(this, &UCameraSpawnSystem::OnFormationChanged);
+    	
+        if (Spawn->GetUnitToSpawn())
+        {
+            ShowUnitPreview(Spawn->GetUnitToSpawn());
+        }
     }
 }
 
-// ------------------------------------------------------------
-// TICK
-// ------------------------------------------------------------
 void UCameraSpawnSystem::Tick(float DeltaTime)
 {
     if (!bIsInSpawnMode || !PreviewSystem || !PreviewSystem->IsValidLowLevel())
@@ -58,14 +59,10 @@ void UCameraSpawnSystem::HandleSpawnInput()
         return;
 
     const FVector SpawnLocation = SpawnRotationPreview.Center;
-    const FRotator SpawnRot = 
-        SpawnRotationPreview.bPreviewActive ?
-            SpawnRotationPreview.CurrentRotation :
-            FRotator::ZeroRotator;
+    const FRotator SpawnRot = SpawnRotationPreview.bPreviewActive ? SpawnRotationPreview.CurrentRotation : FRotator::ZeroRotator;
 
     GetSpawnComponent()->SpawnUnitsWithTransform(SpawnLocation, SpawnRot);
 
-    // Reset
     SpawnRotationPreview.Deactivate();
     bIsInSpawnMode = false;
 	
@@ -95,16 +92,18 @@ void UCameraSpawnSystem::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
 
     if (!EnsurePreviewActor())
     {
+        UE_LOG(LogTemp, Error, TEXT("[CameraSpawnSystem] ShowUnitPreview - EnsurePreviewActor failed!"));
         ResetSpawnState();
         return;
     }
 
     if (!NewUnitClass)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[CameraSpawnSystem] ShowUnitPreview - NewUnitClass is NULL"));
         ResetSpawnState();
         return;
     }
-
+	
     ASoldierRts* DefaultUnit = NewUnitClass->GetDefaultObject<ASoldierRts>();
     if (!DefaultUnit)
     {
@@ -128,7 +127,6 @@ void UCameraSpawnSystem::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
             if (PreviewSystem->ShowSkeletalPreview(Skel, SkelComp->GetRelativeScale3D(), InstanceCount))
             {
                 bIsInSpawnMode = true;
-                RefreshPreviewInstances();
                 return;
             }
         }
@@ -144,7 +142,6 @@ void UCameraSpawnSystem::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
             if (PreviewSystem->ShowStaticPreview(Mesh, StaticComp->GetRelativeScale3D(), InstanceCount))
             {
                 bIsInSpawnMode = true;
-                RefreshPreviewInstances();
                 return;
             }
         }
@@ -257,10 +254,40 @@ void UCameraSpawnSystem::UpdatePreviewFollowMouse(float CurrentTime)
 // ------------------------------------------------------------
 void UCameraSpawnSystem::RefreshPreviewInstances()
 {
-    if (!bIsInSpawnMode)
+    if (!bIsInSpawnMode || !PreviewSystem || !PreviewSystem->HasPreviewActor())
         return;
 
-    ShowUnitPreview(GetSpawnComponent()->GetUnitToSpawn());
+    const int32 NewCount = GetEffectiveSpawnCount();
+    
+    UUnitSpawnComponent* SpawnComp = GetSpawnComponent();
+    if (!SpawnComp)
+        return;
+
+    TSubclassOf<ASoldierRts> UnitClass = SpawnComp->GetUnitToSpawn();
+    if (!UnitClass)
+        return;
+
+    ASoldierRts* DefaultUnit = UnitClass->GetDefaultObject<ASoldierRts>();
+    if (!DefaultUnit)
+        return;
+
+    // Re-show with updated count
+    if (USkeletalMeshComponent* SkelComp = DefaultUnit->GetMesh())
+    {
+        if (USkeletalMesh* Skel = SkelComp->GetSkeletalMeshAsset())
+        {
+            PreviewSystem->ShowSkeletalPreview(Skel, SkelComp->GetRelativeScale3D(), NewCount);
+            return;
+        }
+    }
+
+    if (UStaticMeshComponent* StaticComp = DefaultUnit->FindComponentByClass<UStaticMeshComponent>())
+    {
+        if (UStaticMesh* Mesh = StaticComp->GetStaticMesh())
+        {
+            PreviewSystem->ShowStaticPreview(Mesh, StaticComp->GetRelativeScale3D(), NewCount);
+        }
+    }
 }
 
 // ------------------------------------------------------------
@@ -292,4 +319,22 @@ void UCameraSpawnSystem::UpdatePreviewTransforms(const FVector& Center, const FR
     }
 
     PreviewSystem->UpdateInstances(Transforms);
+}
+
+// ------------------------------------------------------------
+// Event Callbacks
+// ------------------------------------------------------------
+void UCameraSpawnSystem::OnUnitClassChanged(TSubclassOf<ASoldierRts> NewUnitClass)
+{
+    ShowUnitPreview(NewUnitClass);
+}
+
+void UCameraSpawnSystem::OnSpawnCountChanged(int32 /*NewCount*/)
+{
+    RefreshPreviewInstances();
+}
+
+void UCameraSpawnSystem::OnFormationChanged(ESpawnFormation /*NewFormation*/)
+{
+    RefreshPreviewInstances();
 }
