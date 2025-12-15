@@ -144,6 +144,9 @@ protected:
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
 	TObjectPtr<UInputAction> DeleteAction;
 
+    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
+	TObjectPtr<UInputAction> CancelAction;
+
     // Spawn
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Spawn")
 	TObjectPtr<UInputAction> SpawnUnitAction;

@@ -10,6 +10,9 @@ class UPatrolVisualizerComponent;
 class UUnitOrderComponent;
 class UUnitSelectionComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPatrolRoutesChanged);
+
+
 USTRUCT(BlueprintType)
 struct FPatrolRoute
 {
@@ -44,6 +47,33 @@ struct FPatrolRoute
 };
 
 
+USTRUCT(BlueprintType)
+struct FPatrolCreationParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TArray<FVector> Points;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TArray<AActor*> Units;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	EPatrolType Type = EPatrolType::Loop;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FName Name = NAME_None;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FLinearColor Color = FLinearColor::Blue;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool bShowArrows = true;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool bShowNumbers = true;
+};
+
 UCLASS(ClassGroup=(RTS), meta=(BlueprintSpawnableComponent))
 class JUPITERPLUGIN_API UUnitPatrolComponent : public UActorComponent
 {
@@ -53,35 +83,51 @@ public:
 	UUnitPatrolComponent();
 
 	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable, Category = "Patrol")
 	const TArray<FPatrolRoute>& GetActiveRoutes() const { return ActivePatrolRoutes; }
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+	void Server_CreatePatrol(const FPatrolCreationParams& Params);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_UpdatePatrolRoute(int32 Index, const FPatrolRoute& NewRoute);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_UpdateUnitPatrol(AActor* Unit, const FPatrolRoute& NewRoute);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_RemovePatrolRoute(int32 Index);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+	void Server_RemovePatrolRouteByID(FGuid PatrolID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_RemovePatrolRouteForUnit(AActor* Unit);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_ReversePatrolRoute(int32 Index);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_ReversePatrolRouteForUnit(AActor* Unit);
 
-	UFUNCTION(BlueprintCallable)
-	bool GetPatrolRouteForUnit(AActor* Unit, FPatrolRoute& OutRoute) const;
+	/** Multicast to ensure all clients clear their cache/state for ignored patrol */
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_RemovePatrolRoute(const TArray<AActor*>& Units, const FGuid& PatrolID);
+
+	UPROPERTY(BlueprintAssignable, Category = "Events")
+	FOnPatrolRoutesChanged OnPatrolRoutesChanged;
 
 protected:
+
+	bool GetPatrolRouteForUnit(AActor* Unit, FPatrolRoute& OutRoute) const;
+
+	void StopUnits(const TArray<AActor*>& Units);
+
+	void StopUnit(AActor* Unit);
+
 	// ============================================================
 	// INTERNAL HELPERS
 	// ============================================================
@@ -120,7 +166,6 @@ protected:
 	UFUNCTION()
 	void OnRep_ActivePatrolRoutes();
 
-	// Cache for extra patrol data (Color, Name, etc.) keyed by Unit
 	UPROPERTY()
 	TMap<AActor*, FPatrolRoute> UnitRouteCache;
 

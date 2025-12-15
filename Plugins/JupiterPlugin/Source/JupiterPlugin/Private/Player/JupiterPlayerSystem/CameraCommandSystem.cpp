@@ -346,6 +346,15 @@ void UCameraCommandSystem::ResetPatrolPath()
     ClearPatrolPreview();
 }
 
+void UCameraCommandSystem::CancelPatrolCreation()
+{
+    if (bIsBuildingPatrolPath)
+    {
+        UE_LOG(LogTemp, Log, TEXT(">>> PATROL CREATION CANCELLED <<<"));
+        ResetPatrolPath();
+    }
+}
+
 void UCameraCommandSystem::UpdatePatrolPreview()
 {
     if (!PatrolVisualizer || PatrolWaypoints.Num() == 0)

@@ -6,6 +6,7 @@
 #include "Widget/CustomButtonWidget.h"
 #include "UnitsSelectionWidget.generated.h"
 
+class UUnitPatrolComponent;
 class UUnitsEntryWidget;
 class UWrapBox;
 class UBorder;
@@ -17,7 +18,7 @@ class UUnitSpawnCountWidget;
 class UUnitSpawnFormationWidget;
 class UUnitSpawnAxisWidget;
 class UWidgetSwitcher;
-class UPatrolEditorWidget;
+class UPatrolListWidget;
 
 UCLASS()
 class JUPITERPLUGIN_API UUnitsSelectionWidget : public UUserWidget
@@ -30,6 +31,8 @@ public:
 
     UFUNCTION()
     void SetupUnitsList();
+
+    void SetPatrolComponent(UUnitPatrolComponent* PatrolComp);
 
 protected:
 	
@@ -109,7 +112,7 @@ protected:
 
     /* -------- Navigation & Pages -------- */
     UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-    class UWidgetSwitcher* ContentSwitcher;
+    UWidgetSwitcher* ContentSwitcher;
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
     UCustomButtonWidget* Btn_OpenSpawnPage;
@@ -118,7 +121,7 @@ protected:
     UCustomButtonWidget* Btn_OpenPatrolPage;
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-    class UPatrolEditorWidget* PatrolEditorPage;
+    UPatrolListWidget* PatrolEditorPage;
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
     UWidget* SpawnPageContainer;

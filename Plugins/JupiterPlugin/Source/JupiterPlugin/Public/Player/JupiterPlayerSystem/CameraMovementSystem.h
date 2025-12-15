@@ -22,7 +22,12 @@ public:
 	
 	void HandleRotateHorizontal(const FInputActionValue& Value);
 	void HandleRotateVertical(const FInputActionValue& Value);
+
 	void HandleRotateToggle(const FInputActionValue& Value);
+
+	/** Moves the camera smoothly to a target location over a duration */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void MoveToLocation(const FVector& TargetLocation, float Duration = 1.0f);
 
 private:
 
@@ -37,5 +42,14 @@ private:
 	float PendingRotateH = 0.f;
 	float PendingRotateV = 0.f;
 
+
+
 	bool bRotateEnabled = false;
+
+	// --- Smooth Move Data ---
+	bool bIsMovingToLocation = false;
+	FVector MoveToStartLocation;
+	FVector MoveToTargetLocation;
+	float MoveToAlpha = 0.f;
+	float MoveToDuration = 1.f;
 };

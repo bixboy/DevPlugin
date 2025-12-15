@@ -11,7 +11,7 @@ class UUnitSelectionComponent;
 class UWidgetSwitcher;
 class USelectBehaviorWidget;
 class UFormationSelectorWidget;
-class UPatrolEditorWidget;
+class UPatrolListWidget;
 
 UCLASS()
 class JUPITERPLUGIN_API UJupiterHudWidget : public UUserWidget
@@ -44,9 +44,6 @@ public:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UUnitsSelectionWidget* UnitsSelector;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	UPatrolEditorWidget* PatrolEditor;
-
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UCustomButtonWidget* Btn_Switcher;
 
@@ -65,9 +62,6 @@ protected:
 	
 	UFUNCTION()
 	void SetUnitsSelectionWidget(bool bEnabled) const;
-
-	UFUNCTION()
-	void SetPatrolEditorWidget(bool bEnabled) const;
 
 	UFUNCTION()
 	void SwitchUnitAction(UCustomButtonWidget* Button, int Index);

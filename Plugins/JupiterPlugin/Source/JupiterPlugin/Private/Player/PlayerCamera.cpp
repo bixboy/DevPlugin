@@ -148,7 +148,7 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
         Bind(AltCommandAction, ETriggerEvent::Started, CmdSys, &UCameraCommandSystem::HandleAltPressed);
         Bind(AltCommandAction, ETriggerEvent::Completed, CmdSys, &UCameraCommandSystem::HandleAltReleased);
 
-        Bind(DeleteAction, ETriggerEvent::Triggered, CmdSys, &UCameraCommandSystem::HandleDestroySelected);
+        Bind(CancelAction, ETriggerEvent::Triggered, CmdSys, &UCameraCommandSystem::CancelPatrolCreation);
     }
 
     // ----------------------------------------------------

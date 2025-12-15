@@ -31,6 +31,9 @@ public:
 
     void HandleAltPressed();
     void HandleAltReleased();
+    
+    /** Cancels the current patrol path creation process */
+    void CancelPatrolCreation();
 
     // --- Actions ---
     void HandleDestroySelected();

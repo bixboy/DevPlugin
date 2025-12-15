@@ -1,6 +1,7 @@
 ﻿#include "Widget/UnitsSelection/UnitsSelectionWidget.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/UnitPatrolComponent.h"
 #include "Components/EditableTextBox.h"
 #include "Components/WrapBox.h"
 #include "Kismet/GameplayStatics.h"
@@ -13,7 +14,7 @@
 #include "Data/UnitsSelectionDataAsset.h"
 #include "Algo/Sort.h"
 #include "Components/WidgetSwitcher.h"
-#include "Widget/Patrol/PatrolEditorWidget.h"
+#include "Widget/Patrol/PatrolListWidget.h"
 
 #define LOCTEXT_NAMESPACE "UnitsSelectionWidget"
 
@@ -24,7 +25,11 @@ void UUnitsSelectionWidget::NativeOnInitialized()
     if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0))
     {
         if (APawn* PlayerPawn = PlayerController->GetPawn())
+        {
             SpawnComponent = PlayerPawn->FindComponentByClass<UUnitSpawnComponent>();
+            UUnitPatrolComponent* PatrolComp = PlayerPawn->FindComponentByClass<UUnitPatrolComponent>();
+            SetPatrolComponent(PatrolComp);
+        }
     }
 
     if (SpawnCountWidget)
@@ -90,9 +95,36 @@ void UUnitsSelectionWidget::OnOpenPatrolPage(UCustomButtonWidget* Button, int In
     if (Btn_OpenPatrolPage)
         Btn_OpenPatrolPage->ToggleButtonIsSelected(true);
     
+	if (PatrolEditorPage)
+	{
+		// Ensure the list is connected to the component.
+		// Sometimes NativeOnInitialized might run before the Pawn is ready or possessed.
+		if (APlayerController* PC = GetOwningPlayer())
+		{
+			if (APawn* Pawn = PC->GetPawn())
+			{
+				if (UUnitPatrolComponent* Comp = Pawn->FindComponentByClass<UUnitPatrolComponent>())
+				{
+					PatrolEditorPage->InitializePatrolList(Comp);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("UUnitsSelectionWidget::OnOpenPatrolPage - Could not find UnitPatrolComponent on Pawn %s"), *Pawn->GetName());
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("UUnitsSelectionWidget::OnOpenPatrolPage - No Pawn found for PC"));
+			}
+		}
+	}
+}
+
+void UUnitsSelectionWidget::SetPatrolComponent(UUnitPatrolComponent* PatrolComp)
+{
     if (PatrolEditorPage)
     {
-        PatrolEditorPage->SetupGlobal();
+        PatrolEditorPage->InitializePatrolList(PatrolComp);
     }
 }
 

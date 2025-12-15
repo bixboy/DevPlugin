@@ -2,6 +2,7 @@
 #include "Components/PatrolVisualizerComponent.h"
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
+#include "Components/CommandComponent.h"
 #include "Interfaces/Selectable.h"
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/Pawn.h"
@@ -39,16 +40,6 @@ void UUnitPatrolComponent::BeginPlay()
 	{
 		EnsureVisualizerComponent();
 	}
-}
-
-void UUnitPatrolComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	Super::EndPlay(EndPlayReason);
-}
-
-void UUnitPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }
 
 void UUnitPatrolComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -91,17 +82,15 @@ void UUnitPatrolComponent::RefreshRoutesFromSelection()
 		FPatrolRoute Route;
 		if (GetPatrolRouteForUnit(Unit, Route))
 		{
-			// Check if we already have this patrol ID in NewRoutes
 			bool bFound = false;
 			for (FPatrolRoute& ExistingRoute : NewRoutes)
 			{
-				// Group by PatrolID if valid
 				if (ExistingRoute.PatrolID.IsValid() && ExistingRoute.PatrolID == Route.PatrolID)
 				{
 					ExistingRoute.AssignedUnits.AddUnique(Unit);
 					bFound = true;
-					UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] Unit %s added to existing patrol %s"), 
-						*Unit->GetName(), *Route.PatrolID.ToString());
+					UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] Unit %s added to existing patrol %s"), *Unit->GetName(), *Route.PatrolID.ToString());
+
 					break;
 				}
 			}
@@ -110,67 +99,67 @@ void UUnitPatrolComponent::RefreshRoutesFromSelection()
 			{
 				Route.AssignedUnits.Add(Unit);
 				NewRoutes.Add(Route);
-				UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] New patrol route added with ID %s"), 
-					*Route.PatrolID.ToString());
+				
+				UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] New patrol route added with ID %s"), *Route.PatrolID.ToString());
 			}
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("RefreshRoutesFromSelection: Found %d unique routes from %d units"), NewRoutes.Num(), SelectedUnits.Num());
 	ApplyRoutes(NewRoutes);
 }
 
+// ... (HandleOrdersDispatched)
 void UUnitPatrolComponent::HandleOrdersDispatched(const TArray<AActor*>& AffectedUnits, const FCommandData& IssuedCommand)
 {
-	if (IssuedCommand.Type != ECommandType::CommandPatrol || IssuedCommand.PatrolPath.Num() < 2)
-		return;
-
-	// Create a single shared route for all affected units
-	FPatrolRoute SharedRoute;
-	SharedRoute.PatrolID = FGuid::NewGuid(); // Generate unique ID for this patrol
-	SharedRoute.PatrolPoints = IssuedCommand.PatrolPath;
-	SharedRoute.PatrolType = IssuedCommand.bPatrolLoop ? EPatrolType::Loop : EPatrolType::Once;
-
-	// Check if we already have cached data for any of these units
-	// If so, reuse the metadata (name, color, etc.) BUT keep the new ID
-	bool bFoundCache = false;
-	for (AActor* Unit : AffectedUnits)
+	if (IssuedCommand.Type == CommandPatrol && IssuedCommand.PatrolPath.Num() >= 2)
 	{
-		if (!Unit)
-			continue;
-
-		if (const FPatrolRoute* Cached = UnitRouteCache.Find(Unit))
+		// ... Existing creation logic ...
+		FPatrolCreationParams Params;
+		Params.Points = IssuedCommand.PatrolPath;
+		Params.Units = AffectedUnits;
+		Params.Type = IssuedCommand.bPatrolLoop ? EPatrolType::Loop : EPatrolType::Once;
+		
+		for (AActor* Unit : AffectedUnits)
 		{
-			SharedRoute.RouteName = Cached->RouteName;
-			SharedRoute.RouteColor = Cached->RouteColor;
-			SharedRoute.WaitTime = Cached->WaitTime;
-			SharedRoute.bShowArrows = Cached->bShowArrows;
-			SharedRoute.bShowNumbers = Cached->bShowNumbers;
-			SharedRoute.PatrolType = Cached->PatrolType;
-			bFoundCache = true;
-			break; // Use the first found cache
+			if (const FPatrolRoute* Cached = UnitRouteCache.Find(Unit))
+			{
+				Params.Name = Cached->RouteName;
+				Params.Color = Cached->RouteColor;
+				Params.bShowArrows = Cached->bShowArrows;
+				Params.bShowNumbers = Cached->bShowNumbers;
+				break; 
+			}
+		}
+		if (Params.Color == FLinearColor::Blue) Params.Color = RouteColor;
+
+		if (HasAuthority())
+		{
+			Server_CreatePatrol_Implementation(Params);
+		}
+		else
+		{
+			Server_CreatePatrol(Params);
 		}
 	}
-
-	// If no cache found, use default color
-	if (!bFoundCache)
+	else
 	{
-		SharedRoute.RouteColor = RouteColor;
+		// If command is NOT a patrol command (e.g. Move, Attack, Stop), 
+		// units must be removed from their current patrols.
+		for (AActor* Unit : AffectedUnits)
+		{
+			if (HasAuthority())
+			{
+				Server_RemovePatrolRouteForUnit_Implementation(Unit);
+			}
+			else
+			{
+				Server_RemovePatrolRouteForUnit(Unit);
+			}
+		}
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("[UnitPatrolComponent] Created new patrol with ID: %s for %d units"), 
-		*SharedRoute.PatrolID.ToString(), AffectedUnits.Num());
-
-	// Apply the same shared route to all units in the cache
-	for (AActor* Unit : AffectedUnits)
-	{
-		if (!Unit)
-			continue;
-		UnitRouteCache.Add(Unit, SharedRoute);
-	}
-
-	RefreshRoutesFromSelection();
 }
+
+// ... 
 
 void UUnitPatrolComponent::OnSelectionChanged(const TArray<AActor*>& SelectedActors)
 {
@@ -181,22 +170,33 @@ void UUnitPatrolComponent::OnSelectionChanged(const TArray<AActor*>& SelectedAct
 
 void UUnitPatrolComponent::ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes)
 {
-	// Always update if we have new metadata (Color/Name) even if geometry is same
-	// The AreRoutesEquivalent check was too strict on geometry only, or ignored metadata.
-	// Let's just update.
 	ActivePatrolRoutes = NewRoutes;
 	
 	if (IsLocallyControlled())
 	{
 		UpdateVisualization();
+		OnPatrolRoutesChanged.Broadcast();
 	}
 }
 
 void UUnitPatrolComponent::OnRep_ActivePatrolRoutes()
 {
+	UnitRouteCache.Empty();
+	for (const FPatrolRoute& Route : ActivePatrolRoutes)
+	{
+		for (TObjectPtr UnitPtr : Route.AssignedUnits)
+		{
+			if (AActor* Unit = UnitPtr.Get())
+			{
+				UnitRouteCache.Add(Unit, Route);
+			}
+		}
+	}
+
 	if (IsLocallyControlled())
 	{
 		UpdateVisualization();
+		OnPatrolRoutesChanged.Broadcast();
 	}
 }
 
@@ -204,25 +204,22 @@ void UUnitPatrolComponent::Server_UpdatePatrolRoute_Implementation(int32 Index, 
 {
 	if (ActivePatrolRoutes.IsValidIndex(Index))
 	{
-		// Update the route in the active list
 		ActivePatrolRoutes[Index] = NewRoute;
 		
 		UE_LOG(LogTemp, Log, TEXT("[UnitPatrolComponent] Updating patrol route %d (ID: %s) for %d units"), 
 			Index, *NewRoute.PatrolID.ToString(), NewRoute.AssignedUnits.Num());
 		
-		// Propagate changes to all assigned units in the cache AND re-issue orders
-		for (TObjectPtr<AActor> UnitPtr : NewRoute.AssignedUnits)
+		for (TObjectPtr UnitPtr : NewRoute.AssignedUnits)
 		{
 			if (AActor* Unit = UnitPtr.Get())
 			{
 				UnitRouteCache.Add(Unit, NewRoute);
 				
-				// Re-issue the order to update behavior immediately
 				if (UUnitOrderComponent* UnitOrderComp = Unit->FindComponentByClass<UUnitOrderComponent>())
 				{
 					FCommandData Data;
-					Data.Type = ECommandType::CommandPatrol;
-					Data.PatrolID = NewRoute.PatrolID; // Include patrol ID
+					Data.Type = CommandPatrol;
+					Data.PatrolID = NewRoute.PatrolID;
 					Data.PatrolPath = NewRoute.PatrolPoints;
 					Data.bPatrolLoop = (NewRoute.PatrolType == EPatrolType::Loop || NewRoute.PatrolType == EPatrolType::PingPong); 
 					
@@ -232,7 +229,6 @@ void UUnitPatrolComponent::Server_UpdatePatrolRoute_Implementation(int32 Index, 
 			}
 		}
 
-		// Force update on server (if listen server) and trigger replication
 		if (IsLocallyControlled())
 		{
 			UpdateVisualization();
@@ -242,7 +238,8 @@ void UUnitPatrolComponent::Server_UpdatePatrolRoute_Implementation(int32 Index, 
 
 void UUnitPatrolComponent::Server_UpdateUnitPatrol_Implementation(AActor* Unit, const FPatrolRoute& NewRoute)
 {
-	if (!Unit) return;
+	if (!Unit)
+		return;
 
 	// Update Cache
 	UnitRouteCache.Add(Unit, NewRoute);
@@ -260,24 +257,84 @@ void UUnitPatrolComponent::Server_RemovePatrolRoute_Implementation(int32 Index)
 	if (ActivePatrolRoutes.IsValidIndex(Index))
 	{
 		const FPatrolRoute& RouteToRemove = ActivePatrolRoutes[Index];
+		TArray<AActor*> UnitsToStop;
 		
-		// Remove from cache for all assigned units
-		for (TObjectPtr<AActor> UnitPtr : RouteToRemove.AssignedUnits)
+		for (const auto& Ptr : RouteToRemove.AssignedUnits)
 		{
-			if (AActor* Unit = UnitPtr.Get())
+			if (AActor* Unit = Ptr.Get())
 			{
-				UnitRouteCache.Remove(Unit);
-				// Optionally: Stop the unit or clear its command?
-				// For now, we just remove the patrol metadata.
+				UnitsToStop.Add(Unit);
 			}
 		}
 
+		FGuid RemovedID = RouteToRemove.PatrolID;
+
+		// 1. Stop Units
+		StopUnits(UnitsToStop);
+
+		// 2. Remove from Active List
 		ActivePatrolRoutes.RemoveAt(Index);
 		
 		if (IsLocallyControlled())
 		{
 			UpdateVisualization();
 		}
+
+		// 3. Multicast to clear Caches and Sync Clients immediately
+		Multicast_RemovePatrolRoute(UnitsToStop, RemovedID);
+	}
+}
+
+void UUnitPatrolComponent::Multicast_RemovePatrolRoute_Implementation(const TArray<AActor*>& Units, const FGuid& PatrolID)
+{
+	for (int32 i = ActivePatrolRoutes.Num() - 1; i >= 0; --i)
+	{
+		if (ActivePatrolRoutes[i].PatrolID == PatrolID)
+		{
+			ActivePatrolRoutes.RemoveAt(i);
+		}
+	}
+
+	UnitRouteCache.Empty();
+	for (const FPatrolRoute& Route : ActivePatrolRoutes)
+	{
+		for (TObjectPtr UnitPtr : Route.AssignedUnits)
+		{
+			if (AActor* Unit = UnitPtr.Get())
+			{
+				UnitRouteCache.Add(Unit, Route);
+			}
+		}
+	}
+
+	if (IsLocallyControlled())
+	{
+		UpdateVisualization();
+
+		OnPatrolRoutesChanged.Broadcast();
+	}
+}
+
+void UUnitPatrolComponent::Server_RemovePatrolRouteByID_Implementation(FGuid PatrolID)
+{
+	int32 IndexToRemove = -1;
+	for (int32 i = 0; i < ActivePatrolRoutes.Num(); ++i)
+	{
+		if (ActivePatrolRoutes[i].PatrolID == PatrolID)
+		{
+			IndexToRemove = i;
+			break;
+		}
+	}
+
+	if (IndexToRemove != -1)
+	{
+		Server_RemovePatrolRoute(IndexToRemove);
+		UE_LOG(LogTemp, Log, TEXT("[UnitPatrolComponent] Removed Patrol ID: %s"), *PatrolID.ToString());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[UnitPatrolComponent] Could not find Patrol ID: %s to remove"), *PatrolID.ToString());
 	}
 }
 
@@ -285,10 +342,35 @@ void UUnitPatrolComponent::Server_RemovePatrolRouteForUnit_Implementation(AActor
 {
 	if (!Unit) return;
 
-	if (UnitRouteCache.Remove(Unit) > 0)
+	// Remove from Cache
+	UnitRouteCache.Remove(Unit);
+
+	// Remove from ActivePatrolRoutes
+	for (int32 i = ActivePatrolRoutes.Num() - 1; i >= 0; --i)
 	{
-		RefreshRoutesFromSelection();
+		FPatrolRoute& Route = ActivePatrolRoutes[i];
+		int32 RemovedCount = Route.AssignedUnits.Remove(Unit);
+		
+		if (RemovedCount > 0)
+		{
+			// If patrol is now empty, remove it completely
+			if (Route.AssignedUnits.Num() == 0)
+			{
+				Server_RemovePatrolRoute(i);
+			}
+			else
+			{
+				// Otherwise just update clients about this change
+				if (IsLocallyControlled())
+				{
+					UpdateVisualization();
+					OnPatrolRoutesChanged.Broadcast();
+				}
+			}
+		}
 	}
+	
+	RefreshRoutesFromSelection();
 }
 
 void UUnitPatrolComponent::Server_ReversePatrolRoute_Implementation(int32 Index)
@@ -297,9 +379,8 @@ void UUnitPatrolComponent::Server_ReversePatrolRoute_Implementation(int32 Index)
 	{
 		Algo::Reverse(ActivePatrolRoutes[Index].PatrolPoints);
 		
-		// Update cache for all assigned units with the reversed points
 		const FPatrolRoute& ReversedRoute = ActivePatrolRoutes[Index];
-		for (TObjectPtr<AActor> UnitPtr : ReversedRoute.AssignedUnits)
+		for (TObjectPtr UnitPtr : ReversedRoute.AssignedUnits)
 		{
 			if (AActor* Unit = UnitPtr.Get())
 			{
@@ -316,7 +397,8 @@ void UUnitPatrolComponent::Server_ReversePatrolRoute_Implementation(int32 Index)
 
 void UUnitPatrolComponent::Server_ReversePatrolRouteForUnit_Implementation(AActor* Unit)
 {
-	if (!Unit) return;
+	if (!Unit)
+		return;
 
 	if (FPatrolRoute* Route = UnitRouteCache.Find(Unit))
 	{
@@ -330,30 +412,100 @@ bool UUnitPatrolComponent::GetPatrolRouteForUnit(AActor* Unit, FPatrolRoute& Out
 	if (!Unit || !Unit->Implements<USelectable>())
 		return false;
 
-	// PRIORITY 1: Check cache FIRST (contains user modifications)
 	if (const FPatrolRoute* Cached = UnitRouteCache.Find(Unit))
 	{
 		OutRoute = *Cached;
-		UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] Using cached route for %s with ID %s"), 
-			*Unit->GetName(), *Cached->PatrolID.ToString());
+		UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] Using cached route for %s with ID %s"), *Unit->GetName(), *Cached->PatrolID.ToString());
+
 		return true;
 	}
-
-	// PRIORITY 2: Fall back to active command if no cache
-	const FCommandData CurrentCommand = ISelectable::Execute_GetCurrentCommand(Unit);
-	if (CurrentCommand.Type != ECommandType::CommandPatrol || CurrentCommand.PatrolPath.Num() < 2)
-		return false;
-
-	// Build route from command data
-	OutRoute.PatrolID = CurrentCommand.PatrolID;
-	OutRoute.PatrolPoints = CurrentCommand.PatrolPath;
-	OutRoute.PatrolType = CurrentCommand.bPatrolLoop ? EPatrolType::Loop : EPatrolType::Once;
-	OutRoute.RouteColor = RouteColor;
 	
-	UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] Using command route for %s with ID %s"), 
-		*Unit->GetName(), *CurrentCommand.PatrolID.ToString());
+	return false;
+}
+
+// ============================================================
+// NEW API & HELPERS
+// ============================================================
+
+void UUnitPatrolComponent::StopUnits(const TArray<AActor*>& Units)
+{
+	for (AActor* Unit : Units)
+	{
+		StopUnit(Unit);
+	}
+}
+
+void UUnitPatrolComponent::StopUnit(AActor* Unit)
+{
+	if (!Unit)
+		return;
+
+	if (UCommandComponent* CommandComp = Unit->FindComponentByClass<UCommandComponent>())
+	{
+		FCommandData StopData;
+		StopData.Type = CommandMove;
+		StopData.Location = Unit->GetActorLocation();
+		StopData.SourceLocation = Unit->GetActorLocation();
+		StopData.PatrolID.Invalidate(); 
+		
+		CommandComp->CommandMoveToLocation(StopData);
+	}
+	else if (UUnitOrderComponent* UnitOrderComp = Unit->FindComponentByClass<UUnitOrderComponent>())
+	{
+		FCommandData StopData;
+		StopData.Type = CommandMove;
+		StopData.Location = Unit->GetActorLocation();
+		StopData.SourceLocation = Unit->GetActorLocation();
+		StopData.PatrolID.Invalidate(); 
+		UnitOrderComp->IssueOrder(StopData);
+	}
+}
+
+void UUnitPatrolComponent::Server_CreatePatrol_Implementation(const FPatrolCreationParams& Params)
+{
+	FPatrolRoute NewRoute;
+	NewRoute.PatrolID = FGuid::NewGuid();
+	NewRoute.PatrolPoints = Params.Points;
+	NewRoute.PatrolType = Params.Type;
+	NewRoute.RouteName = Params.Name;
+	NewRoute.RouteColor = Params.Color;
+	NewRoute.bShowArrows = Params.bShowArrows;
+	NewRoute.bShowNumbers = Params.bShowNumbers;
 	
-	return true;
+	for (AActor* Unit : Params.Units)
+	{
+		if (Unit)
+			NewRoute.AssignedUnits.AddUnique(Unit);
+	}
+
+	if (NewRoute.PatrolPoints.Num() < 2)
+		return;
+
+	ActivePatrolRoutes.Add(NewRoute);
+
+	for (TObjectPtr UnitPtr : NewRoute.AssignedUnits)
+	{
+		if (AActor* Unit = UnitPtr.Get())
+		{
+			UnitRouteCache.Add(Unit, NewRoute);
+
+			if (UUnitOrderComponent* UnitOrderComp = Unit->FindComponentByClass<UUnitOrderComponent>())
+			{
+				FCommandData Data;
+				Data.Type = CommandPatrol;
+				Data.PatrolID = NewRoute.PatrolID;
+				Data.PatrolPath = NewRoute.PatrolPoints;
+				Data.bPatrolLoop = (NewRoute.PatrolType == EPatrolType::Loop || NewRoute.PatrolType == EPatrolType::PingPong); 
+				UnitOrderComp->IssueOrder(Data);
+			}
+		}
+	}
+
+	if (IsLocallyControlled())
+	{
+		UpdateVisualization();
+		OnPatrolRoutesChanged.Broadcast();
+	}
 }
 
 void UUnitPatrolComponent::EnsureVisualizerComponent()
@@ -410,10 +562,11 @@ FPatrolRouteExtended UUnitPatrolComponent::ConvertToExtended(const FPatrolRoute&
 	FPatrolRouteExtended Extended;
 	Extended.PatrolPoints = Route.PatrolPoints;
 	Extended.PatrolType = Route.PatrolType;
-	Extended.RouteColor = Route.RouteColor; // Use the route's specific color
+	Extended.RouteColor = Route.RouteColor;
 	Extended.RouteName = Route.RouteName;
 	Extended.WaitTimeAtWaypoints = Route.WaitTime;
 	Extended.bShowDirectionArrows = Route.bShowArrows;
 	Extended.bShowWaypointNumbers = Route.bShowNumbers;
+	
 	return Extended;
 }

@@ -144,15 +144,14 @@ void UUnitFormationComponent::OnRep_Spacing()
 
 FVector UUnitFormationComponent::CalculateOffset(int32 Index, int32 TotalUnits) const
 {
-    FVector Offset = FVector::ZeroVector;
+    FVector Offset;
+	
     if (const UFormationDataAsset* FormationData = GetFormationData())
     {
         if (FormationData->SlotOffsets.IsValidIndex(Index))
         {
             const FVector2D& PatternOffset = FormationData->SlotOffsets[Index];
-            Offset = FVector(FormationData->Offset.X + PatternOffset.X * FormationSpacing,
-                             FormationData->Offset.Y + PatternOffset.Y * FormationSpacing,
-                             FormationData->Offset.Z);
+            Offset = FVector(FormationData->Offset.X + PatternOffset.X * FormationSpacing,FormationData->Offset.Y + PatternOffset.Y * FormationSpacing, FormationData->Offset.Z);
             return Offset;
         }
 
@@ -190,9 +189,13 @@ FVector UUnitFormationComponent::CalculateOffset(int32 Index, int32 TotalUnits) 
                     Offset.Y = -Offset.Y;
 
                 if (bAlternate)
-                    Offset *= Multiplier;
+                {
+	                Offset *= Multiplier;
+                }
                 else
-                    Offset *= Index * FormationSpacing;
+                {
+                	Offset *= Index * FormationSpacing;   
+                }
                     
                 break;
             }
@@ -207,9 +210,7 @@ FVector UUnitFormationComponent::CalculateOffset(int32 Index, int32 TotalUnits) 
 void UUnitFormationComponent::CenterFormationOffsets(TArray<FVector>& Offsets) const
 {
     if (Offsets.Num() <= 1)
-    {
-        return;
-    }
+		return;
 
     FVector AverageOffset = FVector::ZeroVector;
     for (const FVector& Offset : Offsets)

@@ -14,6 +14,29 @@ void UCameraMovementSystem::Tick(float DeltaTime)
     APlayerCamera* Cam = GetOwner();
 
     // ----------------------------------------------------
+    // 0. SMOOTH MOVE TO LOCATION
+    // ----------------------------------------------------
+    if (bIsMovingToLocation)
+    {
+        MoveToAlpha += DeltaTime / MoveToDuration;
+        MoveToAlpha = FMath::Clamp(MoveToAlpha, 0.f, 1.f);
+
+        // Smooth step interpolation for nicer feel
+        const float SmoothAlpha = FMath::SmoothStep(0.f, 1.f, MoveToAlpha);
+        const FVector NewLoc = FMath::Lerp(MoveToStartLocation, MoveToTargetLocation, SmoothAlpha);
+
+        Cam->SetActorLocation(NewLoc);
+
+        if (MoveToAlpha >= 1.f)
+        {
+            bIsMovingToLocation = false;
+        }
+
+        // Skip manual movement while animating to target
+        return; 
+    }
+
+    // ----------------------------------------------------
     // 1. CAMERA MOVEMENT
     // ----------------------------------------------------
     if (!PendingMoveInput.IsZero())
@@ -81,6 +104,11 @@ void UCameraMovementSystem::Tick(float DeltaTime)
 void UCameraMovementSystem::HandleMoveInput(const FInputActionValue& Value)
 {
     PendingMoveInput = Value.Get<FVector2D>();
+    // Cancel smooth move if user inputs manual movement
+    if (!PendingMoveInput.IsZero())
+    {
+        bIsMovingToLocation = false;
+    }
 }
 
 void UCameraMovementSystem::HandleMoveReleased(const FInputActionValue& Value)
@@ -171,6 +199,32 @@ void UCameraMovementSystem::UpdateTerrainFollow()
     	
         Cam->SetActorLocation(FVector(Pos.X, Pos.Y, NewPos.Z));
     }
+}
+
+void UCameraMovementSystem::MoveToLocation(const FVector& TargetLocation, float Duration)
+{
+    if (!GetOwner()) return;
+
+    MoveToStartLocation = GetOwner()->GetActorLocation();
+    
+    // Maintain Z height to avoid diving into ground, unless specific Z needed
+    // Usually camera stays at a fixed height logic, but let's assume TargetLocation is on ground
+    // and we want to keep current camera height relative to something?
+    // User asked to move *camera* to this patrol. 
+    // Usually that means centering the camera X/Y on the target, keeping Z or terrain adjust.
+    // Let's assume TargetLocation passed in is the ground point to look at.
+    // but the camera is effectively at Z height.
+    // If we just lerp to TargetLocation (z=0), camera goes to ground.
+    
+    // Adjust target to be at current Camera Z? Or rely on TerrainFollow?
+    // If TerrainFollow is active, setting X/Y is enough and Z will snap in next Tick?
+    // In Tick, UpdateTerrainFollow is called after manual movement.
+    
+    MoveToTargetLocation = FVector(TargetLocation.X, TargetLocation.Y, MoveToStartLocation.Z);
+
+    MoveToDuration = FMath::Max(0.1f, Duration);
+    MoveToAlpha = 0.f;
+    bIsMovingToLocation = true;
 }
 
 void UCameraMovementSystem::ClampCameraPitch()
