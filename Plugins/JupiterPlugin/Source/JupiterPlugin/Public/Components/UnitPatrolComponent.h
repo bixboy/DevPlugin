@@ -113,6 +113,15 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_ReversePatrolRouteForUnit(AActor* Unit);
 
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+	void Server_ReversePatrolRouteByID(FGuid PatrolID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+	void Server_RenamePatrol(FGuid PatrolID, FName NewName);
+
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+    void Server_SetPatrolType(FGuid PatrolID, EPatrolType NewType);
+
 	/** Multicast to ensure all clients clear their cache/state for ignored patrol */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_RemovePatrolRoute(const TArray<AActor*>& Units, const FGuid& PatrolID);
@@ -137,6 +146,12 @@ protected:
 	void UpdateVisualization();
 
 	static FPatrolRouteExtended ConvertToExtended(const FPatrolRoute& Route, const FLinearColor& Color = FLinearColor::Blue);
+
+	/** Helper to resolve logical path index for seamless updates */
+	int32 GetTargetPointIndexForUnit(AActor* Unit, int32 NewPathSize, bool bIsReverse) const;
+
+	/** Helper to centralize command issuance logic */
+	void UpdatePatrolOrderForUnit(AActor* Unit, const FPatrolRoute& Route, bool bIsReverseUpdate);
 
 	bool IsLocallyControlled() const;
 

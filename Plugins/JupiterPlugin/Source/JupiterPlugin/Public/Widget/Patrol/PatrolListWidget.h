@@ -6,6 +6,7 @@
 
 class UUnitPatrolComponent;
 class UPatrolEntryWidget;
+class UPatrolDetailWidget;
 class UPanelWidget;
 
 /**
@@ -32,11 +33,18 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	UPanelWidget* EntryContainer;
 
+	UPROPERTY(meta = (BindWidget))
+	UPatrolDetailWidget* PatrolDetail;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Patrol List")
 	TObjectPtr<UUnitPatrolComponent> PatrolComponent;
 
 	FDelegateHandle OnRoutesChangedHandle;
+	FGuid SelectedPatrolID;
 
 	UFUNCTION()
 	void HandleRoutesChanged();
+
+	UFUNCTION()
+	void OnEntrySelected(FGuid PatrolID);
 };

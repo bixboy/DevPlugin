@@ -1,4 +1,5 @@
-﻿#include "JupiterPlugin/Public/Units/AI/AiControllerRts.h"
+﻿#include "Navigation/PathFollowingComponent.h"
+#include "JupiterPlugin/Public/Units/AI/AiControllerRts.h"
 #include "TimerManager.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Data/AiData.h"
@@ -105,7 +106,7 @@ void AAiControllerRts::OnMoveCompleted(FAIRequestID RequestID, const FPathFollow
     bMoveComplete = true;
     OnReachedDestination.Broadcast(CurrentCommand);
     
-    if (bPatrolling)
+    if (bPatrolling && Result.IsSuccess())
     {
         AdvancePatrolWaypoint();
         if (bPatrolling)
@@ -307,7 +308,7 @@ void AAiControllerRts::CommandPatrol(const FCommandData Cmd)
 
 	CurrentPatrolPath = Cmd.PatrolPath;
 	bPatrolLoopPattern = Cmd.bPatrolLoop;
-	CurrentPatrolWaypointIndex = 0;
+	CurrentPatrolWaypointIndex = Cmd.StartIndex;
 	bPatrolForward = true;
 
 	StartPatrol();

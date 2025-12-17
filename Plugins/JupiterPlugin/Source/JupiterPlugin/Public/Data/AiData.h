@@ -54,7 +54,8 @@ struct FCommandData
 		Radius(0.f),
 		PatrolPath(),
 		bPatrolLoop(false),
-		PatrolID() {}
+		PatrolID(),
+		StartIndex(0) {}
 
 	// Assignation des parametres 
 	FCommandData(APlayerController* InRequesting, const FVector InLocation, const FRotator InRotation, const ECommandType InType, AActor* InTarget = nullptr, const float InRadius = 0.0f)
@@ -67,7 +68,8 @@ struct FCommandData
 		Radius(InRadius),
 		PatrolPath(),
 		bPatrolLoop(false),
-		PatrolID() {}
+		PatrolID(),
+		StartIndex(0) {}
 
 
 	// Variables
@@ -100,4 +102,7 @@ struct FCommandData
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	FGuid PatrolID;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	int32 StartIndex;
 };

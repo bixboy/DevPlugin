@@ -2,10 +2,13 @@
 #include "Components/PatrolVisualizerComponent.h"
 #include "Components/UnitOrderComponent.h"
 #include "Components/UnitSelectionComponent.h"
+#include "Algo/Reverse.h"
+#include "Algo/Rotate.h"
 #include "Components/CommandComponent.h"
 #include "Interfaces/Selectable.h"
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/Pawn.h"
+#include "Units/AI/AiControllerRts.h"
 
 
 UUnitPatrolComponent::UUnitPatrolComponent()
@@ -213,19 +216,7 @@ void UUnitPatrolComponent::Server_UpdatePatrolRoute_Implementation(int32 Index, 
 		{
 			if (AActor* Unit = UnitPtr.Get())
 			{
-				UnitRouteCache.Add(Unit, NewRoute);
-				
-				if (UUnitOrderComponent* UnitOrderComp = Unit->FindComponentByClass<UUnitOrderComponent>())
-				{
-					FCommandData Data;
-					Data.Type = CommandPatrol;
-					Data.PatrolID = NewRoute.PatrolID;
-					Data.PatrolPath = NewRoute.PatrolPoints;
-					Data.bPatrolLoop = (NewRoute.PatrolType == EPatrolType::Loop || NewRoute.PatrolType == EPatrolType::PingPong); 
-					
-					UnitOrderComp->IssueOrder(Data);
-					UE_LOG(LogTemp, Log, TEXT("[UnitPatrolComponent] Re-issued patrol order to %s"), *Unit->GetName());
-				}
+				UpdatePatrolOrderForUnit(Unit, NewRoute, false);
 			}
 		}
 
@@ -495,7 +486,7 @@ void UUnitPatrolComponent::Server_CreatePatrol_Implementation(const FPatrolCreat
 				Data.Type = CommandPatrol;
 				Data.PatrolID = NewRoute.PatrolID;
 				Data.PatrolPath = NewRoute.PatrolPoints;
-				Data.bPatrolLoop = (NewRoute.PatrolType == EPatrolType::Loop || NewRoute.PatrolType == EPatrolType::PingPong); 
+				Data.bPatrolLoop = (NewRoute.PatrolType == EPatrolType::Loop); 
 				UnitOrderComp->IssueOrder(Data);
 			}
 		}
@@ -569,4 +560,129 @@ FPatrolRouteExtended UUnitPatrolComponent::ConvertToExtended(const FPatrolRoute&
 	Extended.bShowWaypointNumbers = Route.bShowNumbers;
 	
 	return Extended;
+}
+
+void UUnitPatrolComponent::Server_RenamePatrol_Implementation(FGuid PatrolID, FName NewName)
+{
+	for (int32 i = 0; i < ActivePatrolRoutes.Num(); ++i)
+	{
+		if (ActivePatrolRoutes[i].PatrolID == PatrolID)
+		{
+			ActivePatrolRoutes[i].RouteName = NewName;
+			OnRep_ActivePatrolRoutes();
+			break;
+		}
+	}
+}
+
+int32 UUnitPatrolComponent::GetTargetPointIndexForUnit(AActor* Unit, int32 NewPathSize, bool bIsReverse) const
+{
+	if (NewPathSize == 0 || !Unit)
+		return 0;
+
+	if (APawn* Pawn = Cast<APawn>(Unit))
+	{
+		if (AAiControllerRts* AI = Cast<AAiControllerRts>(Pawn->GetController()))
+		{
+			int32 CurrentIndex = AI->GetCurrentPatrolWaypointIndex();
+			
+			// If Reversing:
+			// The unit was heading to 'CurrentIndex' (e.g., Index 1 in A->B->C).
+			// We want to return to where we came from (Index 0, A).
+			// In the reversed path (C->B->A), A is at index (N-1) - PreviousIndex.
+			// PreviousIndex = CurrentIndex - 1 (roughly).
+			
+			if (bIsReverse)
+			{
+				if (CurrentIndex > 0)
+				{
+					return (NewPathSize - CurrentIndex);
+				}
+				else
+				{
+					// Unit was going to Start (0). Previous point was End (Loop) or None.
+					// Mapping 0 -> 0 is the safest fallback for Reverse-at-Start.
+					return 0;
+				}
+			}
+			else
+			{
+				// Standard Update: Keep logical target index.
+				return FMath::Clamp(CurrentIndex, 0, NewPathSize - 1);
+			}
+		}
+	}
+
+	return 0;
+}
+
+void UUnitPatrolComponent::UpdatePatrolOrderForUnit(AActor* Unit, const FPatrolRoute& Route, bool bIsReverseUpdate)
+{
+	if (!Unit) return;
+
+	// Update Cache
+	UnitRouteCache.Add(Unit, Route);
+
+	if (UUnitOrderComponent* UnitOrderComp = Unit->FindComponentByClass<UUnitOrderComponent>())
+	{
+		FCommandData Data;
+		Data.Type = CommandPatrol;
+		Data.PatrolID = Route.PatrolID;
+		Data.PatrolPath = Route.PatrolPoints;
+		
+		// PingPong is NOT a circular loop for the movement system.
+		Data.bPatrolLoop = (Route.PatrolType == EPatrolType::Loop); 
+		
+		Data.StartIndex = GetTargetPointIndexForUnit(Unit, Data.PatrolPath.Num(), bIsReverseUpdate);
+
+		UnitOrderComp->IssueOrder(Data);
+		UE_LOG(LogTemp, Verbose, TEXT("[UnitPatrolComponent] Updated patrol for %s. StartIndex: %d, Loop: %d"), 
+			*Unit->GetName(), Data.StartIndex, Data.bPatrolLoop);
+	}
+}
+
+void UUnitPatrolComponent::Server_ReversePatrolRouteByID_Implementation(FGuid PatrolID)
+{
+    for (int32 i = 0; i < ActivePatrolRoutes.Num(); ++i)
+	{
+		if (ActivePatrolRoutes[i].PatrolID == PatrolID)
+		{
+            Algo::Reverse(ActivePatrolRoutes[i].PatrolPoints);
+            
+			OnRep_ActivePatrolRoutes();
+            
+            // Re-issue orders
+            for (TObjectPtr<AActor> UnitPtr : ActivePatrolRoutes[i].AssignedUnits)
+            {
+                if (AActor* Unit = UnitPtr.Get())
+                {
+                    UpdatePatrolOrderForUnit(Unit, ActivePatrolRoutes[i], true);
+                }
+            }
+			break;
+		}
+	}
+}
+
+void UUnitPatrolComponent::Server_SetPatrolType_Implementation(FGuid PatrolID, EPatrolType NewType)
+{
+    for (int32 i = 0; i < ActivePatrolRoutes.Num(); ++i)
+	{
+		if (ActivePatrolRoutes[i].PatrolID == PatrolID)
+		{
+            ActivePatrolRoutes[i].PatrolType = NewType;
+
+			OnRep_ActivePatrolRoutes();
+            
+             // Re-issue orders
+            for (TObjectPtr<AActor> UnitPtr : ActivePatrolRoutes[i].AssignedUnits)
+            {
+                if (AActor* Unit = UnitPtr.Get())
+                {
+                    UpdatePatrolOrderForUnit(Unit, ActivePatrolRoutes[i], false);
+                }
+            }
+			break;
+		}
+	}
 }

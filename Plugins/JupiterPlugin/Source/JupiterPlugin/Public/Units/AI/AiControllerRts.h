@@ -64,6 +64,9 @@ public:
 	void SetAttackTarget(bool bAttack) { bAttackTarget = bAttack; }
 
 	UFUNCTION(BlueprintCallable, Category="AI")
+	int32 GetCurrentPatrolWaypointIndex() const { return CurrentPatrolWaypointIndex; }
+
+	UFUNCTION(BlueprintCallable, Category="AI")
 	ECombatBehavior GetCombatBehavior() const { return CombatBehavior; }
 
 	UFUNCTION(BlueprintCallable, Category="AI")
