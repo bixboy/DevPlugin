@@ -1,13 +1,13 @@
 ﻿#include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
 #include "Player/PlayerCamera.h"
-#include "Components/UnitOrderComponent.h"
-#include "Components/UnitSelectionComponent.h"
+#include "Components/Unit/UnitOrderComponent.h"
 #include "Interfaces/Selectable.h"
 #include "Player/Selections/SphereRadius.h"
 #include "DrawDebugHelpers.h"
 #include "Camera/CameraComponent.h"
+#include "Components/Patrol/PatrolVisualizerComponent.h"
+#include "Components/Unit/UnitSelectionComponent.h"
 #include "Engine/World.h"
-#include "Components/PatrolVisualizerComponent.h"
 #include "Data/PatrolData.h"
 
 
@@ -15,47 +15,54 @@ void UCameraCommandSystem::Init(APlayerCamera* InOwner)
 {
     Super::Init(InOwner);
 
-	if (!GetOwner() || !GetWorldSafe())
-		return;
-	
-    FActorSpawnParameters Params;
-    Params.Owner = GetOwner();
+    if (!GetOwner() || !GetWorldSafe()) return;
     
-    SphereRadius = GetWorldSafe()->SpawnActor<ASphereRadius>(GetOwner()->SphereRadiusClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
-    if (SphereRadius)
+    if (GetOwner()->SphereRadiusClass)
     {
-        SphereRadius->SetActorHiddenInGame(true);
+        FActorSpawnParameters Params;
+        Params.Owner = GetOwner();
+        SphereRadius = GetWorldSafe()->SpawnActor<ASphereRadius>(GetOwner()->SphereRadiusClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
+        if (SphereRadius)
+        {
+            SphereRadius->SetActorHiddenInGame(true);
+        }
     }
 
-	
-	PatrolVisualizer = GetOwner()->GetComponentByClass<UPatrolVisualizerComponent>();
-	RotationHoldThreshold = GetOwner()->RotationHoldThreshold;
-	DragThreshold = GetOwner()->DragThreshold;
-	LoopThreshold = GetOwner()->LoopThreshold;
+    PatrolVisualizer = GetOwner()->GetComponentByClass<UPatrolVisualizerComponent>();
+    RotationHoldThreshold = GetOwner()->RotationHoldThreshold;
+    DragThreshold = GetOwner()->DragThreshold;
+    LoopThreshold = GetOwner()->LoopThreshold;
 }
-
 
 void UCameraCommandSystem::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // --- A. UPDATE PATROL PREVIEW ---
-    if (bIsBuildingPatrolPath)
+    // --- A. PATROL PREVIEW OPTIMIZED ---
+    if (bIsBuildingPatrolPath && PatrolVisualizer)
     {
-        UpdatePatrolPreview();
+        FHitResult Hit;
+        if (GetMouseHitOnTerrain(Hit))
+        {
+            if (bPatrolPreviewDirty || FVector::DistSquared(Hit.Location, LastPreviewMouseLocation) > 25.0f)
+            {
+                UpdatePatrolPreview(Hit.Location);
+                LastPreviewMouseLocation = Hit.Location;
+                bPatrolPreviewDirty = false;
+            }
+        }
     }
 
-    // --- B. LOGIQUE INPUT MAINTENU ---
+    // --- B. INPUT HOLD LOGIC ---
     if (bIsRightClickDown)
     {
         FHitResult Hit;
-        if (!GetMouseHitOnTerrain(Hit))
-         return;
+        if (!GetMouseHitOnTerrain(Hit)) return;
         
         float TimeHeld = GetWorldSafe()->GetTimeSeconds() - ClickStartTime;
         float DistMoved = FVector::Dist2D(CommandStartLocation, Hit.Location);
 
-        // CAS 1 : ALT + CLIC MAINTENU
+        // CAS 1 : ALT + DRAG (Cercle Rayon)
         if (IsAltDown())
         {
             if (!bIsBuildingPatrolPath)
@@ -67,7 +74,7 @@ void UCameraCommandSystem::Tick(float DeltaTime)
                 }
             }
         }
-        // CAS 2 : ROTATION PREVIEW
+        // CAS 2 : STANDARD DRAG (Rotation Formation)
         else 
         {
             if (TimeHeld > RotationHoldThreshold || CurrentMode == ECommandMode::MoveRotation)
@@ -89,14 +96,16 @@ void UCameraCommandSystem::Tick(float DeltaTime)
 
 void UCameraCommandSystem::HandleAltPressed()
 {
-    UE_LOG(LogTemp, Log, TEXT("HandleAltPressed"));
     bIsAltDown = true;
 }
 
 void UCameraCommandSystem::HandleAltReleased()
 {
-    UE_LOG(LogTemp, Log, TEXT("HandleAltReleased"));
     bIsAltDown = false;
+}
+
+void UCameraCommandSystem::CancelPatrolCreation()
+{
 }
 
 void UCameraCommandSystem::HandleCommandActionStarted()
@@ -129,9 +138,7 @@ void UCameraCommandSystem::HandleCommandActionCompleted()
         float Radius = (SphereRadius) ? SphereRadius->GetRadius() : 500.f;
         IssuePatrolCircleCommand(Radius, CommandStartLocation);
         
-        if (SphereRadius)
-        	SphereRadius->End();
-    	
+        if (SphereRadius) SphereRadius->End();
         CurrentMode = ECommandMode::None;
         return;
     }
@@ -144,7 +151,7 @@ void UCameraCommandSystem::HandleCommandActionCompleted()
         return;
     }
 
-    // 3. On délègue à ExecuteFinalCommand
+    // 3. Click Simple -> On décide quoi faire
     FHitResult Hit;
     if (GetMouseHitOnTerrain(Hit))
     {
@@ -155,46 +162,43 @@ void UCameraCommandSystem::HandleCommandActionCompleted()
 }
 
 // ------------------------------------------------------------
-// GESTION DES ETATS DE PATROUILLE
+// STATE MACHINE & LOGIC
 // ------------------------------------------------------------
 
 void UCameraCommandSystem::ExecuteFinalCommand(const FHitResult& HitResult)
 {
-    UE_LOG(LogTemp, Log, TEXT("ExecuteFinalCommand - Alt: %d, BuildingPatrol: %d"), IsAltDown(), bIsBuildingPatrolPath);
-	
-    // Cas A : Soit on COMMENCE, soit on FINIT
+    // A. Gestion Patrouille (ALT KEY)
     if (IsAltDown())
     {
-        if (!bIsBuildingPatrolPath)
+        if (bIsBuildingPatrolPath)
         {
-            UE_LOG(LogTemp, Warning, TEXT(">>> START PATROL CREATION <<<"));
-            
+            // Finir la patrouille en cours
+            UE_LOG(LogTemp, Log, TEXT("Finishing Patrol Creation"));
+            IssuePatrolPathCommand(); 
+            ResetPatrolPath();        
+        }
+        else
+        {
+            // Commencer une nouvelle patrouille
+            UE_LOG(LogTemp, Log, TEXT("Starting Patrol Creation"));
             bIsBuildingPatrolPath = true;
             PatrolWaypoints.Empty();
             AddPatrolWaypoint(HitResult.Location);
         }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT(">>> FINISH PATROL CREATION <<<"));
-            
-            IssuePatrolPathCommand(); 
-            ResetPatrolPath();        
-        }
         return;
     }
 
-    // Cas B : Soit on AJOUTE UN POINT, soit on BOUGE
+    // B. Ajout de point (Si mode construction actif)
     if (bIsBuildingPatrolPath)
     {
-        UE_LOG(LogTemp, Log, TEXT(">>> ADD WAYPOINT (%d) <<<"), PatrolWaypoints.Num() + 1);
-    	
         AddPatrolWaypoint(HitResult.Location);
         return;
     }
 
-    // Cas C : Move ou Attack normal
+    // C. Commandes Standard (Attaque ou Mouvement)
     AActor* Target = GetHoveredActor();
-    if (Target && Target->Implements<USelectable>())
+    
+    if (Target && Target->Implements<USelectable>() && Target != GetOwner())
     {
         IssueAttackCommand(Target);
     }
@@ -210,75 +214,48 @@ void UCameraCommandSystem::ExecuteFinalCommand(const FHitResult& HitResult)
 
 void UCameraCommandSystem::IssueMoveCommand(const FVector& TargetLocation, const FRotator& Facing)
 {
-    if (!GetOrderComponent())
-     return;
-
-    FCommandData Data(
-        GetOwner()->GetPlayerController(),
-        TargetLocation,
-        Facing,
-        ECommandType::CommandMove
-    );
-    
-    GetOrderComponent()->IssueOrder(Data);
+    if (auto* OrderComp = GetOwner()->GetOrderComponent())
+    {
+        FCommandData Data(GetOwner()->GetPlayerController(), TargetLocation, Facing, ECommandType::CommandMove);
+        OrderComp->IssueOrder(Data);
+    }
 }
 
 void UCameraCommandSystem::IssueAttackCommand(AActor* TargetActor)
 {
-    if (!GetOrderComponent()) 
-    return;
-
-    FCommandData Data(
-        GetOwner()->GetPlayerController(),
-        FVector::ZeroVector, 
-        FRotator::ZeroRotator,
-        ECommandType::CommandAttack,
-        TargetActor
-    );
-
-    GetOrderComponent()->IssueOrder(Data);
+    if (auto* OrderComp = GetOwner()->GetOrderComponent())
+    {
+        FCommandData Data(GetOwner()->GetPlayerController(), FVector::ZeroVector, FRotator::ZeroRotator, ECommandType::CommandAttack, TargetActor);
+        OrderComp->IssueOrder(Data);
+    }
 }
 
 void UCameraCommandSystem::IssuePatrolCircleCommand(float Radius, const FVector& Center)
 {
-    if (!GetOrderComponent()) 
-    return;
-
-    FCommandData Data(
-        GetOwner()->GetPlayerController(),
-        Center,
-        FRotator::ZeroRotator,
-        ECommandType::CommandPatrol
-    );
-
-    Data.Radius = Radius;
-    GetOrderComponent()->IssueOrder(Data);
+    if (auto* OrderComp = GetOwner()->GetOrderComponent())
+    {
+        FCommandData Data(GetOwner()->GetPlayerController(), Center, FRotator::ZeroRotator, ECommandType::CommandPatrol);
+        Data.Radius = Radius;
+        OrderComp->IssueOrder(Data);
+    }
 }
 
 void UCameraCommandSystem::IssuePatrolPathCommand()
 {
-    if (!GetOrderComponent()) 
-    {
-        UE_LOG(LogTemp, Error, TEXT("IssuePatrolPathCommand: No Order Component!"));
-        return;
-    }
+    if (!GetOwner()->GetOrderComponent())
+    	return;
 
     if (PatrolWaypoints.Num() < 2) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("IssuePatrolPathCommand: Ignored (Only %d points). Need at least 2."), PatrolWaypoints.Num());
+        UE_LOG(LogTemp, Warning, TEXT("Patrol path too short (Need 2+ points)."));
         return;
     }
 
-    FCommandData Data(
-        GetOwner()->GetPlayerController(),
-        PatrolWaypoints[0],
-        FRotator::ZeroRotator,
-        ECommandType::CommandPatrol
-    );
-	
+    FCommandData Data(GetOwner()->GetPlayerController(), PatrolWaypoints[0], FRotator::ZeroRotator, ECommandType::CommandPatrol);
+    
     const float DistFirstToLast = FVector::Dist(PatrolWaypoints[0], PatrolWaypoints.Last());
     const bool bIsLoop = (DistFirstToLast < LoopThreshold);
-	
+    
     Data.bPatrolLoop = bIsLoop;
     
     if (bIsLoop)
@@ -293,18 +270,12 @@ void UCameraCommandSystem::IssuePatrolPathCommand()
     {
         Data.PatrolPath = PatrolWaypoints;
     }
-    // ---------------------------
 
-    UE_LOG(LogTemp, Warning, TEXT("Issuing Patrol Order with %d waypoints. Loop: %s (Dist to start: %.1f)"), 
-        Data.PatrolPath.Num(), 
-        Data.bPatrolLoop ? TEXT("YES") : TEXT("NO"),
-        DistFirstToLast);
-
-    GetOrderComponent()->IssueOrder(Data);
+    GetOwner()->GetOrderComponent()->IssueOrder(Data);
 }
 
 // ------------------------------------------------------------
-// HELPERS
+// PREVIEWS & VISUALS
 // ------------------------------------------------------------
 
 void UCameraCommandSystem::UpdateCircleRadius(const FVector& MouseLocation)
@@ -312,8 +283,7 @@ void UCameraCommandSystem::UpdateCircleRadius(const FVector& MouseLocation)
     if (SphereRadius)
     {
         SphereRadius->Start(CommandStartLocation, FRotator::ZeroRotator);
-        float Dist = FVector::Dist2D(CommandStartLocation, MouseLocation);
-        SphereRadius->SetRadius(Dist);
+        SphereRadius->SetRadius(FVector::Dist2D(CommandStartLocation, MouseLocation));
     }
 }
 
@@ -331,12 +301,13 @@ void UCameraCommandSystem::UpdateRotationPreview(const FVector& MouseLocation)
 
 void UCameraCommandSystem::AddPatrolWaypoint(const FVector& Location)
 {
-    if (PatrolWaypoints.Num() > 0 && FVector::DistSquared(PatrolWaypoints.Last(), Location) < 100.0f)
+    if (PatrolWaypoints.Num() > 0 && FVector::DistSquared(PatrolWaypoints.Last(), Location) < 10000.0f)
     {
         return;
     }
-	
+    
     PatrolWaypoints.Add(Location);
+    bPatrolPreviewDirty = true;
 }
 
 void UCameraCommandSystem::ResetPatrolPath()
@@ -346,26 +317,19 @@ void UCameraCommandSystem::ResetPatrolPath()
     ClearPatrolPreview();
 }
 
-void UCameraCommandSystem::CancelPatrolCreation()
-{
-    if (bIsBuildingPatrolPath)
-    {
-        UE_LOG(LogTemp, Log, TEXT(">>> PATROL CREATION CANCELLED <<<"));
-        ResetPatrolPath();
-    }
-}
-
-void UCameraCommandSystem::UpdatePatrolPreview()
+void UCameraCommandSystem::UpdatePatrolPreview(const FVector& CurrentMouseLocation)
 {
     if (!PatrolVisualizer || PatrolWaypoints.Num() == 0)
-        return;
+    	return;
+    
+    TArray<FVector> DisplayPoints = PatrolWaypoints;
+    DisplayPoints.Add(CurrentMouseLocation);
     
     FPatrolRouteExtended PreviewRoute;
-    PreviewRoute.PatrolPoints = PatrolWaypoints;
+    PreviewRoute.PatrolPoints = DisplayPoints;
     PreviewRoute.PatrolType = EPatrolType::Once;
-    PreviewRoute.RouteColor = FLinearColor(1.0f, 0.8f, 0.0f);
+    PreviewRoute.RouteColor = FLinearColor::Yellow;
     PreviewRoute.bShowWaypointNumbers = true;
-    PreviewRoute.bShowDirectionArrows = false;
     
     TArray<FPatrolRouteExtended> Routes;
     Routes.Add(PreviewRoute);
@@ -375,37 +339,58 @@ void UCameraCommandSystem::UpdatePatrolPreview()
 
 void UCameraCommandSystem::ClearPatrolPreview()
 {
-    if (!PatrolVisualizer)
-        return;
-    
-    TArray<FPatrolRouteExtended> EmptyRoutes;
-    PatrolVisualizer->UpdateVisualization(EmptyRoutes);
+    if (PatrolVisualizer)
+    {
+        PatrolVisualizer->UpdateVisualization({});
+    }
 }
+
+// ------------------------------------------------------------
+// DESTRUCTION LOGIC (Networked)
+// ------------------------------------------------------------
 
 void UCameraCommandSystem::HandleDestroySelected()
 {
-    if (!GetSelectionComponent())
-    	return;
-	
-    HandleServerDestroyActor(GetSelectionComponent()->GetSelectedActors());
+    if (auto* SelComp = GetOwner()->GetSelectionComponent())
+    {
+        HandleServerDestroyActor(SelComp->GetSelectedActors());
+    }
 }
 
 void UCameraCommandSystem::HandleServerDestroyActor(const TArray<AActor*>& ActorsToDestroy)
 {
-    for (AActor* A : ActorsToDestroy)
+    if (ActorsToDestroy.Num() == 0)
+    	return;
+	
+    // TODO: Implémenter un RPC dans Controller ou UnitOrderComponent
+    
+    if (GetOwner()->HasAuthority())
     {
-        if (A)
-        	A->Destroy();
+        for (AActor* A : ActorsToDestroy)
+        {
+            if (IsValid(A))
+            	A->Destroy();
+        }
+    }
+    else
+    {
+        // RCP Destroy
     }
 }
 
+// ------------------------------------------------------------
+// UTILS
+// ------------------------------------------------------------
+
 bool UCameraCommandSystem::GetMouseHitOnTerrain(FHitResult& OutHit) const
 {
-    if (!GetSelectionComponent())
-    	return false;
+    if (auto* SelComp = GetOwner()->GetSelectionComponent())
+    {
+        OutHit = SelComp->GetMousePositionOnTerrain();
+        return OutHit.bBlockingHit;
+    }
 	
-    OutHit = GetSelectionComponent()->GetMousePositionOnTerrain();
-    return OutHit.bBlockingHit;
+    return false;
 }
 
 AActor* UCameraCommandSystem::GetHoveredActor() const
@@ -417,19 +402,21 @@ AActor* UCameraCommandSystem::GetHoveredActor() const
     if (!PC)
     	return nullptr;
 
-    FVector WL, WD;
-    if (PC->DeprojectMousePositionToWorld(WL, WD))
+    FVector WorldLoc, WorldDir;
+    if (PC->DeprojectMousePositionToWorld(WorldLoc, WorldDir))
     {
-        FVector End = WL + WD * 100000.f;
+        FVector End = WorldLoc + WorldDir * 100000.f;
         FHitResult Hit;
+        
         FCollisionQueryParams Params;
         Params.AddIgnoredActor(GetOwner());
+        Params.bTraceComplex = true; 
 
-        if (GetWorldSafe()->LineTraceSingleByChannel(Hit, WL, End, ECC_Visibility, Params))
+        if (GetWorldSafe()->LineTraceSingleByChannel(Hit, WorldLoc, End, ECC_Visibility, Params))
         {
             return Hit.GetActor();
         }
     }
-	
+    
     return nullptr;
 }

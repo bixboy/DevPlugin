@@ -1,11 +1,9 @@
 #pragma once
-
 #include "CoreMinimal.h"
+#include "Net/Serialization/FastArraySerializer.h"
 #include "PatrolData.generated.h"
 
-/**
- * Type of patrol behavior.
- */
+
 UENUM(BlueprintType)
 enum class EPatrolType : uint8
 {
@@ -14,9 +12,6 @@ enum class EPatrolType : uint8
 	PingPong    UMETA(DisplayName = "Ping Pong")
 };
 
-/**
- * Quality levels for patrol route visualization.
- */
 UENUM(BlueprintType)
 enum class EPatrolVisualQuality : uint8
 {
@@ -27,9 +22,6 @@ enum class EPatrolVisualQuality : uint8
 };
 
 
-/**
- * Extended patrol route structure with additional visual and behavioral properties.
- */
 USTRUCT(BlueprintType)
 struct FPatrolRouteExtended
 {
@@ -60,10 +52,6 @@ struct FPatrolRouteExtended
 	int32 RenderPriority = 0;
 };
 
-
-/**
- * Visualization state for patrol routes.
- */
 UENUM(BlueprintType)
 enum class EPatrolVisualizationState : uint8
 {
@@ -74,4 +62,107 @@ enum class EPatrolVisualizationState : uint8
 	Active,
 	
 	Selected
+};
+
+USTRUCT(BlueprintType)
+struct FPatrolRoute
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FGuid PatrolID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FVector> PatrolPoints;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EPatrolType PatrolType = EPatrolType::Loop;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RouteName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FLinearColor RouteColor = FLinearColor::Blue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float WaitTime = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bShowArrows = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bShowNumbers = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<TObjectPtr<AActor>> AssignedUnits;
+};
+
+
+USTRUCT(BlueprintType)
+struct FPatrolCreationParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TArray<FVector> Points;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TArray<AActor*> Units;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	EPatrolType Type = EPatrolType::Loop;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FName Name = NAME_None;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FLinearColor Color = FLinearColor::Blue;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool bShowArrows = true;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool bShowNumbers = true;
+};
+
+USTRUCT(BlueprintType)
+struct FPatrolRouteItem : public FFastArraySerializerItem
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FPatrolRoute RouteData;
+
+	FPatrolRouteItem() {}
+	FPatrolRouteItem(const FPatrolRoute& InRoute) : RouteData(InRoute) {}
+
+	void PreReplicatedRemove(const struct FPatrolRouteArray& InArraySerializer);
+	void PostReplicatedAdd(const FPatrolRouteArray& InArraySerializer);
+	void PostReplicatedChange(const FPatrolRouteArray& InArraySerializer);
+};
+
+USTRUCT()
+struct FPatrolRouteArray : public FFastArraySerializer
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FPatrolRouteItem> Items;
+
+	UPROPERTY(NotReplicated)
+	TObjectPtr<class UUnitPatrolComponent> OwnerComponent;
+
+	bool NetDeltaSerialize(FNetDeltaSerializeInfo& DeltaParms)
+	{
+		return FastArrayDeltaSerialize<FPatrolRouteItem, FPatrolRouteArray>(Items, DeltaParms, *this);
+	}
+};
+
+template<>
+struct TStructOpsTypeTraits<FPatrolRouteArray> : public TStructOpsTypeTraitsBase2<FPatrolRouteArray>
+{
+	enum
+	{
+		WithNetDeltaSerializer = true,
+	};
 };

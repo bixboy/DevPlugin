@@ -1,10 +1,8 @@
 ﻿#include "Player/Selections/SphereRadius.h"
-
 #include "Components/DecalComponent.h"
-#include "Components/UnitSelectionComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/Unit/UnitSelectionComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "Kismet/KismetMathLibrary.h"
 
 // ------------------------------------------------------------
 // Constructor
@@ -38,7 +36,6 @@ void ASphereRadius::BeginPlay()
 
 	SetActorEnableCollision(false);
 
-	// Cache selection component (faster than searching every tick)
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
 		if (APawn* Pawn = PC->GetPawn())
@@ -64,7 +61,7 @@ void ASphereRadius::Tick(float DeltaTime)
 
 
 // ------------------------------------------------------------
-// Set Radius (Nouvelle fonction)
+// Set Radius
 // ------------------------------------------------------------
 void ASphereRadius::SetRadius(float NewRadius)
 {
@@ -78,27 +75,23 @@ void ASphereRadius::SetRadius(float NewRadius)
 
 
 // ------------------------------------------------------------
-// Compute radius (core behaviour)
+// Compute radius
 // ------------------------------------------------------------
 float ASphereRadius::ComputeRadius()
 {
 	if (!SelectionComponent || !DecalComponent)
 		return 0.f;
 
-	// Mouse → terrain hit
 	const FHitResult Hit = SelectionComponent->GetMousePositionOnTerrain();
 	const FVector EndPoint(Hit.Location.X, Hit.Location.Y, 0.f);
 
-	// Mid-point for correct ground positioning of the decal
 	const FVector NewLocation = (StartLocation + EndPoint) * 0.5f;
 	SetActorLocation(NewLocation);
 
-	// 2D distance → sphere radius
 	const FVector A2D(NewLocation.X, NewLocation.Y, 0.f);
 	const FVector B2D(EndPoint.X, EndPoint.Y, 0.f);
 	const float Radius = FVector::Distance(A2D, B2D);
 
-	// Update decal scale
 	DecalComponent->DecalSize = FVector(Radius * 2.f, Radius * 2.f, Radius * 2.f);
 
 	return Radius;

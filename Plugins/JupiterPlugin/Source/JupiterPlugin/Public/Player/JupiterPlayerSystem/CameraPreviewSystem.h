@@ -1,14 +1,12 @@
 ﻿#pragma once
-
 #include "CoreMinimal.h"
 #include "CameraSystemBase.h"
-#include "Player/PlayerCameraRotationPreview.h"
 #include "CameraPreviewSystem.generated.h"
 
 class APreviewPoseMesh;
 class APlayerCamera;
-class UCameraCommandSystem;
 class UCameraSpawnSystem;
+
 
 UCLASS()
 class JUPITERPLUGIN_API UCameraPreviewSystem : public UCameraSystemBase
@@ -17,41 +15,39 @@ class JUPITERPLUGIN_API UCameraPreviewSystem : public UCameraSystemBase
 
 public:
 	virtual void Init(APlayerCamera* InOwner) override;
+    
+	virtual void Cleanup();
+
 	virtual void Tick(float DeltaTime) override;
 
-	
+	// --- State ---
 	bool EnsurePreviewActor();
 	void HidePreview();
 	bool IsPreviewVisible() const { return bPreviewVisible; }
+	bool HasPreviewActor() const { return PreviewActor != nullptr; }
+	APreviewPoseMesh* GetPreviewActor() const { return PreviewActor; }
 
-	// Spawn preview
+	// --- Logic ---
+	bool IsPlacementValid() const;
+
+	// --- Visuals ---
 	bool ShowSkeletalPreview(USkeletalMesh* Mesh, const FVector& Scale, int32 Count);
 	bool ShowStaticPreview(UStaticMesh* Mesh, const FVector& Scale, int32 Count);
 
 	void UpdateInstances(const TArray<FTransform>& Transforms);
-	void SetupInstances(const TArray<FTransform>& BaseTransforms);
+	void SetPreviewTransform(const FVector& Location, const FRotator& Rotation);
 
-	bool HasPreviewActor() const { return PreviewActor != nullptr; }
-
-	bool IsPlacementValid() const { return bPreviewVisible; }
-
-	// Links
+	// --- Dependency Injection ---
 	void SetSpawnSystem(UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
 
 private:
-
-	// Internal
 	bool InternalCreatePreviewActor(TSubclassOf<APreviewPoseMesh> PreviewClass);
 
-private:
+	UPROPERTY()
+	TObjectPtr<APreviewPoseMesh> PreviewActor;
 
 	UPROPERTY()
-	APreviewPoseMesh* PreviewActor = nullptr;
-
-	UPROPERTY()
-	UCameraSpawnSystem* SpawnSystem = nullptr;
+	TObjectPtr<UCameraSpawnSystem> SpawnSystem;
 
 	bool bPreviewVisible = false;
-
-	TArray<FTransform> CachedTransforms;
 };

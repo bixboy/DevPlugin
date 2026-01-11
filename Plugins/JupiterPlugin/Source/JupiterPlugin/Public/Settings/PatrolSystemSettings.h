@@ -1,14 +1,10 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
 #include "Data/PatrolData.h"
 #include "PatrolSystemSettings.generated.h"
 
-/**
- * Developer settings for the patrol system.
- * Accessible via Project Settings > Plugins > Patrol System
- */
+
 UCLASS(Config=Game, DefaultConfig, meta=(DisplayName="Patrol System"))
 class JUPITERPLUGIN_API UPatrolSystemSettings : public UDeveloperSettings
 {

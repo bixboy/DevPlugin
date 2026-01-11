@@ -5,10 +5,8 @@
 #include "CameraSelectionSystem.generated.h"
 
 class ASelectionBox;
-class ASphereRadius;
 class UCameraSpawnSystem;
 class UCameraCommandSystem;
-class UCameraPatrolSystem;
 
 
 UCLASS()
@@ -17,29 +15,33 @@ class JUPITERPLUGIN_API UCameraSelectionSystem : public UCameraSystemBase
 	GENERATED_BODY()
 
 public:
-
 	virtual void Init(APlayerCamera* InOwner) override;
 	virtual void Tick(float DeltaTime) override;
 
-	// Input handlers
+	// --- Input Handlers ---
 	void HandleSelectionPressed();
 	void HandleSelectionReleased();
 	void HandleSelectionHold(const FInputActionValue& Value);
 	void HandleSelectAll();
 
-	// Links from PlayerCamera
+	// --- Dependency Injection ---
 	void SetCommandSystem(UCameraCommandSystem* InCmd) { CommandSystem = InCmd; }
-	void SetSpawnSystem(UCameraSpawnSystem* InSpawn)  { SpawnSystem = InSpawn; }
+	void SetSpawnSystem(UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
 
 private:
 	void FinalizeSelection();
 
 	// Helpers
-	bool GetMouseHit(FHitResult& OutHit) const;
+	bool GetMouseHitOnTerrain(FHitResult& OutHit) const;
 	AActor* GetHoveredActor() const;
+    
+	// Box Logic
 	void StartBoxSelection();
+	void UpdateBoxSelection();
 	void EndBoxSelection();
-	void ResetSelectionState();
+    
+	// Logic Utils
+	bool ShouldAddToSelection() const;
 
 private:
 	bool bMouseGrounded = false;
@@ -47,14 +49,16 @@ private:
 
 	FVector ClickStartLocation = FVector::ZeroVector;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Settings")
 	float LeftMouseHoldThreshold = 0.15f;
 
+	// Systems
 	UPROPERTY()
-	UCameraCommandSystem* CommandSystem = nullptr;
-	
+	TObjectPtr<UCameraCommandSystem> CommandSystem;
+    
 	UPROPERTY()
-	UCameraSpawnSystem*  SpawnSystem = nullptr;
+	TObjectPtr<UCameraSpawnSystem> SpawnSystem;
 
 	UPROPERTY()
-	ASelectionBox* SelectionBox = nullptr;
+	TObjectPtr<ASelectionBox> SelectionBox;
 };

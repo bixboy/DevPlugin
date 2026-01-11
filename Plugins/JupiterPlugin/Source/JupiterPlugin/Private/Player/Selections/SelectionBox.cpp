@@ -1,15 +1,12 @@
 ﻿#include "Player/Selections/SelectionBox.h"
-#include "Player/PlayerControllerRts.h"
 #include "Components/BoxComponent.h"
 #include "Components/DecalComponent.h"
-#include "Components/UnitSelectionComponent.h"
 #include "Interfaces/Selectable.h"
-#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 
 ASelectionBox::ASelectionBox()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
 	BoxComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxComponent"));
 	BoxComponent->SetBoxExtent(FVector(1.0f, 1.0f, 1.0f));
@@ -34,20 +31,9 @@ void ASelectionBox::BeginPlay()
 	
 	if(Decal)
 		Decal->SetVisibility(false);
-
-    if (APawn* OwnerPawn = UGameplayStatics::GetPlayerController(GetWorld(), 0)->GetPawn())
-		SelectionComponent = OwnerPawn->FindComponentByClass<UUnitSelectionComponent>();
 }
 
-void ASelectionBox::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-	if(BoxSelect)
-	{
-		Adjust();
-		Manage();
-	}
-}
+
 
 void ASelectionBox::Start(FVector Position, const FRotator Rotation)
 {
@@ -66,49 +52,45 @@ void ASelectionBox::Start(FVector Position, const FRotator Rotation)
 	BoxSelect = true;
 }
 
-void ASelectionBox::End()
+void ASelectionBox::UpdateEndLocation(FVector CurrentMouseLocation)
 {
-	if(!SelectionComponent) return;
+	if (!BoxComponent || !Decal)
+		return;
 
+	CurrentMouseLocation.Z = 0.0f;
+	FVector StartPosFlat = FVector(StartLocation.X, StartLocation.Y, 0.0f);
+
+	FVector NewLocation = UKismetMathLibrary::VLerp(StartPosFlat, CurrentMouseLocation, 0.5f);
+	BoxComponent->SetWorldLocation(NewLocation);
+
+	FVector DistVector = StartPosFlat - CurrentMouseLocation;
+	DistVector = GetActorRotation().GetInverse().RotateVector(DistVector);
+	
+	FVector NewExtent = DistVector.GetAbs();
+	NewExtent.Z += 100000.f; 
+	NewExtent *= 0.5f; 
+    
+	BoxComponent->SetBoxExtent(NewExtent);
+	Decal->DecalSize = FVector(NewExtent.Z, NewExtent.Y, NewExtent.X); 
+    
+	Manage();
+}
+
+TArray<AActor*> ASelectionBox::End()
+{
 	BoxSelect = false;
 	SetActorEnableCollision(false);
 	Decal->SetVisibility(false);
 
-	if(CenterInBox.Num() == 0)
-	{
-		SelectionComponent->Handle_Selection(nullptr);	
-	}
-	else
-	{
-		SelectionComponent->Handle_Selection(CenterInBox);
-	}
-
-	GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow, FString::Printf(TEXT("Current Selection: %i"), CenterInBox.Num()));
+    TArray<AActor*> Selected = CenterInBox;
 
 	InBox.Empty();
 	CenterInBox.Empty();
+    
+    return Selected;
 }
 
-void ASelectionBox::Adjust() const
-{
-	if (!SelectionComponent || !BoxComponent || !Decal) return;
 
-	const FVector CurrentMouseLocOnTerrain = SelectionComponent->GetMousePositionOnTerrain().Location;
-	const FVector EndPoint = FVector(CurrentMouseLocOnTerrain.X, CurrentMouseLocOnTerrain.Y, 0.0f);
-
-	FVector NewLocation = UKismetMathLibrary::VLerp(StartLocation, EndPoint, 0.5f);
-	BoxComponent->SetWorldLocation(NewLocation);
-
-	FVector NewExtent = FVector(GetActorLocation().X, GetActorLocation().Y, 0.0f) - EndPoint;
-	NewExtent = GetActorRotation().GetInverse().RotateVector(NewExtent);
-	NewExtent = NewExtent.GetAbs();
-	NewExtent.Z += 100000.f;
-
-	BoxComponent->SetBoxExtent(NewExtent);
-
-	FVector DecalSize = FVector(NewExtent.Z, NewExtent.Y, NewExtent.X);
-	Decal->DecalSize = DecalSize;
-}
 
 void ASelectionBox::Manage()
 {

@@ -1,11 +1,10 @@
 ﻿#pragma once
-
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "SelectionBox.generated.h"
 
-class UUnitSelectionComponent;
 class UBoxComponent;
+class UDecalComponent;
 
 UCLASS()
 class JUPITERPLUGIN_API ASelectionBox : public AActor
@@ -14,19 +13,19 @@ class JUPITERPLUGIN_API ASelectionBox : public AActor
 
 public:
 	ASelectionBox();
-	virtual void Tick(float DeltaTime) override;
 
 	UFUNCTION()
 	void Start(FVector Position, const FRotator Rotation);
 
 	UFUNCTION()
-	void End();
+	void UpdateEndLocation(FVector CurrentMouseLocation);
+
+	UFUNCTION()
+	TArray<AActor*> End();
 
 protected:
 	virtual void BeginPlay() override;
 
-	UFUNCTION()
-	void Adjust() const;
 	UFUNCTION()
 	void Manage();
 
@@ -55,7 +54,4 @@ private:
 
 	UPROPERTY()
 	bool BoxSelect;
-	
-        UPROPERTY()
-        UUnitSelectionComponent* SelectionComponent;
 };

@@ -3,63 +3,63 @@
 #include "GameFramework/Actor.h"
 #include "PreviewPoseMesh.generated.h"
 
-
 class UInstancedStaticMeshComponent;
 class UPoseableMeshComponent;
+
 
 UCLASS()
 class JUPITERPLUGIN_API APreviewPoseMesh : public AActor
 {
-        GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-        APreviewPoseMesh();
+	APreviewPoseMesh();
 
-        UFUNCTION()
-        void ShowPreview(UStaticMesh* NewStaticMesh, FVector NewScale, int32 InstanceCount);
-        void ShowPreview(USkeletalMesh* NewSkeletalMesh, FVector NewScale, int32 InstanceCount);
+	// --- Show Methods ---
+	UFUNCTION()
+	void ShowPreview(UStaticMesh* NewStaticMesh, FVector NewScale, int32 InstanceCount);
+	void ShowPreview(USkeletalMesh* NewSkeletalMesh, FVector NewScale, int32 InstanceCount);
 
-        UFUNCTION()
-        void UpdateInstances(const TArray<FTransform>& InstanceTransforms);
+	UFUNCTION()
+	void HidePreview();
 
-        UFUNCTION()
-        void HidePreview();
+	// --- Update Methods ---
+	UFUNCTION()
+	void UpdateInstances(const TArray<FTransform>& InstanceTransforms);
 
-        UFUNCTION()
-        void CheckIsValidPlacement();
-
-        UFUNCTION()
-        bool GetIsValidPlacement() const;
+	// --- Visual Feedback ---
+	UFUNCTION()
+	void SetPlacementValid(bool bValid);
 
 protected:
+	void EnsurePoseableComponents(int32 DesiredCount);
+	void UpdateMaterialsParameter();
 
-        void EnsurePoseableComponents(int32 DesiredCount);
+protected:
+	UPROPERTY(EditAnywhere, Category = "Settings|Material")
+	UMaterialInterface* GhostMaterialBase;
 
-        UPROPERTY(EditAnywhere, Category = "Settings|Material")
-        UMaterialInstance* HighlightMaterial;
+	UPROPERTY(EditDefaultsOnly, Category = "Settings|Material")
+	FName StatusParamName = "Status";
 
-        UPROPERTY()
-        UMaterialInstanceDynamic* StaticMaterialInstance;
+	UPROPERTY()
+	UMaterialInstanceDynamic* SharedMaterialInstance;
 
-        UPROPERTY(EditAnywhere, meta = (AllowPrivateAccess = true))
-        USceneComponent* Root;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	USceneComponent* Root;
 
-        UPROPERTY(EditAnywhere, meta = (AllowPrivateAccess = true))
-        UInstancedStaticMeshComponent* InstancedStaticMesh;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	UInstancedStaticMeshComponent* InstancedStaticMesh;
 
-        UPROPERTY()
-        TArray<UPoseableMeshComponent*> PoseableMeshes;
+	UPROPERTY()
+	TArray<TObjectPtr<UPoseableMeshComponent>> PoseableMeshes;
 
-        UPROPERTY()
-        TArray<UMaterialInstanceDynamic*> SkeletalMaterialInstances;
+	UPROPERTY()
+	FVector CurrentScale = FVector::OneVector;
 
-        UPROPERTY()
-        FVector CurrentScale = FVector::OneVector;
+	UPROPERTY()
+	bool bUsingStaticMesh = false;
 
-        UPROPERTY()
-        bool bUsingStaticMesh = false;
-
-        UPROPERTY()
-        bool bLastPlacementValid = true;
-
+	UPROPERTY()
+	bool bIsPlacementValid = true;
 };

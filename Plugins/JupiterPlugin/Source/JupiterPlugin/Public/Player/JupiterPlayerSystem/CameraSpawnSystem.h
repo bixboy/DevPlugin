@@ -1,5 +1,4 @@
 ﻿#pragma once
-
 #include "CoreMinimal.h"
 #include "CameraSystemBase.h"
 #include "Player/PlayerCameraRotationPreview.h"
@@ -11,50 +10,66 @@ class UCameraCommandSystem;
 class UUnitSpawnComponent;
 class ASoldierRts;
 
+
 UCLASS()
 class JUPITERPLUGIN_API UCameraSpawnSystem : public UCameraSystemBase
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	virtual void Init(APlayerCamera* InOwner) override;
-	virtual void Tick(float DeltaTime) override;
+    virtual void Init(APlayerCamera* InOwner) override;
+    virtual void Tick(float DeltaTime) override;
 
-	void HandleSpawnInput();	
-	void RefreshPreviewInstances();
-	void ResetSpawnState();
+    // --- Actions ---
+    void HandleSpawnInput();    
+    void RefreshPreviewInstances();
+    void ResetSpawnState();
 
-	void SetPreviewSystem(UCameraPreviewSystem* InPreview) { PreviewSystem = InPreview; }
-	void SetCommandSystem(UCameraCommandSystem* InCmd) { CommandSystem = InCmd; }
-
-private:
-	void ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass);
-	void UpdatePreviewFollowMouse(float CurrentTime);
-	void UpdatePreviewTransforms(const FVector& Center, const FRotator& Facing);
-
-	bool EnsurePreviewActor();
-	int32 GetEffectiveSpawnCount() const;
-
-	// Event callbacks
-	UFUNCTION()
-	void OnUnitClassChanged(TSubclassOf<ASoldierRts> NewUnitClass);
-
-	UFUNCTION()
-	void OnSpawnCountChanged(int32 NewCount);
-
-	UFUNCTION()
-	void OnFormationChanged(ESpawnFormation NewFormation);
+    // --- Dependency Injection ---
+    void SetPreviewSystem(UCameraPreviewSystem* InPreview) { PreviewSystem = InPreview; }
+    void SetCommandSystem(UCameraCommandSystem* InCmd) { CommandSystem = InCmd; }
 
 private:
+    // --- Logic Internals ---
+    void ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass);
+    void UpdatePreviewFollowMouse(float CurrentTime);
+    void UpdatePreviewTransforms(const FVector& Center, const FRotator& Facing);
 
-	UPROPERTY()
-	UCameraPreviewSystem* PreviewSystem = nullptr;
+    bool EnsurePreviewActor();
+    int32 GetEffectiveSpawnCount() const;
 
-	UPROPERTY()
-	UCameraCommandSystem* CommandSystem = nullptr;
+    // --- Event Callbacks ---
+    UFUNCTION()
+    void OnUnitClassChanged(TSubclassOf<ASoldierRts> NewUnitClass);
 
-	FRotationPreviewState SpawnRotationPreview;
+    UFUNCTION()
+    void OnSpawnCountChanged(int32 NewCount);
 
-	bool bIsInSpawnMode = false;
-	float RotationPreviewHoldTime = 0.25f;
+    UFUNCTION()
+    void OnFormationChanged(ESpawnFormation NewFormation);
+
+private:
+    // --- Dependencies ---
+    UPROPERTY()
+    TObjectPtr<UCameraPreviewSystem> PreviewSystem;
+
+    UPROPERTY()
+    TObjectPtr<UCameraCommandSystem> CommandSystem;
+
+    // --- State ---
+    FRotationPreviewState SpawnRotationPreview;
+    
+    bool bIsInSpawnMode = false;
+    
+    UPROPERTY(EditDefaultsOnly, Category="Settings")
+    float RotationPreviewHoldTime = 0.25f;
+
+    TSubclassOf<ASoldierRts> LastPreviewedClass;
+
+    // --- Memory Cache ---
+    UPROPERTY(Transient)
+    TArray<FVector> CachedOffsets;
+
+    UPROPERTY(Transient)
+    TArray<FTransform> CachedTransforms;
 };

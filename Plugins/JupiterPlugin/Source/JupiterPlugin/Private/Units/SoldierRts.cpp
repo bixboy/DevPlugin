@@ -1,15 +1,15 @@
 #include "Units/SoldierRts.h"
-#include "Components/CommandComponent.h"
-#include "Components/SoldierManagerComponent.h"
-#include "Components/WeaponMaster.h"
+#include "Components/Combat/CommandComponent.h"
+#include "Components/Unit/SoldierManagerComponent.h"
+#include "Components/Combat/WeaponMaster.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "JupiterGameState.h"
 #include "Net/UnrealNetwork.h"
-#include "Units/AI/AiControllerRts.h"
+#include "AI/AiControllerRts.h"
 #include "Containers/Set.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "Core/JupiterGameState.h"
 
 
 ASoldierRts::ASoldierRts(const FObjectInitializer& ObjectInitializer)

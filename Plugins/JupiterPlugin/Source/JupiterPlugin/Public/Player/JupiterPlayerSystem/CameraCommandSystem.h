@@ -1,11 +1,13 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "CameraSystemBase.h"
 #include "CameraCommandSystem.generated.h"
 
+
 class ASphereRadius;
 class UPatrolVisualizerComponent;
+class UCameraPreviewSystem;
+class UCameraSpawnSystem;
 
 UENUM(BlueprintType)
 enum class ECommandMode : uint8
@@ -15,6 +17,7 @@ enum class ECommandMode : uint8
     PatrolCircle,
     PatrolPathing
 };
+
 
 UCLASS()
 class JUPITERPLUGIN_API UCameraCommandSystem : public UCameraSystemBase
@@ -32,70 +35,76 @@ public:
     void HandleAltPressed();
     void HandleAltReleased();
     
-    /** Cancels the current patrol path creation process */
     void CancelPatrolCreation();
 
     // --- Actions ---
     void HandleDestroySelected();
+	
     void HandleServerDestroyActor(const TArray<AActor*>& ActorsToDestroy);
 
-    void SetPreviewSystem(class UCameraPreviewSystem* InPreview) { PreviewSystem = InPreview; }
-    void SetSpawnSystem(class UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
+    // --- Dependency Injection ---
+    void SetPreviewSystem(UCameraPreviewSystem* InPreview) { PreviewSystem = InPreview; }
+    void SetSpawnSystem(UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
 
+    // --- Getters ---
     bool IsBuildingPatrolPath() const { return bIsBuildingPatrolPath; }
     bool IsAltDown() const { return bIsAltDown; }
 
 protected:
     void ExecuteFinalCommand(const FHitResult& HitResult);
     
+    // Issuers
     void IssueMoveCommand(const FVector& TargetLocation, const FRotator& Facing);
     void IssueAttackCommand(AActor* TargetActor);
     void IssuePatrolCircleCommand(float Radius, const FVector& Center);
     void IssuePatrolPathCommand();
 
+    // Updates
     void UpdateRotationPreview(const FVector& MouseLocation);
     void UpdateCircleRadius(const FVector& MouseLocation);
     
+    // Patrol Logic
     void AddPatrolWaypoint(const FVector& Location);
     void ResetPatrolPath();
     
-    void UpdatePatrolPreview();
+    void UpdatePatrolPreview(const FVector& CurrentMouseLocation); 
     void ClearPatrolPreview();
 
     bool GetMouseHitOnTerrain(FHitResult& OutHit) const;
     AActor* GetHoveredActor() const;
 
 protected:
-    // --- Systems References ---
+    // --- References ---
     UPROPERTY()
-    UCameraPreviewSystem* PreviewSystem = nullptr;
+    TObjectPtr<UCameraPreviewSystem> PreviewSystem;
 
     UPROPERTY()
-    UCameraSpawnSystem* SpawnSystem = nullptr;
+    TObjectPtr<UCameraSpawnSystem> SpawnSystem;
 
     UPROPERTY()
-    UPatrolVisualizerComponent* PatrolVisualizer = nullptr;
-	
+    TObjectPtr<UPatrolVisualizerComponent> PatrolVisualizer;
+
+    UPROPERTY()
+    TObjectPtr<ASphereRadius> SphereRadius;
 
     // --- Settings ---
-    UPROPERTY()
-    float RotationHoldThreshold;
+    UPROPERTY(EditDefaultsOnly, Category = "Settings|Input")
+    float RotationHoldThreshold = 0.2f;
 
-    UPROPERTY()
-    float DragThreshold;
+    UPROPERTY(EditDefaultsOnly, Category = "Settings|Input")
+    float DragThreshold = 10.0f;
 
-	UPROPERTY()
-	float LoopThreshold;
-	
+    UPROPERTY(EditDefaultsOnly, Category = "Settings|Patrol")
+    float LoopThreshold = 150.f;
 
-    // --- State Machine Data ---
+    // --- State Machine ---
     ECommandMode CurrentMode = ECommandMode::None;
     
     bool bIsRightClickDown = false;
     bool bIsAltDown = false;
     
     float ClickStartTime = 0.0f;
-    FVector CommandStartLocation;
+    FVector CommandStartLocation = FVector::ZeroVector;
 
     // --- Rotation Data ---
     FRotator BaseRotation = FRotator::ZeroRotator;
@@ -107,6 +116,7 @@ protected:
     UPROPERTY(VisibleAnywhere, Category = "Debug|Patrol")
     TArray<FVector> PatrolWaypoints;
 
-    UPROPERTY()
-    ASphereRadius* SphereRadius = nullptr;
+    // --- Optimization Flags ---
+    FVector LastPreviewMouseLocation = FVector::ZeroVector;
+    bool bPatrolPreviewDirty = false;
 };

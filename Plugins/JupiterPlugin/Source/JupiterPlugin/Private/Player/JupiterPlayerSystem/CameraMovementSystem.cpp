@@ -1,15 +1,23 @@
 ﻿#include "Player/JupiterPlayerSystem/CameraMovementSystem.h"
 #include "Player/PlayerCamera.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
-#include "Kismet/KismetMathLibrary.h"
-
 #include "GameFramework/SpringArmComponent.h"
 
+
+void UCameraMovementSystem::Init(APlayerCamera* InOwner)
+{
+    Super::Init(InOwner);
+    
+    if (GetOwner())
+    {
+        CurrentTerrainHeight = GetOwner()->GetActorLocation().Z;
+    }
+}
 
 void UCameraMovementSystem::Tick(float DeltaTime)
 {
     if (!GetOwner())
-        return;
+    	return;
 
     APlayerCamera* Cam = GetOwner();
 
@@ -21,81 +29,200 @@ void UCameraMovementSystem::Tick(float DeltaTime)
         MoveToAlpha += DeltaTime / MoveToDuration;
         MoveToAlpha = FMath::Clamp(MoveToAlpha, 0.f, 1.f);
 
-        // Smooth step interpolation for nicer feel
         const float SmoothAlpha = FMath::SmoothStep(0.f, 1.f, MoveToAlpha);
-        const FVector NewLoc = FMath::Lerp(MoveToStartLocation, MoveToTargetLocation, SmoothAlpha);
+        FVector NewLoc = FMath::Lerp(MoveToStartLocation, MoveToTargetLocation, SmoothAlpha);
 
+        CurrentTerrainHeight = NewLoc.Z; 
         Cam->SetActorLocation(NewLoc);
 
         if (MoveToAlpha >= 1.f)
         {
             bIsMovingToLocation = false;
         }
-
-        // Skip manual movement while animating to target
-        return; 
-    }
-
-    // ----------------------------------------------------
-    // 1. CAMERA MOVEMENT
-    // ----------------------------------------------------
-    if (!PendingMoveInput.IsZero())
-    {
-        FVector MoveVector = FVector::ZeroVector;
-
-        MoveVector += Cam->GetSpringArm()->GetForwardVector() * PendingMoveInput.Y;
-        MoveVector += Cam->GetSpringArm()->GetRightVector()   * PendingMoveInput.X;
-
-        MoveVector *= Cam->CameraSpeed * DeltaTime;
-        MoveVector.Z = 0.f;
-
-        const FVector NextLocation = Cam->GetActorLocation() + MoveVector;
-        Cam->SetActorLocation(NextLocation);
-
-        UpdateTerrainFollow();
-    }
-
-    // ----------------------------------------------------
-    // 2. ZOOM
-    // ----------------------------------------------------
-    if (PendingZoomInput != 0.f)
-    {
-        const float ZoomDelta = PendingZoomInput * 100.f;
-        Cam->TargetZoom = FMath::Clamp(Cam->TargetZoom + ZoomDelta, Cam->MinZoom, Cam->MaxZoom);
     	
+        return;
+    }
+
+    // ----------------------------------------------------
+    // 1. INPUT GATHERING
+    // ----------------------------------------------------
+    FVector2D TotalMoveInput = PendingMoveInput;
+    
+    if (Cam->CanEdgeScroll)
+    {
+        FVector2D EdgeInput = GetEdgeScrollInput();
+        if (!EdgeInput.IsZero())
+        {
+            TotalMoveInput += EdgeInput * Cam->EdgeScrollSpeed;
+        }
+    }
+
+    if (TotalMoveInput.SizeSquared() > 1.0f)
+    {
+        TotalMoveInput.Normalize();
+    }
+
+    // ----------------------------------------------------
+    // 2. MOVEMENT APPLICATION
+    // ----------------------------------------------------
+    if (!TotalMoveInput.IsZero())
+    {
+        FRotator CamRot = Cam->GetSpringArm()->GetTargetRotation();
+        CamRot.Pitch = 0.f;
+        CamRot.Roll = 0.f;
+
+        const FVector Forward = FRotationMatrix(CamRot).GetUnitAxis(EAxis::X);
+        const FVector Right   = FRotationMatrix(CamRot).GetUnitAxis(EAxis::Y);
+
+        FVector MoveDir = (Forward * TotalMoveInput.Y) + (Right * TotalMoveInput.X);
+        
+        // Vitesse ajustée par la hauteur (Plus on est haut, plus on bouge vite ?)
+        // Optionnel : float HeightSpeedMod = FMath::GetMappedRangeValueClamped(..., Cam->TargetZoom, ...);
+        
+        FVector DesiredOffset = MoveDir * Cam->CameraSpeed * DeltaTime * 100.f; 
+        Cam->AddActorWorldOffset(DesiredOffset);
+    }
+
+    // ----------------------------------------------------
+    // 3. TERRAIN FOLLOW
+    // ----------------------------------------------------
+    UpdateTerrainFollow(DeltaTime);
+
+    // ----------------------------------------------------
+    // 4. ZOOM
+    // ----------------------------------------------------
+    if (FMath::Abs(PendingZoomInput) > 0.01f)
+    {
+        float ZoomSpeedFactor = Cam->TargetZoom * 0.15f; 
+        float ZoomDelta = PendingZoomInput * ZoomSpeedFactor;
+        
+        Cam->TargetZoom = FMath::Clamp(Cam->TargetZoom + ZoomDelta, Cam->MinZoom, Cam->MaxZoom);
+        
         PendingZoomInput = 0.f;
     }
 
     // ----------------------------------------------------
-    // 3. ROTATION
+    // 5. ROTATION
     // ----------------------------------------------------
     if (bRotateEnabled)
     {
-        if (PendingRotateH != 0.f)
-        {
-            Cam->TargetRotation = UKismetMathLibrary::ComposeRotators(
-            	Cam->TargetRotation,
-                FRotator(0.f, PendingRotateH * Cam->RotateSpeed * DeltaTime, 0.f)
-            );
-        }
+        float YawDelta = PendingRotateH * Cam->RotateSpeed * DeltaTime * 50.f;
+        float PitchDelta = PendingRotateV * Cam->RotateSpeed * DeltaTime * 50.f;
 
-        if (PendingRotateV != 0.f)
-        {
-            Cam->TargetRotation = UKismetMathLibrary::ComposeRotators(
-            	Cam->TargetRotation,
-            	FRotator(PendingRotateV * Cam->RotateSpeed * DeltaTime, 0.f, 0.f)
-            );
-        }
+        if (!FMath::IsNearlyZero(YawDelta))
+        	Cam->TargetRotation.Yaw += YawDelta;
+    	
+        if (!FMath::IsNearlyZero(PitchDelta))
+        	Cam->TargetRotation.Pitch += PitchDelta;
+
+        ClampCameraPitch();
     }
 
-    PendingRotateH = PendingRotateV = 0.f;
-	
-    if (Cam->CanEdgeScroll)
-        ProcessEdgeScroll();
-	
-    ClampCameraPitch();
+    PendingRotateH = 0.f;
+    PendingRotateV = 0.f;
 }
 
+
+// ----------------------------------------------------
+// Helpers
+// ----------------------------------------------------
+
+FVector2D UCameraMovementSystem::GetEdgeScrollInput() const
+{
+    if (!GetWorldSafe()) return FVector2D::ZeroVector;
+
+    FVector2D MousePos = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorldSafe());
+    const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(GetWorldSafe());
+
+    float DPIScale = UWidgetLayoutLibrary::GetViewportScale(GetWorldSafe());
+    MousePos *= DPIScale;
+
+    if (ViewportSize.X <= 0 || ViewportSize.Y <= 0)
+    	return FVector2D::ZeroVector;
+
+    const float XNorm = MousePos.X / ViewportSize.X;
+    const float YNorm = MousePos.Y / ViewportSize.Y;
+
+    FVector2D Edge = FVector2D::ZeroVector;
+
+    const float Margin = 0.02f;
+
+    if (XNorm > (1.0f - Margin))
+    {
+	    Edge.X = 1.f;
+    }
+    else if (XNorm < Margin)
+    {
+	    Edge.X = -1.f;
+    }
+
+    if (YNorm > (1.0f - Margin))
+    {
+	    Edge.Y = -1.f;
+    }
+    else if (YNorm < Margin)
+    {
+	    Edge.Y = 1.f;
+    }
+
+    return Edge;
+}
+
+void UCameraMovementSystem::UpdateTerrainFollow(float DeltaTime)
+{
+    if (!GetWorldSafe() || !GetOwner())
+    	return;
+
+    APlayerCamera* Cam = GetOwner();
+    FVector CurrentPos = Cam->GetActorLocation();
+
+    FVector TraceStart = FVector(CurrentPos.X, CurrentPos.Y, CurrentPos.Z + 10000.0f);
+    FVector TraceEnd   = FVector(CurrentPos.X, CurrentPos.Y, -10000.0f);
+
+    FHitResult Hit;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(Cam);
+
+    bool bHit = GetWorldSafe()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params);
+
+    if (bHit)
+    {
+        float TargetZ = Hit.ImpactPoint.Z;
+
+        CurrentTerrainHeight = FMath::FInterpTo(CurrentTerrainHeight, TargetZ, DeltaTime, 5.0f);
+        
+        Cam->SetActorLocation(FVector(CurrentPos.X, CurrentPos.Y, CurrentTerrainHeight));
+    }
+}
+
+void UCameraMovementSystem::MoveToLocation(const FVector& TargetLocation, float Duration)
+{
+    if (!GetOwner())
+    	return;
+
+    MoveToStartLocation = GetOwner()->GetActorLocation();
+	
+    MoveToTargetLocation = TargetLocation;
+    
+    MoveToDuration = FMath::Max(0.1f, Duration);
+    MoveToAlpha = 0.f;
+    bIsMovingToLocation = true;
+}
+
+void UCameraMovementSystem::ClampCameraPitch()
+{
+    if (!GetOwner())
+    	return;
+
+    APlayerCamera* Cam = GetOwner();
+	
+    float CurrentPitch = Cam->TargetRotation.Pitch;
+    
+    float MinP = -Cam->RotatePitchMax;
+    float MaxP = -Cam->RotatePitchMin;
+
+    Cam->TargetRotation.Pitch = FMath::Clamp(CurrentPitch, MinP, MaxP);
+}
 
 // ----------------------------------------------------
 // Input Handlers
@@ -104,7 +231,7 @@ void UCameraMovementSystem::Tick(float DeltaTime)
 void UCameraMovementSystem::HandleMoveInput(const FInputActionValue& Value)
 {
     PendingMoveInput = Value.Get<FVector2D>();
-    // Cancel smooth move if user inputs manual movement
+    
     if (!PendingMoveInput.IsZero())
     {
         bIsMovingToLocation = false;
@@ -113,7 +240,7 @@ void UCameraMovementSystem::HandleMoveInput(const FInputActionValue& Value)
 
 void UCameraMovementSystem::HandleMoveReleased(const FInputActionValue& Value)
 {
-	PendingMoveInput = FVector2D::ZeroVector;
+    PendingMoveInput = FVector2D::ZeroVector;
 }
 
 void UCameraMovementSystem::HandleZoomInput(const FInputActionValue& Value)
@@ -134,116 +261,4 @@ void UCameraMovementSystem::HandleRotateVertical(const FInputActionValue& Value)
 void UCameraMovementSystem::HandleRotateToggle(const FInputActionValue& Value)
 {
     bRotateEnabled = Value.Get<bool>();
-}
-
-// ----------------------------------------------------
-// Helpers
-// ----------------------------------------------------
-
-void UCameraMovementSystem::ProcessEdgeScroll()
-{
-    APlayerCamera* Cam = GetOwner();
-    if (!Cam || !GetWorldSafe())
-        return;
-
-    FVector2D MousePos = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorldSafe());
-    const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(GetWorldSafe());
-
-    MousePos *= UWidgetLayoutLibrary::GetViewportScale(GetWorldSafe());
-
-    const float XNorm = MousePos.X / ViewportSize.X;
-    const float YNorm = MousePos.Y / ViewportSize.Y;
-
-    FVector2D EdgeInput = FVector2D::ZeroVector;
-
-	// X NORM
-    if (XNorm > 0.98f)
-    {
-	    EdgeInput.X = 1.f;
-    }
-    else if (XNorm < 0.02f)
-    {
-	    EdgeInput.X = -1.f;
-    }
-
-	// Y NORM
-    if (YNorm > 0.98f)
-    {
-	    EdgeInput.Y = -1.f;
-    }
-    else if (YNorm < 0.02f)
-    {
-	    EdgeInput.Y = 1.f;
-    }
-
-    if (!EdgeInput.IsZero())
-        PendingMoveInput += EdgeInput * Cam->EdgeScrollSpeed;
-}
-
-void UCameraMovementSystem::UpdateTerrainFollow()
-{
-    if (!GetWorldSafe() || !GetOwner())
-        return;
-
-    APlayerCamera* Cam = GetOwner();
-    FVector Pos = Cam->GetActorLocation();
-
-    FHitResult Hit;
-    FVector Start = Pos + FVector(0,0,10000);
-    FVector End   = Pos - FVector(0,0,10000);
-
-    if (GetWorldSafe()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility))
-    {
-        FVector NewPos = Hit.ImpactPoint;
-        NewPos.Z += 0;
-    	
-        Cam->SetActorLocation(FVector(Pos.X, Pos.Y, NewPos.Z));
-    }
-}
-
-void UCameraMovementSystem::MoveToLocation(const FVector& TargetLocation, float Duration)
-{
-    if (!GetOwner()) return;
-
-    MoveToStartLocation = GetOwner()->GetActorLocation();
-    
-    // Maintain Z height to avoid diving into ground, unless specific Z needed
-    // Usually camera stays at a fixed height logic, but let's assume TargetLocation is on ground
-    // and we want to keep current camera height relative to something?
-    // User asked to move *camera* to this patrol. 
-    // Usually that means centering the camera X/Y on the target, keeping Z or terrain adjust.
-    // Let's assume TargetLocation passed in is the ground point to look at.
-    // but the camera is effectively at Z height.
-    // If we just lerp to TargetLocation (z=0), camera goes to ground.
-    
-    // Adjust target to be at current Camera Z? Or rely on TerrainFollow?
-    // If TerrainFollow is active, setting X/Y is enough and Z will snap in next Tick?
-    // In Tick, UpdateTerrainFollow is called after manual movement.
-    
-    MoveToTargetLocation = FVector(TargetLocation.X, TargetLocation.Y, MoveToStartLocation.Z);
-
-    MoveToDuration = FMath::Max(0.1f, Duration);
-    MoveToAlpha = 0.f;
-    bIsMovingToLocation = true;
-}
-
-void UCameraMovementSystem::ClampCameraPitch()
-{
-    if (!GetOwner())
-        return;
-
-    APlayerCamera* Cam = GetOwner();
-
-    float NewPitch = Cam->TargetRotation.Pitch;
-	
-    if (NewPitch < (Cam->RotatePitchMax * -1.f))
-    {
-	    NewPitch = (Cam->RotatePitchMax * -1.f);
-    }
-    else if (NewPitch > (Cam->RotatePitchMin * -1.f))
-    {
-	    NewPitch = (Cam->RotatePitchMin * -1.f);
-    }
-
-    Cam->TargetRotation = FRotator(NewPitch, Cam->TargetRotation.Yaw, 0.f);
 }

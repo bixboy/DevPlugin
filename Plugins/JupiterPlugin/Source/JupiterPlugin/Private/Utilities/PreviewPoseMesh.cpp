@@ -1,9 +1,7 @@
 #include "Utilities/PreviewPoseMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PoseableMeshComponent.h"
-#include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
-
 
 APreviewPoseMesh::APreviewPoseMesh()
 {
@@ -15,15 +13,15 @@ APreviewPoseMesh::APreviewPoseMesh()
     InstancedStaticMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("InstancedStaticMesh"));
     InstancedStaticMesh->SetupAttachment(Root);
     InstancedStaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    InstancedStaticMesh->SetVisibility(false);
     InstancedStaticMesh->SetCanEverAffectNavigation(false);
+    InstancedStaticMesh->SetCastShadow(false);
 
     bReplicates = false;
 }
 
-/* ---------------------------------------------------------
-                SHOW PREVIEWS
---------------------------------------------------------- */
+// ---------------------------------------------------------
+// SHOW LOGIC
+// ---------------------------------------------------------
 
 void APreviewPoseMesh::ShowPreview(UStaticMesh* Mesh, FVector Scale, int32 Count)
 {
@@ -34,31 +32,36 @@ void APreviewPoseMesh::ShowPreview(UStaticMesh* Mesh, FVector Scale, int32 Count
     }
 
     bUsingStaticMesh = true;
-    CurrentScale     = Scale;
-
+    CurrentScale = Scale;
     SetActorHiddenInGame(false);
 
-    for (UPoseableMeshComponent* P : PoseableMeshes)
-    {
-        if (P)
-        {
-            P->SetVisibility(false);
-            P->SetSkinnedAssetAndUpdate(nullptr);
-        }
-    }
-    SkeletalMaterialInstances.Reset();
+	for (auto& P : PoseableMeshes) 
+	{
+		if (P) 
+		{
+			P->SetVisibility(false);
+		}
+	}
 
-    // Setup static mesh
-    InstancedStaticMesh->SetStaticMesh(Mesh);
-    InstancedStaticMesh->ClearInstances();
+    if (InstancedStaticMesh->GetStaticMesh() != Mesh)
+    {
+        InstancedStaticMesh->SetStaticMesh(Mesh);
+    }
     InstancedStaticMesh->SetVisibility(true);
 
-    // Material
-    StaticMaterialInstance = HighlightMaterial ? UMaterialInstanceDynamic::Create(HighlightMaterial, this) : nullptr;
+    if (GhostMaterialBase && !SharedMaterialInstance)
+    {
+        SharedMaterialInstance = UMaterialInstanceDynamic::Create(GhostMaterialBase, this);
+    }
 
-    InstancedStaticMesh->SetOverlayMaterial(StaticMaterialInstance);
-
-    bLastPlacementValid = true;
+    if (SharedMaterialInstance)
+    {
+        int32 MatCount = Mesh->GetStaticMaterials().Num();
+        for (int32 i = 0; i < MatCount; i++)
+        {
+            InstancedStaticMesh->SetOverlayMaterial(SharedMaterialInstance);
+        }
+    }
 }
 
 void APreviewPoseMesh::ShowPreview(USkeletalMesh* Mesh, FVector Scale, int32 Count)
@@ -70,179 +73,166 @@ void APreviewPoseMesh::ShowPreview(USkeletalMesh* Mesh, FVector Scale, int32 Cou
     }
 
     bUsingStaticMesh = false;
-    CurrentScale     = Scale;
-
+    CurrentScale = Scale;
     SetActorHiddenInGame(false);
 
-    // Clear static mesh
-    InstancedStaticMesh->ClearInstances();
-    InstancedStaticMesh->SetStaticMesh(nullptr);
+    // 1. Désactiver Static
     InstancedStaticMesh->SetVisibility(false);
-    StaticMaterialInstance = nullptr;
+    InstancedStaticMesh->ClearInstances();
 
+    // 2. Setup Material
+    if (GhostMaterialBase && !SharedMaterialInstance)
+    {
+        SharedMaterialInstance = UMaterialInstanceDynamic::Create(GhostMaterialBase, this);
+    }
+
+    // 3. Setup Skeletal Instances
     EnsurePoseableComponents(Count);
-
-    SkeletalMaterialInstances.SetNum(Count);
 
     for (int32 i = 0; i < PoseableMeshes.Num(); ++i)
     {
         UPoseableMeshComponent* P = PoseableMeshes[i];
         if (!P)
-            continue;
+        	continue;
 
         if (i < Count)
         {
             P->SetVisibility(true);
             P->SetWorldScale3D(Scale);
-            P->SetSkinnedAssetAndUpdate(Mesh);
-
-            if (HighlightMaterial)
+            
+            if (P->GetSkinnedAsset() != Mesh)
             {
-                if (!SkeletalMaterialInstances[i])
-                {
-                    SkeletalMaterialInstances[i] = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
-                }
-                P->SetOverlayMaterial(SkeletalMaterialInstances[i]);
+                P->SetSkinnedAssetAndUpdate(Mesh);
+            }
+
+            if (SharedMaterialInstance)
+            {
+                P->SetOverlayMaterial(SharedMaterialInstance);
             }
         }
         else
         {
             P->SetVisibility(false);
-            P->SetSkinnedAssetAndUpdate(nullptr);
         }
     }
-
-    bLastPlacementValid = true;
 }
 
-/* ---------------------------------------------------------
-                        UPDATE INSTANCES
---------------------------------------------------------- */
+// ---------------------------------------------------------
+// UPDATE LOGIC
+// ---------------------------------------------------------
 
 void APreviewPoseMesh::UpdateInstances(const TArray<FTransform>& Transforms)
 {
     if (bUsingStaticMesh)
     {
-        InstancedStaticMesh->ClearInstances();
+        int32 CurrentCount = InstancedStaticMesh->GetInstanceCount();
+        int32 NewCount = Transforms.Num();
 
-        for (const FTransform& T : Transforms)
+        if (NewCount == 0)
         {
-            FTransform I = T;
-            I.SetScale3D(CurrentScale);
-            InstancedStaticMesh->AddInstance(I);
+            InstancedStaticMesh->ClearInstances();
+            return;
         }
 
-        InstancedStaticMesh->SetVisibility(Transforms.Num() > 0);
+        // Cas A : Le nombre a changé -> On est obligé de rebuild
+        if (CurrentCount != NewCount)
+        {
+            InstancedStaticMesh->ClearInstances();
+            for (const FTransform& T : Transforms)
+            {
+                FTransform FinalT = T;
+                FinalT.SetScale3D(CurrentScale);
+            	InstancedStaticMesh->AddInstance(FinalT, false);
+            }
+        }
+        // Cas B : Le nombre est identique -> Update rapide (Batch)
+        else
+        {
+            TArray<FTransform> ScaledTransforms;
+            ScaledTransforms.Reserve(NewCount);
+            for(const FTransform& T : Transforms)
+            {
+                FTransform FinalT = T;
+                FinalT.SetScale3D(CurrentScale);
+                ScaledTransforms.Add(FinalT);
+            }
+            
+			InstancedStaticMesh->BatchUpdateInstancesTransforms(0, ScaledTransforms, false, true);
+        }
     }
     else
     {
-        EnsurePoseableComponents(Transforms.Num());
-        SkeletalMaterialInstances.SetNum(Transforms.Num());
+        int32 Count = Transforms.Num();
+        EnsurePoseableComponents(Count);
 
-        for (int32 i = 0; i < PoseableMeshes.Num(); ++i)
+        for (int32 i = 0; i < Count; ++i)
         {
-            UPoseableMeshComponent* P = PoseableMeshes[i];
-            if (!P)
-                continue;
-
-            if (Transforms.IsValidIndex(i))
+            if (PoseableMeshes.IsValidIndex(i))
             {
                 const FTransform& T = Transforms[i];
-                P->SetWorldTransform(FTransform(T.GetRotation(), T.GetLocation(), CurrentScale));
-                P->SetVisibility(true);
-
-                if (HighlightMaterial)
-                {
-                    if (!SkeletalMaterialInstances[i])
-                        SkeletalMaterialInstances[i] = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
-
-                    P->SetOverlayMaterial(SkeletalMaterialInstances[i]);
-                }
-            }
-            else
-            {
-                P->SetVisibility(false);
+            	PoseableMeshes[i]->SetRelativeTransform(T); 
+            	PoseableMeshes[i]->SetRelativeScale3D(CurrentScale);
+            	PoseableMeshes[i]->SetVisibility(true);
             }
         }
+        
+        // Hide unused
+        for (int32 i = Count; i < PoseableMeshes.Num(); ++i)
+        {
+            PoseableMeshes[i]->SetVisibility(false);
+        }
     }
-
-    CheckIsValidPlacement();
 }
 
-/* ---------------------------------------------------------
-                    HIDE PREVIEW
---------------------------------------------------------- */
+// ---------------------------------------------------------
+// FEEDBACK VISUEL
+// ---------------------------------------------------------
+
+void APreviewPoseMesh::SetPlacementValid(bool bValid)
+{
+    if (bIsPlacementValid == bValid)
+    	return;
+
+    bIsPlacementValid = bValid;
+    UpdateMaterialsParameter();
+}
+
+void APreviewPoseMesh::UpdateMaterialsParameter()
+{
+    if (!SharedMaterialInstance)
+    	return;
+
+    // 1.0 = Valide (Vert),
+    // 0.0 = Invalide (Rouge)
+    float Value = bIsPlacementValid ? 1.0f : 0.0f;
+    SharedMaterialInstance->SetScalarParameterValue(StatusParamName, Value);
+}
+
+// ---------------------------------------------------------
+// HELPERS
+// ---------------------------------------------------------
 
 void APreviewPoseMesh::HidePreview()
 {
-    // Static
-    InstancedStaticMesh->ClearInstances();
-    InstancedStaticMesh->SetStaticMesh(nullptr);
-    InstancedStaticMesh->SetVisibility(false);
-
-    // Skeletal
-    for (UPoseableMeshComponent* P : PoseableMeshes)
-    {
-        if (P)
-        {
-            P->SetVisibility(false);
-            P->SetSkinnedAssetAndUpdate(nullptr);
-        }
-    }
-
-    SkeletalMaterialInstances.Reset();
-    StaticMaterialInstance = nullptr;
-
-    bLastPlacementValid = true;
     SetActorHiddenInGame(true);
-}
-
-void APreviewPoseMesh::CheckIsValidPlacement()
-{
-    const float Status = bLastPlacementValid ? 1.f : 0.f;
-
-    if (StaticMaterialInstance)
-        StaticMaterialInstance->SetScalarParameterValue(TEXT("Status"), Status);
-
-    for (UMaterialInstanceDynamic* M : SkeletalMaterialInstances)
-    {
-        if (M)
-            M->SetScalarParameterValue(TEXT("Status"), Status);
-    }
-}
-
-bool APreviewPoseMesh::GetIsValidPlacement() const
-{
-    return bLastPlacementValid;
 }
 
 void APreviewPoseMesh::EnsurePoseableComponents(int32 Count)
 {
-    Count = FMath::Max(0, Count);
+    if (PoseableMeshes.Num() >= Count)
+    	return;
 
-    while (PoseableMeshes.Num() < Count)
+    int32 ToCreate = Count - PoseableMeshes.Num();
+    for (int32 i = 0; i < ToCreate; ++i)
     {
-        const FName Name = *FString::Printf(TEXT("PoseableMesh_%d"), PoseableMeshes.Num());
-        UPoseableMeshComponent* P = NewObject<UPoseableMeshComponent>(this, Name);
-
-        if (!P)
-            break;
-
-        P->SetupAttachment(Root);
-        P->RegisterComponent();
-        P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-        P->SetVisibility(false);
-
-        PoseableMeshes.Add(P);
-    }
-
-    // Hide extras
-    for (int32 i = Count; i < PoseableMeshes.Num(); ++i)
-    {
-	    if (UPoseableMeshComponent* P = PoseableMeshes[i])
+        UPoseableMeshComponent* P = NewObject<UPoseableMeshComponent>(this);
+        if (P)
         {
-            P->SetVisibility(false);
-            P->SetSkinnedAssetAndUpdate(nullptr);
+            P->SetupAttachment(Root);
+            P->RegisterComponent();
+            P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            P->SetCastShadow(false);
+            PoseableMeshes.Add(P);
         }
     }
 }

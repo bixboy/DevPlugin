@@ -1,17 +1,15 @@
 ﻿#include "Player/JupiterPlayerSystem/CameraSpawnSystem.h"
-
 #include "Camera/CameraComponent.h"
 #include "Player/PlayerCamera.h"
-
-#include "Components/UnitSpawnComponent.h"
-#include "Components/UnitSelectionComponent.h"
+#include "Player/JupiterPlayerSystem/CameraPreviewSystem.h"
+#include "Components/Unit/UnitSpawnComponent.h"
 #include "Units/SoldierRts.h"
-
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Player/JupiterPlayerSystem/CameraPreviewSystem.h"
+#include "Components/Unit/UnitSelectionComponent.h"
+#include "Utilities/PreviewPoseMesh.h"
 
 
 void UCameraSpawnSystem::Init(APlayerCamera* InOwner)
@@ -19,16 +17,19 @@ void UCameraSpawnSystem::Init(APlayerCamera* InOwner)
     Super::Init(InOwner);
 
     if (!GetOwner() || !GetOwner()->GetSpawnComponent())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Init Failed: SpawnComponent missing on Owner"));
         return;
+    }
 
     SpawnRotationPreview.Reset(FRotator::ZeroRotator);
-	
+    
     if (UUnitSpawnComponent* Spawn = GetSpawnComponent())
     {
         Spawn->OnUnitClassChanged.AddDynamic(this, &UCameraSpawnSystem::OnUnitClassChanged);
         Spawn->OnSpawnCountChanged.AddDynamic(this, &UCameraSpawnSystem::OnSpawnCountChanged);
         Spawn->OnSpawnFormationChanged.AddDynamic(this, &UCameraSpawnSystem::OnFormationChanged);
-    	
+        
         if (Spawn->GetUnitToSpawn())
         {
             ShowUnitPreview(Spawn->GetUnitToSpawn());
@@ -38,72 +39,79 @@ void UCameraSpawnSystem::Init(APlayerCamera* InOwner)
 
 void UCameraSpawnSystem::Tick(float DeltaTime)
 {
-    if (!bIsInSpawnMode || !PreviewSystem || !PreviewSystem->IsValidLowLevel())
+    if (!bIsInSpawnMode || !PreviewSystem)
         return;
 
-    const float CurrentTime =
-        (GetWorldSafe() ? GetWorldSafe()->GetTimeSeconds() : 0.f);
-
+    const float CurrentTime = (GetWorldSafe() ? GetWorldSafe()->GetTimeSeconds() : 0.f);
     UpdatePreviewFollowMouse(CurrentTime);
 }
 
+#pragma region Actions
+
 // ------------------------------------------------------------
-// On spawn key pressed
+// Validation du Spawn
 // ------------------------------------------------------------
 void UCameraSpawnSystem::HandleSpawnInput()
 {
-    if (!bIsInSpawnMode || !PreviewSystem || !GetSpawnComponent())
-        return;
+    if (!bIsInSpawnMode || !PreviewSystem)
+    	return;
+
+    UUnitSpawnComponent* SpawnComp = GetSpawnComponent();
+    if (!SpawnComp)
+    	return;
 
     if (!PreviewSystem->IsPlacementValid())
+    {
+        // TODO: Jouer un son d'erreur ?
+    	UE_LOG(LogTemp, Warning, TEXT("Impossible de spawn %s emplacement non valide"), *SpawnComp->GetUnitToSpawn()->GetName());
         return;
+    }
 
     const FVector SpawnLocation = SpawnRotationPreview.Center;
     const FRotator SpawnRot = SpawnRotationPreview.bPreviewActive ? SpawnRotationPreview.CurrentRotation : FRotator::ZeroRotator;
 
-    GetSpawnComponent()->SpawnUnitsWithTransform(SpawnLocation, SpawnRot);
+    SpawnComp->SpawnUnitsWithTransform(SpawnLocation, SpawnRot);
 
     SpawnRotationPreview.Deactivate();
     bIsInSpawnMode = false;
-	
+    
     if (PreviewSystem)
         PreviewSystem->HidePreview();
 }
 
-// ------------------------------------------------------------
-// Reset forced by selection system / UI
-// ------------------------------------------------------------
 void UCameraSpawnSystem::ResetSpawnState()
 {
     bIsInSpawnMode = false;
     SpawnRotationPreview.Deactivate();
+    LastPreviewedClass = nullptr;
 
     if (PreviewSystem)
         PreviewSystem->HidePreview();
 }
 
+#pragma endregion
+
+#pragma region Preview Logic
+
 // ------------------------------------------------------------
-// Called when unit class changes
+// Mise à jour du visuel (Mesh) de l'unité
 // ------------------------------------------------------------
 void UCameraSpawnSystem::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
 {
-    if (!PreviewSystem)
-        return;
+    if (!PreviewSystem) return;
 
-    if (!EnsurePreviewActor())
+    if (NewUnitClass == LastPreviewedClass && bIsInSpawnMode)
     {
-        UE_LOG(LogTemp, Error, TEXT("[CameraSpawnSystem] ShowUnitPreview - EnsurePreviewActor failed!"));
-        ResetSpawnState();
+        RefreshPreviewInstances();
         return;
     }
 
-    if (!NewUnitClass)
+    if (!EnsurePreviewActor() || !NewUnitClass)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[CameraSpawnSystem] ShowUnitPreview - NewUnitClass is NULL"));
         ResetSpawnState();
         return;
     }
-	
+    
     ASoldierRts* DefaultUnit = NewUnitClass->GetDefaultObject<ASoldierRts>();
     if (!DefaultUnit)
     {
@@ -111,219 +119,221 @@ void UCameraSpawnSystem::ShowUnitPreview(TSubclassOf<ASoldierRts> NewUnitClass)
         return;
     }
 
+    LastPreviewedClass = NewUnitClass;
     const int32 InstanceCount = GetEffectiveSpawnCount();
 
-    const float Yaw = GetOwner()->GetCameraComponent()->GetComponentRotation().Yaw;
-    const FRotator BaseRotation(0, Yaw, 0);
-    SpawnRotationPreview.Reset(BaseRotation);
+    if (GetOwner()->GetCameraComponent())
+    {
+        const float Yaw = GetOwner()->GetCameraComponent()->GetComponentRotation().Yaw;
+        SpawnRotationPreview.Reset(FRotator(0, Yaw, 0));
+    }
 
-    // ------------------------------------------------------------
-    // Skeletal Mesh preview
-    // ------------------------------------------------------------
+    // Détection du type de Mesh (Skeletal vs Static)
+    bool bSuccess = false;
+
+    // A. Skeletal Mesh
     if (USkeletalMeshComponent* SkelComp = DefaultUnit->GetMesh())
     {
         if (USkeletalMesh* Skel = SkelComp->GetSkeletalMeshAsset())
         {
-            if (PreviewSystem->ShowSkeletalPreview(Skel, SkelComp->GetRelativeScale3D(), InstanceCount))
-            {
-                bIsInSpawnMode = true;
-                return;
-            }
+            bSuccess = PreviewSystem->ShowSkeletalPreview(Skel, SkelComp->GetRelativeScale3D(), InstanceCount);
         }
     }
 
-    // ------------------------------------------------------------
-    // Static Mesh preview
-    // ------------------------------------------------------------
-    if (UStaticMeshComponent* StaticComp = DefaultUnit->FindComponentByClass<UStaticMeshComponent>())
+    // B. Static Mesh 
+    if (!bSuccess)
     {
-        if (UStaticMesh* Mesh = StaticComp->GetStaticMesh())
+        if (UStaticMeshComponent* StaticComp = DefaultUnit->FindComponentByClass<UStaticMeshComponent>())
         {
-            if (PreviewSystem->ShowStaticPreview(Mesh, StaticComp->GetRelativeScale3D(), InstanceCount))
+            if (UStaticMesh* Mesh = StaticComp->GetStaticMesh())
             {
-                bIsInSpawnMode = true;
-                return;
+                bSuccess = PreviewSystem->ShowStaticPreview(Mesh, StaticComp->GetRelativeScale3D(), InstanceCount);
             }
         }
     }
 
-    ResetSpawnState();
-}
-
-// ------------------------------------------------------------
-// Ensure preview actor exists
-// ------------------------------------------------------------
-bool UCameraSpawnSystem::EnsurePreviewActor()
-{
-    if (!PreviewSystem)
-        return false;
-
-    return PreviewSystem->EnsurePreviewActor();
-}
-
-// ------------------------------------------------------------
-// Effective spawn count according to formation
-// ------------------------------------------------------------
-int32 UCameraSpawnSystem::GetEffectiveSpawnCount() const
-{
-    UUnitSpawnComponent* Spawn = GetSpawnComponent();
-    if (!Spawn)
-        return 1;
-
-    if (Spawn->GetSpawnFormation() == ESpawnFormation::Custom)
+    if (bSuccess)
     {
-        const FIntPoint Dim = Spawn->GetCustomFormationDimensions();
-        return FMath::Max(1, Dim.X * Dim.Y);
+        bIsInSpawnMode = true;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Impossible de trouver un Mesh valide pour la preview de %s"), *NewUnitClass->GetName());
+        ResetSpawnState();
+    }
+}
+
+// ------------------------------------------------------------
+// Mise à jour des positions
+// ------------------------------------------------------------
+void UCameraSpawnSystem::RefreshPreviewInstances()
+{
+    if (!bIsInSpawnMode || !PreviewSystem || !PreviewSystem->HasPreviewActor())
+        return;
+	
+    TSubclassOf<ASoldierRts> CurrentClass = LastPreviewedClass;
+    LastPreviewedClass = nullptr; 
+    ShowUnitPreview(CurrentClass);
+}
+
+// ------------------------------------------------------------
+// Calculs des transforms
+// ------------------------------------------------------------
+void UCameraSpawnSystem::UpdatePreviewTransforms(const FVector& Center, const FRotator& Facing)
+{
+	if (!PreviewSystem || !PreviewSystem->HasPreviewActor())
+		return;
+
+	PreviewSystem->SetPreviewTransform(Center, Facing);
+
+	UUnitSpawnComponent* SpawnComp = GetSpawnComponent();
+	if (!SpawnComp)
+		return;
+
+	const int32 Count = GetEffectiveSpawnCount();
+	const float Spacing = FMath::Max(SpawnComp->GetFormationSpacing(), 0.f);
+
+	CachedOffsets.Reset();
+    
+	SpawnComp->BuildSpawnFormationOffsets(Count, Spacing, CachedOffsets, FRotator::ZeroRotator);
+
+	if (CachedOffsets.IsEmpty())
+		return;
+
+    CachedTransforms.Reset();
+    CachedTransforms.Reserve(CachedOffsets.Num());
+
+    UWorld* World = GetWorldSafe();
+    FCollisionQueryParams Params;
+    if (GetOwner())
+    	Params.AddIgnoredActor(GetOwner());
+	
+    if (PreviewSystem && PreviewSystem->GetPreviewActor())
+    	Params.AddIgnoredActor(PreviewSystem->GetPreviewActor());
+    
+    FTransform ActorTransform(Facing, Center);
+
+    for (const FVector& Offset : CachedOffsets)
+    {
+        FVector WorldPos = ActorTransform.TransformPosition(Offset);
+
+        FVector TraceStart = WorldPos + FVector(0, 0, 500.f);
+        FVector TraceEnd = WorldPos + FVector(0, 0, -1000.f);
+        FHitResult Hit;
+        
+        if (World && World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+        {
+             WorldPos = Hit.Location;
+        }
+    	
+        FVector LocalPos = ActorTransform.InverseTransformPosition(WorldPos);
+        CachedTransforms.Emplace(FTransform(LocalPos));
     }
 
-    return FMath::Max(1, Spawn->GetUnitsPerSpawn());
+    PreviewSystem->UpdateInstances(CachedTransforms);
 }
 
 // ------------------------------------------------------------
-// Follow mouse + hold-to-rotate
+// Gestion Souris & Rotation (Drag & Drop Logic)
 // ------------------------------------------------------------
 void UCameraSpawnSystem::UpdatePreviewFollowMouse(float CurrentTime)
 {
     if (!PreviewSystem || !PreviewSystem->HasPreviewActor())
-        return;
+    	return;
 
     UUnitSelectionComponent* Selection = GetSelectionComponent();
     if (!Selection)
-        return;
+    	return;
 
     const FHitResult MouseHit = Selection->GetMousePositionOnTerrain();
     const FVector MousePos = MouseHit.Location;
 
     if (MousePos.IsNearlyZero())
-        return;
+    	return;
 
     APlayerController* PC = GetOwner()->GetPlayerController();
     if (!PC)
-        return;
+    	return;
 
-    // Input states
+    // Input States
     const bool bLDown = PC->IsInputKeyDown(EKeys::LeftMouseButton);
     const bool bRDown = PC->IsInputKeyDown(EKeys::RightMouseButton);
     const bool bDown = (bLDown || bRDown);
 
-    const bool bLJust = PC->WasInputKeyJustPressed(EKeys::LeftMouseButton);
-    const bool bRJust = PC->WasInputKeyJustPressed(EKeys::RightMouseButton);
-    const bool bJust = (bLJust || bRJust);
+    const bool bJustPressed = PC->WasInputKeyJustPressed(EKeys::LeftMouseButton);
 
+    // Rotation par défaut alignée caméra
     const float Yaw = GetOwner()->GetCameraComponent()->GetComponentRotation().Yaw;
-    const FRotator MouseRotation(0, Yaw, 0);
+    const FRotator CameraAlignRot(0, Yaw, 0);
 
-    // Start hold
-    if (bJust)
+    // --- State Machine Rotation ---
+    
+    // 1. Début du Clic
+    if (bJustPressed)
     {
-        SpawnRotationPreview.BeginHold(CurrentTime, MousePos, MouseRotation);
+        SpawnRotationPreview.BeginHold(CurrentTime, MousePos, CameraAlignRot);
     }
+    // 2. Relâchement
     else if (!bDown)
     {
         SpawnRotationPreview.StopHold();
     }
 
+    // 3. Mode "Suivi Souris Simple"
     if (!SpawnRotationPreview.bPreviewActive)
     {
         SpawnRotationPreview.Center = MousePos;
-        SpawnRotationPreview.BaseRotation = MouseRotation;
-        SpawnRotationPreview.CurrentRotation = MouseRotation;
+        SpawnRotationPreview.BaseRotation = CameraAlignRot;
+        SpawnRotationPreview.CurrentRotation = CameraAlignRot;
     }
 
-    if (SpawnRotationPreview.bHoldActive &&
-        !SpawnRotationPreview.bPreviewActive)
+    // 4. Détection du passage en mode "Drag-Rotate"
+    if (SpawnRotationPreview.bHoldActive && !SpawnRotationPreview.bPreviewActive)
     {
         if (SpawnRotationPreview.TryActivate(CurrentTime, RotationPreviewHoldTime, MousePos, MousePos))
         {
-            SpawnRotationPreview.InitialDirection = FRotationPreviewState::ResolvePlanarDirection(
-            	MousePos - SpawnRotationPreview.Center, SpawnRotationPreview.BaseRotation);
+            SpawnRotationPreview.InitialDirection = FRotationPreviewState::ResolvePlanarDirection(MousePos - SpawnRotationPreview.Center,
+            	SpawnRotationPreview.BaseRotation);
         }
     }
 
+    // 5. Update pendant le Drag-Rotate
     if (SpawnRotationPreview.bPreviewActive)
     {
         SpawnRotationPreview.UpdateRotation(MousePos);
     }
 
     SpawnRotationPreview.Center = MousePos;
+    
     UpdatePreviewTransforms(SpawnRotationPreview.Center, SpawnRotationPreview.CurrentRotation);
 }
 
-// ------------------------------------------------------------
-// Rebuild instance transforms when formation changes
-// ------------------------------------------------------------
-void UCameraSpawnSystem::RefreshPreviewInstances()
+#pragma endregion
+
+
+#pragma region Helpers & Events
+
+bool UCameraSpawnSystem::EnsurePreviewActor()
 {
-    if (!bIsInSpawnMode || !PreviewSystem || !PreviewSystem->HasPreviewActor())
-        return;
-
-    const int32 NewCount = GetEffectiveSpawnCount();
-    
-    UUnitSpawnComponent* SpawnComp = GetSpawnComponent();
-    if (!SpawnComp)
-        return;
-
-    TSubclassOf<ASoldierRts> UnitClass = SpawnComp->GetUnitToSpawn();
-    if (!UnitClass)
-        return;
-
-    ASoldierRts* DefaultUnit = UnitClass->GetDefaultObject<ASoldierRts>();
-    if (!DefaultUnit)
-        return;
-
-    // Re-show with updated count
-    if (USkeletalMeshComponent* SkelComp = DefaultUnit->GetMesh())
-    {
-        if (USkeletalMesh* Skel = SkelComp->GetSkeletalMeshAsset())
-        {
-            PreviewSystem->ShowSkeletalPreview(Skel, SkelComp->GetRelativeScale3D(), NewCount);
-            return;
-        }
-    }
-
-    if (UStaticMeshComponent* StaticComp = DefaultUnit->FindComponentByClass<UStaticMeshComponent>())
-    {
-        if (UStaticMesh* Mesh = StaticComp->GetStaticMesh())
-        {
-            PreviewSystem->ShowStaticPreview(Mesh, StaticComp->GetRelativeScale3D(), NewCount);
-        }
-    }
+    return (PreviewSystem && PreviewSystem->EnsurePreviewActor());
 }
 
-// ------------------------------------------------------------
-// Compute final transforms for preview instances
-// ------------------------------------------------------------
-void UCameraSpawnSystem::UpdatePreviewTransforms(const FVector& Center, const FRotator& Facing)
+int32 UCameraSpawnSystem::GetEffectiveSpawnCount() const
 {
-    if (!PreviewSystem || !PreviewSystem->HasPreviewActor())
-        return;
-
-    const int32 Count = GetEffectiveSpawnCount();
-    const float Spacing = GetSpawnComponent() ? FMath::Max(GetSpawnComponent()->GetFormationSpacing(), 0.f) : 0.f;
-
-    TArray<FVector> Offsets;
-	GetSpawnComponent()->BuildSpawnFormationOffsets(Count, Spacing, Offsets, Facing);
-
-    if (Offsets.IsEmpty())
-        return;
-
-    TArray<FTransform> Transforms;
-    Transforms.Reserve(Offsets.Num());
-
-    const FQuat RotQ = FRotator(0.f, Facing.Yaw, 0.f).Quaternion();
-
-    for (const FVector& Offset : Offsets)
+    if (UUnitSpawnComponent* Spawn = GetSpawnComponent())
     {
-        const FVector Rotated = RotQ.RotateVector(Offset);
-        Transforms.Add(FTransform(Facing, Center + Rotated));
+        if (Spawn->GetSpawnFormation() == ESpawnFormation::Custom)
+        {
+            const FIntPoint Dim = Spawn->GetCustomFormationDimensions();
+            return FMath::Max(1, Dim.X * Dim.Y);
+        }
+    	
+        return FMath::Max(1, Spawn->GetUnitsPerSpawn());
     }
-
-    PreviewSystem->UpdateInstances(Transforms);
+	
+    return 1;
 }
 
-// ------------------------------------------------------------
-// Event Callbacks
-// ------------------------------------------------------------
 void UCameraSpawnSystem::OnUnitClassChanged(TSubclassOf<ASoldierRts> NewUnitClass)
 {
     ShowUnitPreview(NewUnitClass);
@@ -338,3 +348,5 @@ void UCameraSpawnSystem::OnFormationChanged(ESpawnFormation /*NewFormation*/)
 {
     RefreshPreviewInstances();
 }
+
+#pragma endregion

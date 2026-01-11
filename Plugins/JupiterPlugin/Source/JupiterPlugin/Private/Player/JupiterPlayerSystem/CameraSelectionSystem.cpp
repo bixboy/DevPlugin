@@ -1,9 +1,9 @@
 ﻿#include "Player/JupiterPlayerSystem/CameraSelectionSystem.h"
+
+#include "Components/Unit/UnitSelectionComponent.h"
 #include "Player/PlayerCamera.h"
-#include "Components/UnitSelectionComponent.h"
 #include "Player/Selections/SelectionBox.h"
 #include "Interfaces/Selectable.h"
-#include "Units/SoldierRts.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
@@ -15,77 +15,65 @@ void UCameraSelectionSystem::Init(APlayerCamera* InOwner)
     Super::Init(InOwner);
 
     if (!GetWorldSafe() || !InOwner)
-        return;
+    	return;
 
-    // Spawn SelectionBox actor
-    FActorSpawnParameters Params;
-    Params.Owner = InOwner;
-    Params.Instigator = InOwner;
+    if (InOwner->GetSelectionBoxClass())
+    {
+        FActorSpawnParameters Params;
+        Params.Owner = InOwner;
+        Params.Instigator = InOwner;
 
-    SelectionBox = GetWorldSafe()->SpawnActor<ASelectionBox>(
-        InOwner->GetSelectionBoxClass(),
-        FVector::ZeroVector,
-        FRotator::ZeroRotator,
-        Params
-    );
+        SelectionBox = GetWorldSafe()->SpawnActor<ASelectionBox>(
+            InOwner->GetSelectionBoxClass(),
+            FVector::ZeroVector,
+            FRotator::ZeroRotator,
+            Params
+        );
 
-    if (SelectionBox)
-        SelectionBox->SetOwner(InOwner);
+        if (SelectionBox)
+        {
+            SelectionBox->SetOwner(InOwner);
+            SelectionBox->SetActorHiddenInGame(true);
+        }
+    }
 }
 
 void UCameraSelectionSystem::Tick(float DeltaTime)
 {
-    // Nothing to tick for now
+    if (bBoxSelect && SelectionBox)
+    {
+        UpdateBoxSelection();
+    }
 }
-
 
 // --------------------------------------------------
 // INPUT : Mouse Down
 // --------------------------------------------------
 void UCameraSelectionSystem::HandleSelectionPressed()
 {
+    if (!GetOwner() || !GetSelectionComponent())
+    	return;
 
-	if (!Owner.IsValid())
-	{
-		UE_LOG(LogTemp, Error, TEXT("GetSelectionComponent FAILED: Owner invalid"));
-		return;
-	}
-
-	if (!Owner->GetSelectionComponent())
-	{
-		UE_LOG(LogTemp, Error, TEXT("GetSelectionComponent FAILED: Owner->SelectionComponent is NULL"));
-	}
-	
-    if (!GetSelectionComponent())
-        return;
-
-	GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, "Selection Started");
-	
-    // Check if we are creating a patrol route
     if (CommandSystem && CommandSystem->IsBuildingPatrolPath())
     {
-        //CommandSystem->CancelPatrolCreation();
-        return; // Do not proceed with selection
+        return;
     }
-
+    
+    // Raycast Terrain
     FHitResult Hit;
-    if (!GetMouseHit(Hit))
+    if (!GetMouseHitOnTerrain(Hit))
     {
         bMouseGrounded = false;
         return;
     }
 
     bMouseGrounded = true;
+    ClickStartLocation = Hit.Location;
 
     if (SpawnSystem)
-        SpawnSystem->ResetSpawnState();
-
-    GetSelectionComponent()->Handle_Selection(nullptr);
-
-    bBoxSelect = false;
-    ClickStartLocation = Hit.Location;
+    	SpawnSystem->ResetSpawnState();
+	
 }
-
 
 // --------------------------------------------------
 // INPUT : Mouse Released
@@ -93,13 +81,13 @@ void UCameraSelectionSystem::HandleSelectionPressed()
 void UCameraSelectionSystem::HandleSelectionReleased()
 {
     if (!bMouseGrounded)
-        return;
+    	return;
 
     bMouseGrounded = false;
 
-    if (bBoxSelect && SelectionBox)
+    if (bBoxSelect)
     {
-        SelectionBox->End();
+        EndBoxSelection();
         bBoxSelect = false;
         return;
     }
@@ -107,46 +95,80 @@ void UCameraSelectionSystem::HandleSelectionReleased()
     FinalizeSelection();
 }
 
-
 // --------------------------------------------------
-// INPUT : Mouse Hold
+// INPUT : Mouse Hold (Triggered)
 // --------------------------------------------------
 void UCameraSelectionSystem::HandleSelectionHold(const FInputActionValue& Value)
 {
     if (!bMouseGrounded)
-        return;
-
-    const float HeldValue = Value.Get<float>();
-
-    if (HeldValue == 0.f)
-    {
-        if (SelectionBox)
-            SelectionBox->End();
-        return;
-    }
+    	return;
 
     APlayerController* PC = GetOwner()->GetPlayerController();
-    if (!PC || !SelectionBox)
-        return;
+    if (!PC)
+    	return;
 
-    if (PC->GetInputKeyTimeDown(EKeys::LeftMouseButton) >= LeftMouseHoldThreshold)
+    float TimeDown = PC->GetInputKeyTimeDown(EKeys::LeftMouseButton);
+
+    if (TimeDown >= LeftMouseHoldThreshold && !bBoxSelect)
     {
-        if (!bBoxSelect)
+        StartBoxSelection();
+        bBoxSelect = true;
+    }
+}
+
+// --------------------------------------------------
+// BOX LOGIC
+// --------------------------------------------------
+
+void UCameraSelectionSystem::StartBoxSelection()
+{
+    if (!SelectionBox || !GetSelectionComponent())
+    	return;
+
+    GetSelectionComponent()->Handle_Selection(nullptr);
+	
+    SelectionBox->Start(ClickStartLocation, FRotator::ZeroRotator); 
+}
+
+void UCameraSelectionSystem::UpdateBoxSelection()
+{
+    if (!SelectionBox)
+    	return;
+
+    FHitResult Hit;
+    if (GetMouseHitOnTerrain(Hit))
+    {
+    	SelectionBox->UpdateEndLocation(Hit.Location);
+    }
+}
+
+void UCameraSelectionSystem::EndBoxSelection()
+{
+    if (SelectionBox && GetSelectionComponent())
+    {
+        TArray<AActor*> SelectedActors = SelectionBox->End();
+        
+        if (SelectedActors.Num() > 0)
         {
-            StartBoxSelection();
-            bBoxSelect = true;
+            GetSelectionComponent()->Handle_Selection(SelectedActors);
+        }
+        else
+        {
+            // Optional: If box empty, maybe clear selection? 
+            // Original behavior: Handle_Selection(nullptr) if empty.
+            GetSelectionComponent()->Handle_Selection(nullptr); 
         }
     }
 }
 
 
 // --------------------------------------------------
-// FINAL SELECTION
+// SINGLE CLICK LOGIC
 // --------------------------------------------------
 void UCameraSelectionSystem::FinalizeSelection()
 {
     if (!GetSelectionComponent())
-        return;
+    	return;
 
     AActor* HitActor = GetHoveredActor();
 
@@ -154,48 +176,65 @@ void UCameraSelectionSystem::FinalizeSelection()
     {
         GetSelectionComponent()->Handle_Selection(HitActor);
     }
+    else
+    {
+        GetSelectionComponent()->Handle_Selection(nullptr);
+    }
 }
 
 
 // --------------------------------------------------
-// Double Tap : Select all same type
+// DOUBLE TAP : Select All Visible of Type
 // --------------------------------------------------
 void UCameraSelectionSystem::HandleSelectAll()
 {
     if (!GetSelectionComponent() || !GetOwner())
-        return;
+    	return;
 
+    TArray<AActor*> CurrentSelection = GetSelectionComponent()->GetSelectedActors();
+    if (CurrentSelection.IsEmpty())
+    	return;
+
+    AActor* ReferenceUnit = CurrentSelection[0];
+    if (!ReferenceUnit->Implements<USelectable>())
+    	return;
+
+    const ETeams RefTeam = ISelectable::Execute_GetCurrentTeam(ReferenceUnit);
+	
+    TArray<AActor*> VisibleActors = GetOwner()->GetAllActorsOfClassInCameraBound<AActor>(GetWorldSafe(), AActor::StaticClass());
+    
     TArray<AActor*> ToSelect;
-    TArray<AActor*> VisibleUnits = GetOwner()->GetAllActorsOfClassInCameraBound<AActor>(GetWorldSafe(), ASoldierRts::StaticClass());
+    ToSelect.Reserve(VisibleActors.Num());
 
-    if (VisibleUnits.IsEmpty())
-        return;
-
-    const TArray<AActor*> Current = GetSelectionComponent()->GetSelectedActors();
-    if (Current.IsEmpty())
-        return;
-
-    const ETeams Team = ISelectable::Execute_GetCurrentTeam(Current[0]);
-
-    for (AActor* Unit : VisibleUnits)
+    for (AActor* Actor : VisibleActors)
     {
-        if (Unit && ISelectable::Execute_GetCurrentTeam(Unit) == Team)
-            ToSelect.Add(Unit);
+        if (Actor && Actor->Implements<USelectable>())
+        {
+            bool bSameClass = Actor->GetClass() == ReferenceUnit->GetClass();
+            bool bSameTeam = ISelectable::Execute_GetCurrentTeam(Actor) == RefTeam;
+
+            if (bSameClass && bSameTeam)
+            {
+                ToSelect.Add(Actor);
+            }
+        }
     }
 
-    if (!ToSelect.IsEmpty())
+    if (ToSelect.Num() > 0)
+    {
         GetSelectionComponent()->Handle_Selection(ToSelect);
+    }
 }
 
 // --------------------------------------------------
-// Helpers
+// HELPERS
 // --------------------------------------------------
 
-bool UCameraSelectionSystem::GetMouseHit(FHitResult& OutHit) const
+bool UCameraSelectionSystem::GetMouseHitOnTerrain(FHitResult& OutHit) const
 {
     if (!GetSelectionComponent())
-        return false;
-
+    	return false;
+	
     OutHit = GetSelectionComponent()->GetMousePositionOnTerrain();
     return OutHit.bBlockingHit;
 }
@@ -203,41 +242,31 @@ bool UCameraSelectionSystem::GetMouseHit(FHitResult& OutHit) const
 AActor* UCameraSelectionSystem::GetHoveredActor() const
 {
     if (!GetOwner() || !GetWorldSafe())
-        return nullptr;
+    	return nullptr;
 
-    FVector Wl, Wd;
-	
     APlayerController* PC = GetOwner()->GetPlayerController();
     if (!PC)
-        return nullptr;
+    	return nullptr;
 
-    PC->DeprojectMousePositionToWorld(Wl, Wd);
-    const FVector End = Wl + Wd * 1000000.f;
+    FVector WLoc, WDir;
+    if (PC->DeprojectMousePositionToWorld(WLoc, WDir))
+    {
+        FVector End = WLoc + WDir * 1000000.f;
 
-    FHitResult Hit;
-    FCollisionQueryParams Params;
-    Params.AddIgnoredActor(GetOwner());
+        FHitResult Hit;
+        FCollisionQueryParams Params;
+        Params.AddIgnoredActor(GetOwner());
+    	
+        if (SelectionBox)
+        	Params.AddIgnoredActor(SelectionBox);
 
-    if (GetWorldSafe()->LineTraceSingleByChannel(Hit, Wl, End, ECC_Visibility, Params))
-        return Hit.GetActor();
-
+        if (GetWorldSafe()->LineTraceSingleByChannel(Hit, WLoc, End, ECC_Visibility, Params))
+        {
+            if (Hit.GetActor() && Hit.GetActor()->Implements<USelectable>())
+            {
+                return Hit.GetActor();
+            }
+        }
+    }
     return nullptr;
-}
-
-void UCameraSelectionSystem::StartBoxSelection()
-{
-    if (SelectionBox)
-        SelectionBox->Start(ClickStartLocation, GetOwner()->TargetRotation);
-}
-
-void UCameraSelectionSystem::EndBoxSelection()
-{
-    if (SelectionBox)
-        SelectionBox->End();
-}
-
-void UCameraSelectionSystem::ResetSelectionState()
-{
-    bMouseGrounded = false;
-    bBoxSelect = false;
 }

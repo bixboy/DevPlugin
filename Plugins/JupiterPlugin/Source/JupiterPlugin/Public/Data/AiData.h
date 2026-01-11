@@ -33,9 +33,9 @@ enum class ECombatBehavior : uint8
 UENUM(BlueprintType)
 enum class ETeams : uint8
 {
-	Clone	UMETA(DisplayName = "Clone Team"),
-	Droid	UMETA(DisplayName = "Droid Team"),
-	HiveMind	UMETA(DisplayName = "HiveMind Team")
+	Clone UMETA(DisplayName = "Clone Team"),
+	Droid UMETA(DisplayName = "Droid Team"),
+	HiveMind UMETA(DisplayName = "HiveMind Team")
 };
 
 USTRUCT(BlueprintType)
