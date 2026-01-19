@@ -348,3 +348,80 @@ void UUnitSelectionComponent::RefreshCachedSelection()
         CachedSelectedActors.Add(Actor);
 }
 
+
+void UUnitSelectionComponent::SetControlGroup(int32 GroupIndex)
+{
+    if (GroupIndex < 0 || GroupIndex > 9)
+		return;
+
+    ControlGroups.Remove(GroupIndex);
+
+    const TArray<AActor*> CurrentSelection = GetSelectedActors();
+    if (CurrentSelection.IsEmpty())
+    {
+        OnControlGroupUpdated.Broadcast(GroupIndex, 0);
+        UE_LOG(LogTemp, Log, TEXT("Control Group %d Cleared"), GroupIndex);
+        return;
+    }
+
+    TArray<TWeakObjectPtr<AActor>>& Group = ControlGroups.Add(GroupIndex);
+    for (AActor* Actor : CurrentSelection)
+    {
+        Group.Add(Actor);
+    }
+
+    OnControlGroupUpdated.Broadcast(GroupIndex, Group.Num());
+    UE_LOG(LogTemp, Log, TEXT("Control Group %d Set: %d Units"), GroupIndex, Group.Num());
+}
+
+void UUnitSelectionComponent::RecallControlGroup(int32 GroupIndex)
+{
+    if (!ControlGroups.Contains(GroupIndex))
+		return;
+
+    TArray<TWeakObjectPtr<AActor>>& Group = ControlGroups[GroupIndex];
+    TArray<AActor*> ValidActors;
+    bool bNeedsCleanup = false;
+
+    for (int32 i = Group.Num() - 1; i >= 0; --i)
+    {
+        AActor* Actor = Group[i].Get();
+        if (IsValid(Actor))
+        {
+            ValidActors.Add(Actor);
+        }
+        else
+        {
+            Group.RemoveAt(i);
+            bNeedsCleanup = true;
+        }
+    }
+
+    if (bNeedsCleanup)
+    {
+        if (Group.IsEmpty())
+        {
+            ControlGroups.Remove(GroupIndex);
+            OnControlGroupUpdated.Broadcast(GroupIndex, 0);
+        }
+        else
+        {
+            OnControlGroupUpdated.Broadcast(GroupIndex, Group.Num());
+        }
+    }
+
+    Handle_Selection(ValidActors);
+    UE_LOG(LogTemp, Log, TEXT("Control Group %d Recalled: %d Units"), GroupIndex, ValidActors.Num());
+}
+
+void UUnitSelectionComponent::ClearControlGroup(int32 GroupIndex)
+{
+    if (GroupIndex < 0 || GroupIndex > 9)
+		return;
+
+    if (ControlGroups.Remove(GroupIndex) > 0)
+    {
+        OnControlGroupUpdated.Broadcast(GroupIndex, 0);
+        UE_LOG(LogTemp, Log, TEXT("Control Group %d Cleared Manually"), GroupIndex);
+    }
+}

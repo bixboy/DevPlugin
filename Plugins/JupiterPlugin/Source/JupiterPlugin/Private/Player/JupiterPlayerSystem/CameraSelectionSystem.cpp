@@ -154,8 +154,6 @@ void UCameraSelectionSystem::EndBoxSelection()
         }
         else
         {
-            // Optional: If box empty, maybe clear selection? 
-            // Original behavior: Handle_Selection(nullptr) if empty.
             GetSelectionComponent()->Handle_Selection(nullptr); 
         }
     }
@@ -223,6 +221,60 @@ void UCameraSelectionSystem::HandleSelectAll()
     if (ToSelect.Num() > 0)
     {
         GetSelectionComponent()->Handle_Selection(ToSelect);
+    }
+}
+
+// --------------------------------------------------
+// Control Groups
+// --------------------------------------------------
+
+void UCameraSelectionSystem::HandleControlGroupInput(const FInputActionValue& Value, int32 GroupIndex)
+{
+    APlayerController* PC = GetOwner() ? GetOwner()->GetPlayerController() : nullptr;
+    if (!PC)
+    {
+        return;
+    }
+
+    // Check Modifiers
+    const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+    const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
+
+    if (bCtrl)
+    {
+        HandleSetGroup(GroupIndex);
+    }
+    else if (bAlt)
+    {
+        HandleClearGroup(GroupIndex);
+    }
+    else
+    {
+        HandleRecallGroup(GroupIndex);
+    }
+}
+
+void UCameraSelectionSystem::HandleRecallGroup(int32 Index)
+{
+    if (GetSelectionComponent())
+    {
+        GetSelectionComponent()->RecallControlGroup(Index);
+    }
+}
+
+void UCameraSelectionSystem::HandleSetGroup(int32 Index)
+{
+    if (GetSelectionComponent())
+    {
+        GetSelectionComponent()->SetControlGroup(Index);
+    }
+}
+
+void UCameraSelectionSystem::HandleClearGroup(int32 Index)
+{
+    if (GetSelectionComponent())
+    {
+        GetSelectionComponent()->ClearControlGroup(Index);
     }
 }
 

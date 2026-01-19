@@ -12,6 +12,7 @@ class APlayerController;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FSelectedUpdatedDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSelectionChangedSignature, const TArray<AActor*>&, SelectedActors);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSelectionDeltaSignature, const TArray<AActor*>&, AddedActors, const TArray<AActor*>&, RemovedActors);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnControlGroupUpdatedSignature, int32, GroupIndex, int32, UnitCount);
 
 UCLASS(ClassGroup = (RTS), meta = (BlueprintSpawnableComponent))
 class JUPITERPLUGIN_API UUnitSelectionComponent : public UActorComponent
@@ -62,6 +63,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS|Selection")
     void DestroyHud();
 
+    /** Sets the current selection to the specified control group index (0-9). */
+    UFUNCTION(BlueprintCallable, Category = "RTS|Selection|Groups")
+    void SetControlGroup(int32 GroupIndex);
+
+    /** Recalls the selection from the specified control group index (0-9). */
+    UFUNCTION(BlueprintCallable, Category = "RTS|Selection|Groups")
+    void RecallControlGroup(int32 GroupIndex);
+
+    /** Clears the specified control group index (0-9). */
+    UFUNCTION(BlueprintCallable, Category = "RTS|Selection|Groups")
+    void ClearControlGroup(int32 GroupIndex);
+
     /** Delegate fired whenever the replicated selection array changes. */
     UPROPERTY(BlueprintAssignable, Category = "RTS|Selection")
     FSelectedUpdatedDelegate OnSelectedUpdate;
@@ -73,6 +86,10 @@ public:
     /** Delegate providing the delta between two selection states. */
     UPROPERTY(BlueprintAssignable, Category = "RTS|Selection")
     FOnSelectionDeltaSignature OnSelectionDelta;
+
+    /** Delegate fired when a control group is updated. */
+    UPROPERTY(BlueprintAssignable, Category = "RTS|Selection|Groups")
+    FOnControlGroupUpdatedSignature OnControlGroupUpdated;
 
     /** Asset manager reference exposed for UI driven asset loading. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTS|Selection")
@@ -121,6 +138,9 @@ protected:
     /** Cached weak references used to compute selection deltas locally. */
     UPROPERTY()
     TArray<TWeakObjectPtr<AActor>> CachedSelectedActors;
+
+    /** Map of control groups to their assigned units. using weak pointers to handle death. */
+    TMap<int32, TArray<TWeakObjectPtr<AActor>>> ControlGroups;
 
     /** Resolves the controller that owns this selection component. */
     APlayerController* ResolveOwnerController() const;

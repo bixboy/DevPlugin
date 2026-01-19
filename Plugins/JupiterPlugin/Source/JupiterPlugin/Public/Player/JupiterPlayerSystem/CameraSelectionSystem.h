@@ -23,6 +23,12 @@ public:
 	void HandleSelectionReleased();
 	void HandleSelectionHold(const FInputActionValue& Value);
 	void HandleSelectAll();
+	
+	// --- Control Groups ---
+	void HandleControlGroupInput(const FInputActionValue& Value, int32 GroupIndex);
+	void HandleRecallGroup(int32 Index);
+	void HandleSetGroup(int32 Index);
+	void HandleClearGroup(int32 Index);
 
 	// --- Dependency Injection ---
 	void SetCommandSystem(UCameraCommandSystem* InCmd) { CommandSystem = InCmd; }

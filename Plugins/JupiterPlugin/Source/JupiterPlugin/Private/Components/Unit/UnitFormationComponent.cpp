@@ -5,11 +5,6 @@
 #include "Net/UnrealNetwork.h"
 
 
-namespace
-{
-    constexpr float TwoPi = 6.28318530718f;
-}
-
 UUnitFormationComponent::UUnitFormationComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
@@ -221,7 +216,7 @@ FVector UUnitFormationComponent::CalculateOffset(int32 Index, int32 TotalUnits) 
                 if (Index != 0)
                 {
                     FRandomStream Stream(Index * 137);
-                    const float Angle = (Index / static_cast<float>(TotalUnits)) * TwoPi;
+                    const float Angle = (Index / static_cast<float>(TotalUnits)) * TWO_PI;
                     const float Radius = Stream.FRandRange(-0.5f, 0.5f) * FormationSpacing;
                     Offset.X += Radius * FMath::Cos(Angle);
                     Offset.Y += Radius * FMath::Sin(Angle);
