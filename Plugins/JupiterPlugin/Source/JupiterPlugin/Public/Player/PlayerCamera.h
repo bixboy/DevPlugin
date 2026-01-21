@@ -118,8 +118,8 @@ protected:
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Selection")
     TObjectPtr<UInputAction> DoubleTapAction;
     
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Selection")
-    TArray<TObjectPtr<UInputAction>> ControlGroupActions;
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs")
+	TObjectPtr<UInputAction> ControlGroupAction;
 
     // Command Actions
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")

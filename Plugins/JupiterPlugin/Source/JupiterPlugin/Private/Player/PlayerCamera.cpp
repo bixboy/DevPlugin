@@ -140,14 +140,7 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
         Bind(SelectHoldAction, ETriggerEvent::Triggered, SelectionSystem, &UCameraSelectionSystem::HandleSelectionHold);
         Bind(DoubleTapAction, ETriggerEvent::Completed, SelectionSystem, &UCameraSelectionSystem::HandleSelectAll);
 
-        // Control Groups Bindings
-        for (int32 i = 0; i < ControlGroupActions.Num(); ++i)
-        {
-            if (ControlGroupActions[i])
-            {
-                EIC->BindAction(ControlGroupActions[i], ETriggerEvent::Started, SelectionSystem.Get(), &UCameraSelectionSystem::HandleControlGroupInput, i);
-            }
-        }
+    	EIC->BindAction(ControlGroupAction, ETriggerEvent::Started, SelectionSystem.Get(), &UCameraSelectionSystem::HandleControlGroupInput);
     }
 
     // ----------------------------------------------------

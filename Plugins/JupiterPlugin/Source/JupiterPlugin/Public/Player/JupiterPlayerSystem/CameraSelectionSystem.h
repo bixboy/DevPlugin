@@ -25,7 +25,7 @@ public:
 	void HandleSelectAll();
 	
 	// --- Control Groups ---
-	void HandleControlGroupInput(const FInputActionValue& Value, int32 GroupIndex);
+	void HandleControlGroupInput(const FInputActionValue& Value);
 	void HandleRecallGroup(int32 Index);
 	void HandleSetGroup(int32 Index);
 	void HandleClearGroup(int32 Index);

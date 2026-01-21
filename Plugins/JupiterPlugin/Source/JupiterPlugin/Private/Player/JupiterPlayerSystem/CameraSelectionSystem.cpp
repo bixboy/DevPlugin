@@ -228,30 +228,31 @@ void UCameraSelectionSystem::HandleSelectAll()
 // Control Groups
 // --------------------------------------------------
 
-void UCameraSelectionSystem::HandleControlGroupInput(const FInputActionValue& Value, int32 GroupIndex)
+void UCameraSelectionSystem::HandleControlGroupInput(const FInputActionValue& Value)
 {
-    APlayerController* PC = GetOwner() ? GetOwner()->GetPlayerController() : nullptr;
-    if (!PC)
-    {
-        return;
-    }
+	APlayerController* PC = GetOwner() ? GetOwner()->GetPlayerController() : nullptr;
+	if (!PC)
+		return;
+	
+	FVector InputVector = Value.Get<FVector>(); 
+	int32 RawValue = FMath::RoundToInt(InputVector.X);
+	int32 GroupIndex = RawValue % 10;
 
-    // Check Modifiers
-    const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
-    const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
+	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+	const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
 
-    if (bCtrl)
-    {
-        HandleSetGroup(GroupIndex);
-    }
-    else if (bAlt)
-    {
-        HandleClearGroup(GroupIndex);
-    }
-    else
-    {
-        HandleRecallGroup(GroupIndex);
-    }
+	if (bCtrl)
+	{
+		HandleSetGroup(GroupIndex);
+	}
+	else if (bAlt)
+	{
+		HandleClearGroup(GroupIndex);
+	}
+	else
+	{
+		HandleRecallGroup(GroupIndex);
+	}
 }
 
 void UCameraSelectionSystem::HandleRecallGroup(int32 Index)
