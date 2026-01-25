@@ -4,76 +4,68 @@
 #include "Components/Image.h"
 #include "Components/Border.h"
 #include "Components/ScaleBox.h"
-
-void UCustomButtonWidget::SetButtonColor(FLinearColor NewColor)
-{
-	FillColor = NewColor;
-	bOverride_FillColor = true;
-	bEnableFill = true;
-	UpdateButtonVisuals(true);
-}
-
-#include "Components/Border.h"
-#include "Components/Button.h"
-#include "Components/Image.h"
 #include "Components/ScaleBoxSlot.h"
-#include "Components/TextBlock.h"
 #include "Styling/SlateBrush.h"
 
 namespace
 {
-	FSlateBrush CreateUpdatedBrush(const FSlateBrush& InBrush, const FLinearColor& TintColor, const FLinearColor& OutlineColor)
-	{
-		FSlateBrush Result = InBrush;
-		Result.TintColor = FSlateColor(TintColor);
-		Result.OutlineSettings.Color = OutlineColor;
-		return Result;
-	}
+    FSlateBrush CreateUpdatedBrush(const FSlateBrush& InBrush, const FLinearColor& TintColor)
+    {
+       FSlateBrush Result = InBrush;
+       Result.TintColor = FSlateColor(TintColor);
+       return Result;
+    }
+}
+
+void UCustomButtonWidget::SetButtonColor(FLinearColor NewColor)
+{
+    FillColor = NewColor;
+    bOverride_FillColor = true;
+    bEnableFill = true;
+    SetButtonSettings();
 }
 
 void UCustomButtonWidget::NativePreConstruct()
 {
-	Super::NativePreConstruct();
+    Super::NativePreConstruct();
 
-	if (!Button || !ButtonTextBlock || !ButtonBorder)
-		return;
+    if (!Button)
+       return;
 
-	if (!Button->OnClicked.IsAlreadyBound(this, &UCustomButtonWidget::OnCustomUIButtonClickedEvent))
-		Button->OnClicked.AddDynamic(this, &UCustomButtonWidget::OnCustomUIButtonClickedEvent);
+    // Bindings
+    if (!Button->OnClicked.IsAlreadyBound(this, &UCustomButtonWidget::OnCustomUIButtonClickedEvent))
+       Button->OnClicked.AddDynamic(this, &UCustomButtonWidget::OnCustomUIButtonClickedEvent);
 
-	if (!Button->OnHovered.IsAlreadyBound(this, &UCustomButtonWidget::OnCustomUIButtonHoveredEvent))
-		Button->OnHovered.AddDynamic(this, &UCustomButtonWidget::OnCustomUIButtonHoveredEvent);
+    if (!Button->OnHovered.IsAlreadyBound(this, &UCustomButtonWidget::OnCustomUIButtonHoveredEvent))
+       Button->OnHovered.AddDynamic(this, &UCustomButtonWidget::OnCustomUIButtonHoveredEvent);
 
-	if (!Button->OnUnhovered.IsAlreadyBound(this, &UCustomButtonWidget::OnCustomUIButtonUnHoveredEvent))
-		Button->OnUnhovered.AddDynamic(this, &UCustomButtonWidget::OnCustomUIButtonUnHoveredEvent);
+    if (!Button->OnUnhovered.IsAlreadyBound(this, &UCustomButtonWidget::OnCustomUIButtonUnHoveredEvent))
+       Button->OnUnhovered.AddDynamic(this, &UCustomButtonWidget::OnCustomUIButtonUnHoveredEvent);
 
-	UpdateButtonText(ButtonText);
-	SetButtonSettings();
+    UpdateButtonText(ButtonText);
+    SetButtonSettings();
 }
 
 void UCustomButtonWidget::SetButtonText(const FText& InText)
 {
-	if (!ButtonTextBlock)
-		return;
-
-	bOverride_ButtonText = InText.IsEmpty();
-	ButtonText = InText;
-	UpdateButtonText(ButtonText);
+    ButtonText = InText;
+    bOverride_ButtonText = !InText.IsEmpty(); 
+    UpdateButtonText(ButtonText);
 }
 
 void UCustomButtonWidget::ToggleButtonIsSelected(bool bNewValue)
 {
-	if (bIsSelected == bNewValue)
-		return;
+    if (bIsSelected == bNewValue)
+       return;
 
-	bIsSelected = bNewValue;
-	UpdateButtonVisuals(true);
+    bIsSelected = bNewValue;
+    UpdateButtonVisuals(true);
 }
 
 void UCustomButtonWidget::SetButtonTexture(UTexture2D* NewTexture)
 {
-	ButtonTexture = NewTexture;
-	SetButtonSettings();
+    ButtonTexture = NewTexture;
+    SetButtonSettings();
 }
 
 //-------------------------- Events & Delegates -----------------------------
@@ -81,21 +73,21 @@ void UCustomButtonWidget::SetButtonTexture(UTexture2D* NewTexture)
 
 void UCustomButtonWidget::OnCustomUIButtonClickedEvent()
 {
-	OnButtonClicked.Broadcast(this, ButtonIndex);
+    OnButtonClicked.Broadcast(this, ButtonIndex);
 }
 
 void UCustomButtonWidget::OnCustomUIButtonHoveredEvent()
 {
-	bIsHovered = true;
-	UpdateButtonVisuals(false);
-	OnButtonHovered.Broadcast(this, ButtonIndex);
+    bIsHovered = true;
+    UpdateButtonVisuals(false);
+    OnButtonHovered.Broadcast(this, ButtonIndex);
 }
 
 void UCustomButtonWidget::OnCustomUIButtonUnHoveredEvent()
 {
-	bIsHovered = false;
-	UpdateButtonVisuals(false);
-	OnButtonUnHovered.Broadcast(this, ButtonIndex);
+    bIsHovered = false;
+    UpdateButtonVisuals(false);
+    OnButtonUnHovered.Broadcast(this, ButtonIndex);
 }
 
 #pragma endregion
@@ -105,131 +97,156 @@ void UCustomButtonWidget::OnCustomUIButtonUnHoveredEvent()
 
 void UCustomButtonWidget::UpdateButtonText(const FText& InText)
 {
-	if (ButtonTextBlock)
-	{
-		ButtonTextBlock->SetText(InText);
+    if (!ButtonTextBlock)
+       return;
+    
+    const bool bShouldShow = bOverride_ButtonText && !InText.IsEmpty();
+    
+    if (bShouldShow)
+    {
+       if (TextScaleBox)
+       {
+           TextScaleBox->SetVisibility(ESlateVisibility::HitTestInvisible);
+       }
+       
+       ButtonTextBlock->SetVisibility(ESlateVisibility::HitTestInvisible);
+       ButtonTextBlock->SetText(InText);
 
-		FSlateFontInfo NewFontInfo = ButtonTextBlock->GetFont();
-		NewFontInfo.Size = TextScale;
-		ButtonTextBlock->SetFont(NewFontInfo);
-	}
+       FSlateFontInfo NewFontInfo = ButtonTextBlock->GetFont();
+       NewFontInfo.Size = TextScale;
+       ButtonTextBlock->SetFont(NewFontInfo);
+        
+       if (UScaleBoxSlot* ScaleBoxSlot = Cast<UScaleBoxSlot>(ButtonTextBlock->Slot))
+       {
+          ScaleBoxSlot->SetHorizontalAlignment(TextAlignmentHorizontal);
+          ScaleBoxSlot->SetVerticalAlignment(TextAlignmentVertical);
+       }
+    }
+    else
+    {
+       ButtonTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+       if (TextScaleBox)
+       {
+           TextScaleBox->SetVisibility(ESlateVisibility::Collapsed);
+       }
+    }
 }
 
 void UCustomButtonWidget::SetButtonSettings()
 {
-	if (!ButtonBorder)
-		return;
+    // --- 1. CALCULS DES ÉTATS ---
+    bUseTexture = bEnableTexture && ButtonTexture != nullptr;
+    bUseBorderTexture = static_cast<bool>(bOverride_BorderTexture);
+    bUseFill = bEnableFill;
 
-	bUseTexture = bEnableTexture && ButtonTexture != nullptr;
-	bUseFill = bEnableFill && (!bUseTexture || bAllowFillWhenTextureIsSet);
+    CachedFillColor = bOverride_FillColor ? FillColor : (ButtonBorder ? ButtonBorder->GetBrushColor() : FLinearColor::White);
+    CachedFillHoverColor = bOverride_FillHoverColor ? FillHoverColor : CachedFillColor;
+    
+    CachedBorderColor = bOverride_BorderColor ? BorderColor : CachedFillColor;
+    CachedBorderHoverColor = bOverride_BorderHoverColor ? BorderHoverColor : CachedBorderColor;
 
-	CachedFillColor = bOverride_FillColor ? FillColor : ButtonBorder->GetBrushColor();
-	CachedFillHoverColor = bOverride_FillHoverColor ? FillHoverColor : CachedFillColor;
-	
-	CachedBorderColor = bOverride_BorderColor ? BorderColor : CachedFillColor;
-	CachedBorderHoverColor = bOverride_BorderHoverColor ? BorderHoverColor : CachedBorderColor;
+    CachedTextureAlpha = bOverride_Texture_Alpha ? TextureAlpha : 1.f;
+    CachedTextureHoverAlpha = bOverride_Texture_Alpha ? TextureHoverAlpha : CachedTextureAlpha;
+    
+    CachedTextureScale = bOverride_Texture_Scale ? TextureScale : 1.f;
+    CachedTextureHoverScale = bOverride_Texture_Scale ? TextureHoverScale : CachedTextureScale;
+    
+    CachedTextureShift.X = bOverride_Texture_Shift ? TextureShiftX : 0.f;
+    CachedTextureShift.Y = bOverride_Texture_Shift ? TextureShiftY : 0.f;
 
-	CachedTextureAlpha = bOverride_Texture_Alpha ? TextureAlpha : 1.f;
-	CachedTextureHoverAlpha = bOverride_Texture_Alpha ? TextureHoverAlpha : CachedTextureAlpha;
-	
-	CachedTextureScale = bOverride_Texture_Scale ? TextureScale : 1.f;
-	CachedTextureHoverScale = bOverride_Texture_Scale ? TextureHoverScale : CachedTextureScale;
-	
-	CachedTextureShift.X = bOverride_Texture_Shift ? TextureShiftX : 0.f;
-	CachedTextureShift.Y = bOverride_Texture_Shift ? TextureShiftY : 0.f;
+    bUsingTextureSizeOverride = static_cast<bool>(bOverride_Texture_Size);
+    CachedTextureSize = bOverride_Texture_Size ? TextureSize : FVector2D(32.f, 32.f);
 
-	if (ButtonImage)
-	{
-		if (bUseTexture && ButtonTexture)
-		{
-			FSlateBrush Brush;
-			Brush.SetResourceObject(ButtonTexture);
-			Brush.ImageSize = FVector2D(ButtonTexture->GetSizeX(), ButtonTexture->GetSizeY());
-			Brush.DrawAs = ESlateBrushDrawType::Image;
-			
-			ButtonImage->SetBrushFromTexture(ButtonTexture);
-			ButtonImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		}
-		else
-		{
-			ButtonImage->SetBrush(FSlateBrush());
-			ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
-		}
-	}
-	else if (bUseTexture && ButtonTexture)
-	{
-		ButtonBorder->SetBrushFromTexture(ButtonTexture);
-	}
-	else
-	{
-		FSlateBrush BrushCopy = ButtonBorder->Background;
-		BrushCopy.SetResourceObject(nullptr);
-		ButtonBorder->SetBrush(BrushCopy);
-	}
+    // --- 2. GESTION DE L'ICÔNE (ButtonImage) ---
+    if (ButtonImage)
+    {
+       if (bUseTexture)
+       {
+          ButtonImage->SetBrushFromTexture(ButtonTexture);
+          
+          if (bUsingTextureSizeOverride)
+          {
+             ButtonImage->SetBrushSize(CachedTextureSize);
+          }
+           
+          ButtonImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+       }
+       else
+       {
+          ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
+       }
+    }
 
-	UpdateButtonVisuals(true);
+    // --- 3. GESTION DU CADRE DÉCORATIF (BorderImage) ---
+    if (BorderImage)
+    {
+        // On ne collapse plus si pas utilise, on laissera transparent dans UpdateButtonVisuals
+        BorderImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
 
-	if (ButtonTextBlock)
-	{
-		if (UScaleBoxSlot* ScaleBoxSlot = Cast<UScaleBoxSlot>(ButtonTextBlock->Slot))
-		{
-			ScaleBoxSlot->SetHorizontalAlignment(TextAlignmentHorizontal);
-			ScaleBoxSlot->SetVerticalAlignment(TextAlignmentVertical);
-		}
-	}
+    // --- 4. GESTION DU FOND (ButtonBorder) ---
+    UpdateButtonVisuals(true);
+
+    // --- 5. ALIGNEMENT TEXTE ---
+    if (ButtonTextBlock)
+    {
+       if (UScaleBoxSlot* ScaleBoxSlot = Cast<UScaleBoxSlot>(ButtonTextBlock->Slot))
+       {
+          ScaleBoxSlot->SetHorizontalAlignment(TextAlignmentHorizontal);
+          ScaleBoxSlot->SetVerticalAlignment(TextAlignmentVertical);
+       }
+    }
 }
 
 void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
 {
-	const bool bShouldUseHoverState = bIsHovered || bIsSelected;
-	const bool bDisplayTextureOnBorder = (!ButtonImage || !ButtonImage->IsVisible()) && bUseTexture && ButtonTexture;
+    const bool bShouldUseHoverState = bIsHovered || bIsSelected;
 
-	if (ButtonBorder)
-	{
-		FLinearColor FillColorToApply = FLinearColor::Transparent;
-		if (bDisplayTextureOnBorder)
-		{
-			const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
-			FillColorToApply = FLinearColor(1.f, 1.f, 1.f, TargetAlpha);
-		}
-		else if (bUseFill)
-		{
-			FillColorToApply = bShouldUseHoverState ? CachedFillHoverColor : CachedFillColor;
-		}
+    // --- A. COUCHE FOND (ButtonBorder) ---
+    if (ButtonBorder)
+    {
+       if (bUseFill)
+       {
+           const FLinearColor TargetColor = bShouldUseHoverState ? CachedFillHoverColor : CachedFillColor;
+           ButtonBorder->SetBrushColor(TargetColor);
+       }
+       else
+       {
+           ButtonBorder->SetBrushColor(FLinearColor::Transparent);
+       }
+    }
 
-		const FLinearColor BorderColorToApply = bShouldUseHoverState ? CachedBorderHoverColor : CachedBorderColor;
-		
-		FSlateBrush BrushCopy = ButtonBorder->Background;
-		const FSlateBrush UpdatedBrush = CreateUpdatedBrush(BrushCopy, FillColorToApply, BorderColorToApply);
-		ButtonBorder->SetBrush(UpdatedBrush);
+    // --- B. COUCHE CADRE (BorderImage) ---
+    if (BorderImage)
+    {
+        if (bUseBorderTexture)
+        {
+            const FLinearColor TargetBorderColor = bShouldUseHoverState ? BorderHoverColor : BorderTextureColor;
+            BorderImage->SetBrushColor(TargetBorderColor);
+        }
+        else
+        {
+            BorderImage->SetBrushColor(FLinearColor::Transparent);
+        }
+    }
 
-		if (!ButtonImage || !bUseTexture)
-		{
-			const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
-			ButtonBorder->SetRenderScale(FVector2D(TargetScale, TargetScale));
-			ButtonBorder->SetRenderTranslation(CachedTextureShift);
-		}
-	}
+    // --- C. COUCHE ICÔNE (ButtonImage) ---
+    if (ButtonImage && bUseTexture)
+    {
+        const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
+        const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
 
-	if (ButtonImage)
-	{
-		if (bUseTexture && ButtonTexture)
-		{
-			const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
-			const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
+        FLinearColor CurrentColor = ButtonImage->GetColorAndOpacity();
+        CurrentColor.A = TargetAlpha;
+        ButtonImage->SetColorAndOpacity(CurrentColor);
 
-			FLinearColor CurrentColor = ButtonImage->GetColorAndOpacity();
-			CurrentColor.A = TargetAlpha;
-			ButtonImage->SetColorAndOpacity(CurrentColor);
-
-			ButtonImage->SetRenderScale(FVector2D(TargetScale, TargetScale));
-			ButtonImage->SetRenderTranslation(CachedTextureShift);
-		}
-		else if (bForceStateUpdate)
-		{
-			ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
-		}
-	}
+        ButtonImage->SetRenderScale(FVector2D(TargetScale, TargetScale));
+        ButtonImage->SetRenderTranslation(CachedTextureShift);
+    }
+    else if (bForceStateUpdate && ButtonImage)
+    {
+        ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
+    }
 }
 
 #pragma endregion

@@ -6,12 +6,11 @@
 class UTextBlock;
 class UBorder;
 class UCustomButtonWidget;
-class UUnitsSelectionWidget;
-class UUnitSelectionComponent;
 class UWidgetSwitcher;
 class USelectBehaviorWidget;
 class UFormationSelectorWidget;
-class UPatrolListWidget;
+class UJupiterEditorPanel;
+class UUnitSelectionComponent;
 
 UENUM(BlueprintType)
 enum class EControlPanelTab : uint8
@@ -47,12 +46,12 @@ public:
 	
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	USelectBehaviorWidget* BehaviorSelector;
-	
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	UUnitsSelectionWidget* UnitsSelector;
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UCustomButtonWidget* Btn_Switcher;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+	UJupiterEditorPanel* EditorPanel;
 
 	UFUNCTION(BlueprintCallable)
 	void InitializedJupiterHud(APawn* PawnLinked);
@@ -66,9 +65,6 @@ protected:
 	
 	UFUNCTION()
 	void SetBehaviorSelectionWidget(bool bEnabled) const;
-	
-	UFUNCTION()
-	void SetUnitsSelectionWidget(bool bEnabled) const;
 
 	UFUNCTION()
 	void SwitchUnitAction(UCustomButtonWidget* Button, int Index);

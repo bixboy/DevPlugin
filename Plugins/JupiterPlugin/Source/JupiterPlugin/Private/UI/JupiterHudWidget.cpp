@@ -3,13 +3,12 @@
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/Unit/UnitSelectionComponent.h"
-#include "Components/Unit/UnitSpawnComponent.h"
-#include "Components/Patrol/UnitPatrolComponent.h"
+
 #include "Components/WidgetSwitcher.h"
 #include "UI/CustomButtonWidget.h"
 #include "UI/Behaviors/SelectBehaviorWidget.h"
 #include "UI/Formations/FormationSelectorWidget.h"
-#include "UI/UnitsSelection/UnitsSelectionWidget.h"
+#include "UI/Editor/JupiterEditorPanel.h"
 
 
 void UJupiterHudWidget::NativeOnInitialized()
@@ -89,12 +88,6 @@ void UJupiterHudWidget::SetBehaviorSelectionWidget(const bool bEnabled) const
 	}
 }
 
-void UJupiterHudWidget::SetUnitsSelectionWidget(bool bEnabled) const
-{
-    if (UnitsSelector)
-		UnitsSelector->SetVisibility(bEnabled ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-}
-
 void UJupiterHudWidget::InitializedJupiterHud(APawn* PawnLinked)
 {
 	if(!PawnLinked)
@@ -113,21 +106,7 @@ void UJupiterHudWidget::InitializedJupiterHud(APawn* PawnLinked)
 	SetFormationSelectionWidget(false);
 	SetBehaviorSelectionWidget(false);
 	SetBehaviorSelectionWidget(false);
-	SetUnitsSelectionWidget(true);
-
-    if (UnitsSelector)
-    {
-    if (UnitsSelector)
-    {
-    	// Retrieve Dependencies
-        UUnitSpawnComponent* SpawnComp = PawnLinked->FindComponentByClass<UUnitSpawnComponent>();
-        UUnitPatrolComponent* PatrolComp = PawnLinked->FindComponentByClass<UUnitPatrolComponent>();
-        
-        // Inject Dependencies (even if null, to reset)
-        UnitsSelector->Init(SpawnComp, PatrolComp);
-    }
-    }
-
+	
     if (SelectionComponent.IsValid())
     {
         SelectionComponent->OnSelectedUpdate.AddUniqueDynamic(this, &UJupiterHudWidget::OnSelectionUpdated);
@@ -149,20 +128,14 @@ void UJupiterHudWidget::UpdateSubWidgetsContext()
 		if (SelectedActors.IsEmpty())
 		{
 			SetBehaviorSelectionWidget(false);
-			if (UnitsSelector)
-			{
-			    UnitsSelector->SetSelectionContext(SelectedActors);
-			}
+			// EditorPanel does not need selection context updates in the new design (pages pull data)
 			
 			return;
 		}
 
 		SetBehaviorSelectionWidget(true);
 		SetFormationSelectionWidget(SelectionComponent->HasGroupSelection());
-        if (UnitsSelector)
-        {
-            UnitsSelector->SetSelectionContext(SelectedActors);
-        }
+			// EditorPanel does not need selection context
 
 		int Selected = SelectedActors.Num();
 		FString Text = FString::FromInt(Selected);
