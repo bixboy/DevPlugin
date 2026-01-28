@@ -1,5 +1,4 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "UI/Editor/JupiterPageBase.h"
 #include "Page_Patrol.generated.h"
@@ -9,21 +8,16 @@ class UPatrolEntryWidget;
 class UPatrolDetailWidget;
 class UPanelWidget;
 
-/**
- * Page responsible for managing Patrol Routes.
- * Replaces UPatrolListWidget.
- */
+
 UCLASS()
 class JUPITERPLUGIN_API UPage_Patrol : public UJupiterPageBase
 {
 	GENERATED_BODY()
 
 public:
-	// --- UJupiterPageBase Interface ---
 	virtual void InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp) override;
 	virtual void OnPageOpened() override;
 	virtual void OnPageClosed() override;
-	// ----------------------------------
 
 protected:
 

@@ -9,9 +9,6 @@
 void UPage_Patrol::InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
 {
 	Super::InitPage(SpawnComp, PatrolComp, SelComp);
-	
-	// Initial Refresh if we are already active or just to be safe (though OnPageOpened is preferred for heavy updates)
-    // We defer heavy UI building to OnPageOpened usually, but binding delegates is good here.
 }
 
 void UPage_Patrol::OnPageOpened()
@@ -20,7 +17,6 @@ void UPage_Patrol::OnPageOpened()
 
 	if (PatrolComponent.IsValid())
 	{
-	    // Ensure we don't double bind
         PatrolComponent->OnPatrolRoutesChanged.RemoveDynamic(this, &UPage_Patrol::HandleRoutesChanged);
 		PatrolComponent->OnPatrolRoutesChanged.AddDynamic(this, &UPage_Patrol::HandleRoutesChanged);
 		
@@ -44,7 +40,6 @@ void UPage_Patrol::OnPageClosed()
         PatrolDetail->ClearBinding();
     }
     
-    // Clear selection state
     SelectedPatrolID = FGuid();
     
 	Super::OnPageClosed();
@@ -58,9 +53,7 @@ void UPage_Patrol::HandleRoutesChanged()
 void UPage_Patrol::RefreshList()
 {
 	if (!EntryContainer || !PatrolComponent.IsValid() || !EntryWidgetClass)
-	{
 		return;
-	}
 
 	EntryContainer->ClearChildren();
 
@@ -75,7 +68,6 @@ void UPage_Patrol::RefreshList()
 	{
 		const FPatrolRoute& Route = RouteItem.RouteData;
 
-        // Distance Filter/Logic
 	    if (MyPawn && MaxDisplayDistance > 0.f && !Route.PatrolPoints.IsEmpty())
 	    {
             const float DistSq = FVector::DistSquared(MyLoc, Route.PatrolPoints[0]);
@@ -110,6 +102,7 @@ void UPage_Patrol::RefreshList()
             }
             
             EntryContainer->AddChild(NewEntry);
+        	NewEntry->SetPadding(FMargin(0.f, 2.5f, 0.f, 2.5f));
         }
         RouteIndex++;
 	}
@@ -126,11 +119,11 @@ void UPage_Patrol::RefreshList()
 
 void UPage_Patrol::OnEntrySelected(int32 LoopIndex, UPatrolEntryWidget* EntryWidget)
 {
-	if (!EntryWidget) return;
+	if (!EntryWidget)
+		return;
 	
 	SelectedPatrolID = EntryWidget->PatrolID;
 
-    // Visual Update
 	for (int32 i = 0; i < EntryContainer->GetChildrenCount(); ++i)
 	{
 		if (UPatrolEntryWidget* Entry = Cast<UPatrolEntryWidget>(EntryContainer->GetChildAt(i)))
@@ -139,9 +132,6 @@ void UPage_Patrol::OnEntrySelected(int32 LoopIndex, UPatrolEntryWidget* EntryWid
 		}
 	}
 
-    // Detail Update
 	if (PatrolDetail)
-	{
 		PatrolDetail->SetupDetailWidget(LoopIndex, PatrolComponent.Get());
-	}
 }

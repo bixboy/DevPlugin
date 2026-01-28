@@ -29,15 +29,14 @@ void UPatrolEntryWidget::Setup(const FPatrolRoute& Route, int32 Index, float Dis
 	}
 	if (Text_UnitCount)
 	{
-		Text_UnitCount->SetText(FText::AsNumber(Route.AssignedUnits.Num()));
+		FText MyText = FText::Format(NSLOCTEXT("MyNamespace", "UnitCountKey", "{0} Units"), FText::AsNumber(Route.AssignedUnits.Num()));
+		Text_UnitCount->SetText(MyText);
 	}
 	if (Text_Distance)
 	{
 		if (Distance >= 0.0f)
 		{
-			FString DistStr = (Distance > 100000.0f) // > 1km (1000m * 100cm)
-				? FString::Printf(TEXT("%.1f km"), Distance / 100000.0f)
-				: FString::Printf(TEXT("%d m"), FMath::RoundToInt(Distance / 100.0f));
+			FString DistStr = (Distance > 100000.0f) ? FString::Printf(TEXT("%.1f km"), Distance / 100000.0f) : FString::Printf(TEXT("%d m"), FMath::RoundToInt(Distance / 100.0f));
 			Text_Distance->SetText(FText::FromString(DistStr));
 			Text_Distance->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		}
@@ -49,6 +48,29 @@ void UPatrolEntryWidget::Setup(const FPatrolRoute& Route, int32 Index, float Dis
 	if (Image_RouteColor)
 	{
 		Image_RouteColor->SetColorAndOpacity(Route.RouteColor);
+	}
+
+	if (Img_TypeIcon)
+	{
+		UTexture2D* TargetIcon = nullptr;
+		if (Route.PatrolType == EPatrolType::Loop)
+		{
+			TargetIcon = Icon_Loop;
+		}
+		else
+		{
+			TargetIcon = Icon_PingPong;
+		}
+
+		if (TargetIcon)
+		{
+			Img_TypeIcon->SetBrushFromTexture(TargetIcon);
+			Img_TypeIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
+		else
+		{
+			Img_TypeIcon->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 
 	SetIsSelected(false);

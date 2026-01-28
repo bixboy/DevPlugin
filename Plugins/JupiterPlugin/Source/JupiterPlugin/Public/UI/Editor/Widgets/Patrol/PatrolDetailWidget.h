@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/JupiterToggleSwitch.h"
 #include "PatrolDetailWidget.generated.h"
 
 class UUnitPatrolComponent;
@@ -32,19 +33,19 @@ public:
 	UTextBlock* Text_Info;
 
 	UPROPERTY(meta = (BindWidget))
+	UTextBlock* Text_WaypointCount;
+
+	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_Focus;
 
 	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_SelectUnits;
     
     UPROPERTY(meta = (BindWidget))
-	UCustomButtonWidget* Btn_Loop;
-    
-    UPROPERTY(meta = (BindWidget))
-	UCustomButtonWidget* Btn_Reverse;
+	UJupiterToggleSwitch* Btn_LoopToggle;
 
-	UPROPERTY(meta = (BindWidget))
-	UWrapBox* ActionButtonsContainer;
+    UPROPERTY(meta = (BindWidget))
+	UJupiterToggleSwitch* Btn_ReverseToggle;
 
 	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_DeletePatrol;
@@ -59,10 +60,10 @@ protected:
 	void OnSelectUnitsClicked(UCustomButtonWidget* Button, int Index);
 
     UFUNCTION()
-	void OnLoopClicked(UCustomButtonWidget* Button, int Index);
+	void OnLoopToggled(bool bIsToggled);
 
     UFUNCTION()
-	void OnReverseClicked(UCustomButtonWidget* Button, int Index);
+	void OnReverseToggled(bool bIsToggled);
 
 	UFUNCTION()
 	void OnDeletePatrolClicked(UCustomButtonWidget* Button, int Index);
@@ -70,14 +71,12 @@ protected:
 	UFUNCTION()
 	void OnNameCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
-	/** Refreshes UI from the bound patrol data */
 	void RefreshUI();
 
 	TWeakObjectPtr<UUnitPatrolComponent> WeakPatrolComponent;
 	FGuid BoundPatrolID;
 	int32 CurrentPatrolIndex = -1;
     
-    // Helpers copied/moved from EntryWidget
     void FocusCamera();
     void SelectAssignedUnits();
     void DeletePatrol();

@@ -7,6 +7,8 @@
 #include "Player/PlayerCamera.h"
 #include "Player/JupiterPlayerSystem/CameraMovementSystem.h"
 #include "UI/CustomButtonWidget.h"
+#include "UI/JupiterToggleSwitch.h"
+#include "Data/PatrolData.h"
 
 
 void UPatrolDetailWidget::NativeConstruct()
@@ -23,14 +25,14 @@ void UPatrolDetailWidget::NativeConstruct()
 		Btn_SelectUnits->OnButtonClicked.AddDynamic(this, &UPatrolDetailWidget::OnSelectUnitsClicked);
 	}
 	
-    if (Btn_Loop)
+    if (Btn_LoopToggle)
 	{
-		Btn_Loop->OnButtonClicked.AddDynamic(this, &UPatrolDetailWidget::OnLoopClicked);
+		Btn_LoopToggle->OnToggled.AddDynamic(this, &UPatrolDetailWidget::OnLoopToggled);
 	}
 	
-    if (Btn_Reverse)
+    if (Btn_ReverseToggle)
 	{
-		Btn_Reverse->OnButtonClicked.AddDynamic(this, &UPatrolDetailWidget::OnReverseClicked);
+		Btn_ReverseToggle->OnToggled.AddDynamic(this, &UPatrolDetailWidget::OnReverseToggled);
 	}
 	
 	if (Btn_DeletePatrol)
@@ -54,6 +56,12 @@ void UPatrolDetailWidget::SetupDetailWidget(int32 Index, UUnitPatrolComponent* C
 		const FPatrolRoute& Route = WeakPatrolComponent->GetActiveRoutes()[CurrentPatrolIndex].RouteData;
 		BoundPatrolID = Route.PatrolID;
 		// UE_LOG(LogTemp, Warning, TEXT("UPatrolDetailWidget::SetupDetailWidget - ID: %s"), *BoundPatrolID.ToString());
+        
+        if (Btn_ReverseToggle)
+        {
+            Btn_ReverseToggle->SetIsToggled(false);
+        }
+
 		RefreshUI();
 	}
 	else
@@ -114,9 +122,21 @@ void UPatrolDetailWidget::RefreshUI()
 
     if (Text_Info)
     {
-        FString Info = FString::Printf(TEXT("%d Units | %d Points"), Route.AssignedUnits.Num(), Route.PatrolPoints.Num());
+        FString Info = FString::Printf(TEXT("%d : Units"), Route.AssignedUnits.Num());
         Text_Info->SetText(FText::FromString(Info));
     }
+
+    if (Text_WaypointCount)
+    {
+        FString CountStr = FString::Printf(TEXT("%d : Points"), Route.PatrolPoints.Num());
+        Text_WaypointCount->SetText(FText::FromString(CountStr));
+    }
+    
+    if (Btn_LoopToggle)
+    {
+        Btn_LoopToggle->SetIsToggled(Route.PatrolType == EPatrolType::Loop);
+    }
+
 }
 
 void UPatrolDetailWidget::OnFocusClicked(UCustomButtonWidget* Button, int Index)
@@ -129,45 +149,22 @@ void UPatrolDetailWidget::OnSelectUnitsClicked(UCustomButtonWidget* Button, int 
 	SelectAssignedUnits();
 }
 
-void UPatrolDetailWidget::OnLoopClicked(UCustomButtonWidget* Button, int Index)
+void UPatrolDetailWidget::OnLoopToggled(bool bIsToggled)
 {
     if (WeakPatrolComponent.IsValid())
     {
-
-        for (const FPatrolRouteItem& Item : WeakPatrolComponent->GetActiveRoutes())
-        {
-            const FPatrolRoute& R = Item.RouteData;
-            if (R.PatrolID == BoundPatrolID)
-            {
-                EPatrolType NewType;
-                
-                if (R.PatrolType == EPatrolType::Loop)
-                {
-	                NewType = EPatrolType::PingPong;
-                }
-                else if (R.PatrolType == EPatrolType::PingPong)
-                {
-	                NewType = EPatrolType::Once;
-                }
-                else
-                {
-	                NewType = EPatrolType::Loop;
-                }
-
-                FPatrolModPayload Payload;
-                Payload.NewType = NewType;
-                WeakPatrolComponent->Server_ModifyPatrol(BoundPatrolID, EPatrolModAction::ChangeType, Payload);
-                break;
-            }
-        }
+        EPatrolType NewType = bIsToggled ? EPatrolType::Loop : EPatrolType::PingPong;
+        
+        FPatrolModPayload Payload;
+        Payload.NewType = NewType;
+        WeakPatrolComponent->Server_ModifyPatrol(BoundPatrolID, EPatrolModAction::ChangeType, Payload);
     }
 }
 
-void UPatrolDetailWidget::OnReverseClicked(UCustomButtonWidget* Button, int Index)
+void UPatrolDetailWidget::OnReverseToggled(bool bIsToggled)
 {
     if (WeakPatrolComponent.IsValid())
     {
-        // Payload can be empty for Reverse
         WeakPatrolComponent->Server_ModifyPatrol(BoundPatrolID, EPatrolModAction::Reverse, FPatrolModPayload());
     }
 }
@@ -176,9 +173,9 @@ void UPatrolDetailWidget::OnDeletePatrolClicked(UCustomButtonWidget* Button, int
 {
 	if (WeakPatrolComponent.IsValid())
 	{
-		// Prefer removing by ID using the server RPC we saw in the component
 		WeakPatrolComponent->Server_RemovePatrolRouteByID(BoundPatrolID);
 	}
+	
     ClearBinding();
 }
 

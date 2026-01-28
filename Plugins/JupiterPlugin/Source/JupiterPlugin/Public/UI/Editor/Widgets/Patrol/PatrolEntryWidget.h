@@ -6,23 +6,17 @@
 
 class UTextBlock;
 class UImage;
-class UTextBlock;
-class UImage;
 class UCustomButtonWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPatrolEntrySelected, int32, Index, UPatrolEntryWidget*, EntryWidget);
 
-/**
- * Compact row for a single patrol entry.
- * Clicking it selects the patrol.
- */
+
 UCLASS(Abstract)
 class JUPITERPLUGIN_API UPatrolEntryWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	/** Internal ID to track which patrol this widget represents */
 	UPROPERTY(BlueprintReadOnly, Category = "Patrol Entry")
 	FGuid PatrolID;
 
@@ -46,11 +40,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	UImage* Image_RouteColor;
 	
-	/** Main button to select the row */
 	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_Select;
 
-	/** Background or border to show selection state */
 	UPROPERTY(meta = (BindWidget))
 	UImage* SelectionBackground;
 
@@ -74,4 +66,14 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Style")
 	FLinearColor NormalColor = FLinearColor::Transparent;
+
+	// Icons
+	UPROPERTY(EditDefaultsOnly, Category = "Style|Icons")
+	UTexture2D* Icon_Loop;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Style|Icons")
+	UTexture2D* Icon_PingPong;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	UImage* Img_TypeIcon;
 };
