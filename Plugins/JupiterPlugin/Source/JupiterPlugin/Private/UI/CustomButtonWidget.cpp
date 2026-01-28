@@ -243,10 +243,6 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
         ButtonImage->SetRenderScale(FVector2D(TargetScale, TargetScale));
         ButtonImage->SetRenderTranslation(CachedTextureShift);
     }
-    else if (bForceStateUpdate && ButtonImage)
-    {
-        ButtonImage->SetVisibility(ESlateVisibility::Collapsed);
-    }
 }
 
 #pragma endregion

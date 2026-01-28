@@ -18,7 +18,6 @@ void UJupiterEditorPanel::NativeOnInitialized()
 	FindComponents();
 	SetupSidebar();
 
-	// Initialize all pages in the switcher
 	if (ContentSwitcher)
 	{
 		const int32 NumPages = ContentSwitcher->GetChildrenCount();
@@ -32,8 +31,6 @@ void UJupiterEditorPanel::NativeOnInitialized()
 	}
 
 	SetupSidebar();
-
-	// Default Page
 	SwitchToPage(0);
 }
 
@@ -50,17 +47,20 @@ void UJupiterEditorPanel::FindComponents()
 	PatrolComponent = PlayerPawn->FindComponentByClass<UUnitPatrolComponent>();
 	SelectionComponent = PlayerPawn->FindComponentByClass<UUnitSelectionComponent>();
 
-	if (!SpawnComponent) UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitSpawnComponent on BoardPawn"));
-	if (!PatrolComponent) UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitPatrolComponent on BoardPawn"));
-	if (!SelectionComponent) UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitSelectionComponent on BoardPawn"));
+	if (!SpawnComponent) 
+		UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitSpawnComponent on BoardPawn"));
+	
+	if (!PatrolComponent) 
+		UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitPatrolComponent on BoardPawn"));
+	
+	if (!SelectionComponent) 
+		UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitSelectionComponent on BoardPawn"));
 }
 
 void UJupiterEditorPanel::SetupSidebar()
 {
 	if (!SidebarContainer || !ContentSwitcher || !SidebarButtonClass)
-	{
 		return;
-	}
 
 	SidebarContainer->ClearChildren();
 	PageButtons.Reset();
@@ -70,9 +70,7 @@ void UJupiterEditorPanel::SetupSidebar()
 	{
 		UJupiterPageBase* Page = Cast<UJupiterPageBase>(ContentSwitcher->GetWidgetAtIndex(i));
 		if (!Page)
-		{
 			continue;
-		}
 
 		UCustomButtonWidget* NewButton = CreateWidget<UCustomButtonWidget>(this, SidebarButtonClass);
 		if (NewButton)
@@ -95,33 +93,32 @@ void UJupiterEditorPanel::SetupSidebar()
 
 void UJupiterEditorPanel::OnSidebarButtonClicked(UCustomButtonWidget* Button, int32 Index)
 {
-	if (!Button) return;
+	if (!Button) 
+		return;
+	
 	SwitchToPage(Index);
 }
 
 void UJupiterEditorPanel::SwitchToPage(int32 PageIndex)
 {
-	if (!ContentSwitcher) return;
+	if (!ContentSwitcher)
+		return;
 
-	// Notify old page
 	if (UJupiterPageBase* OldPage = Cast<UJupiterPageBase>(ContentSwitcher->GetActiveWidget()))
 	{
 		OldPage->OnPageClosed();
 	}
 	
-	// Ensure index is valid for Switcher
 	if (PageIndex >= 0 && PageIndex < ContentSwitcher->GetChildrenCount())
 	{
 		ContentSwitcher->SetActiveWidgetIndex(PageIndex);
 		
-		// Notify new page
 		if (UJupiterPageBase* NewPage = Cast<UJupiterPageBase>(ContentSwitcher->GetWidgetAtIndex(PageIndex)))
 		{
 			NewPage->OnPageOpened();
 		}
 	}
 
-	// Update Button Visuals
 	for (auto& Elem : PageButtons)
 	{
 		if (Elem.Value)

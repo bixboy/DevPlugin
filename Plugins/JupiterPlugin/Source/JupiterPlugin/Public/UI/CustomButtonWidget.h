@@ -57,7 +57,7 @@ protected:
     void SetButtonSettings();
 
     UFUNCTION()
-    void UpdateButtonVisuals(bool bForceStateUpdate = false);
+    virtual void UpdateButtonVisuals(bool bForceStateUpdate = false);
 
     UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
     UTextBlock* ButtonTextBlock;

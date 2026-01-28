@@ -1,8 +1,6 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "UI/Editor/JupiterUITypes.h"
 #include "JupiterEditorPanel.generated.h"
 
 class UPanelWidget;
@@ -13,11 +11,7 @@ class UUnitPatrolComponent;
 class UUnitSelectionComponent;
 class UCustomButtonWidget;
 
-/**
- * Root Controller for the RTS Editor UI.
- * Manages the Sidebar and Content Switcher.
- * Acts as the Single Source of Truth for accessing Components.
- */
+
 UCLASS()
 class JUPITERPLUGIN_API UJupiterEditorPanel : public UUserWidget
 {
@@ -30,10 +24,8 @@ public:
 	void SwitchToPage(int32 PageIndex);
 
 protected:
-	/** Finds components on the generic PlayerPawn/PlayerController */
 	void FindComponents();
 
-	/** Binds sidebar buttons */
 	void SetupSidebar();
 
 	UFUNCTION()
@@ -62,7 +54,6 @@ protected:
 	UPROPERTY()
 	UUnitSelectionComponent* SelectionComponent;
 	
-	// --- Internal State ---
-	
+	UPROPERTY()
 	TMap<int32, UCustomButtonWidget*> PageButtons;
 };

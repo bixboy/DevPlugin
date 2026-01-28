@@ -4,7 +4,9 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Components/TextBlock.h"
 #include "Components/SizeBox.h"
+#include "Blueprint/WidgetTree.h"
 
 
 void UUnitSpawnFormationWidget::NativeOnInitialized()
@@ -124,18 +126,23 @@ void UUnitSpawnFormationWidget::OnFormationChanged(FString SelectedItem, ESelect
 
 UWidget* UUnitSpawnFormationWidget::HandleGenerateWidget(FString Item)
 {
-	UHorizontalBox* Row = NewObject<UHorizontalBox>(this);
+    if (!WidgetTree)
+    {
+        return nullptr;
+    }
+
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
     
 	const ESpawnFormation* FormationPtr = OptionToFormation.Find(Item);
 	UTexture2D* IconTexture = (FormationPtr && FormationIcons.Contains(*FormationPtr)) ? *FormationIcons.Find(*FormationPtr) : nullptr;
 
 	if (IconTexture)
 	{
-		USizeBox* IconBox = NewObject<USizeBox>(this);
+		USizeBox* IconBox = WidgetTree->ConstructWidget<USizeBox>();
 		IconBox->SetWidthOverride(24.f);
 		IconBox->SetHeightOverride(24.f);
 
-		UImage* IconImage = NewObject<UImage>(this);
+		UImage* IconImage = WidgetTree->ConstructWidget<UImage>();
 		IconImage->SetBrushFromTexture(IconTexture);
 		IconImage->SetDesiredSizeOverride(FVector2D(24.f, 24.f));
         
@@ -150,7 +157,7 @@ UWidget* UUnitSpawnFormationWidget::HandleGenerateWidget(FString Item)
 		}
 	}
 
-	UTextBlock* TextLabel = NewObject<UTextBlock>(this);
+	UTextBlock* TextLabel = WidgetTree->ConstructWidget<UTextBlock>();
 	TextLabel->SetText(FText::FromString(Item));
 	TextLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White)); 
     

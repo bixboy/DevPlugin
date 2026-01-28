@@ -4,7 +4,7 @@
 #include "Components/Patrol/UnitPatrolComponent.h"
 #include "Components/PanelWidget.h"
 #include "GameFramework/PlayerController.h"
-#include "Kismet/GameplayStatics.h"
+
 
 void UPage_Patrol::InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
 {
