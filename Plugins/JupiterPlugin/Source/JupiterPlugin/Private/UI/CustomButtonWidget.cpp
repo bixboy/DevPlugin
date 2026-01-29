@@ -32,7 +32,6 @@ void UCustomButtonWidget::NativePreConstruct()
     if (!Button)
        return;
 
-    // Bindings
     if (!Button->OnClicked.IsAlreadyBound(this, &UCustomButtonWidget::OnCustomUIButtonClickedEvent))
        Button->OnClicked.AddDynamic(this, &UCustomButtonWidget::OnCustomUIButtonClickedEvent);
 
@@ -136,14 +135,14 @@ void UCustomButtonWidget::SetButtonSettings()
 {
     // --- 1. CALCULS DES ÉTATS ---
     bUseTexture = bEnableTexture && ButtonTexture != nullptr;
-    bUseBorderTexture = static_cast<bool>(bOverride_BorderTexture);
+    bUseBorderTexture = bEnableBorder;
     bUseFill = bEnableFill;
 
     CachedFillColor = bOverride_FillColor ? FillColor : (ButtonBorder ? ButtonBorder->GetBrushColor() : FLinearColor::White);
     CachedFillHoverColor = bOverride_FillHoverColor ? FillHoverColor : CachedFillColor;
     
-    CachedBorderColor = bOverride_BorderColor ? BorderColor : CachedFillColor;
-    CachedBorderHoverColor = bOverride_BorderHoverColor ? BorderHoverColor : CachedBorderColor;
+    CachedBorderColor = BorderColor;
+    CachedBorderHoverColor = BorderHoverColor;
 
     CachedTextureAlpha = bOverride_Texture_Alpha ? TextureAlpha : 1.f;
     CachedTextureHoverAlpha = bOverride_Texture_Alpha ? TextureHoverAlpha : CachedTextureAlpha;
@@ -157,7 +156,7 @@ void UCustomButtonWidget::SetButtonSettings()
     bUsingTextureSizeOverride = static_cast<bool>(bOverride_Texture_Size);
     CachedTextureSize = bOverride_Texture_Size ? TextureSize : FVector2D(32.f, 32.f);
 
-    // --- 2. GESTION DE L'ICÔNE (ButtonImage) ---
+    // --- 2. (ButtonImage) ---
     if (ButtonImage)
     {
        if (bUseTexture)
@@ -177,17 +176,16 @@ void UCustomButtonWidget::SetButtonSettings()
        }
     }
 
-    // --- 3. GESTION DU CADRE DÉCORATIF (BorderImage) ---
+    // --- 3. (BorderImage) ---
     if (BorderImage)
     {
-        // On ne collapse plus si pas utilise, on laissera transparent dans UpdateButtonVisuals
         BorderImage->SetVisibility(ESlateVisibility::HitTestInvisible);
     }
 
-    // --- 4. GESTION DU FOND (ButtonBorder) ---
+    // --- 4. (ButtonBorder) ---
     UpdateButtonVisuals(true);
 
-    // --- 5. ALIGNEMENT TEXTE ---
+    // --- 5. Text ---
     if (ButtonTextBlock)
     {
        if (UScaleBoxSlot* ScaleBoxSlot = Cast<UScaleBoxSlot>(ButtonTextBlock->Slot))
@@ -202,7 +200,7 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
 {
     const bool bShouldUseHoverState = bIsHovered || bIsSelected;
 
-    // --- A. COUCHE FOND (ButtonBorder) ---
+    // --- A. (ButtonBorder) ---
     if (ButtonBorder)
     {
        if (bUseFill)
@@ -216,12 +214,12 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
        }
     }
 
-    // --- B. COUCHE CADRE (BorderImage) ---
+    // --- B. (BorderImage) ---
     if (BorderImage)
     {
         if (bUseBorderTexture)
         {
-            const FLinearColor TargetBorderColor = bShouldUseHoverState ? BorderHoverColor : BorderTextureColor;
+            const FLinearColor TargetBorderColor = bShouldUseHoverState ? CachedBorderHoverColor : CachedBorderColor;
             BorderImage->SetBrushColor(TargetBorderColor);
         }
         else
@@ -230,7 +228,7 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
         }
     }
 
-    // --- C. COUCHE ICÔNE (ButtonImage) ---
+    // --- C. (ButtonImage) ---
     if (ButtonImage && bUseTexture)
     {
         const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;

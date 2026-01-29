@@ -162,29 +162,22 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (InlineEditConditionToggle))
     uint8 bOverride_FillHoverColor : 1;
 
-    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (InlineEditConditionToggle))
-    uint8 bOverride_BorderColor : 1;
-
-    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (InlineEditConditionToggle))
-    uint8 bOverride_BorderHoverColor : 1;
-
-	UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (InlineEditConditionToggle))
-	uint8 bOverride_BorderTexture : 1;
-
     UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (EditCondition = "bOverride_FillColor"))
     FLinearColor FillColor = FLinearColor::White;
 
     UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (EditCondition = "bOverride_FillHoverColor"))
     FLinearColor FillHoverColor = FLinearColor::White;
 
-    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (EditCondition = "bOverride_BorderColor"))
+    // --- Border Settings ---
+
+    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance")
+    bool bEnableBorder = false;
+
+    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (EditCondition = "bEnableBorder"))
     FLinearColor BorderColor = FLinearColor::White;
 
-    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (EditCondition = "bOverride_BorderHoverColor"))
+    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (EditCondition = "bEnableBorder"))
     FLinearColor BorderHoverColor = FLinearColor::White;
-
-	UPROPERTY(EditAnywhere, Category = "Jupiter UI | Appearance", meta = (EditCondition = "bOverride_BorderTexture"))
-	FLinearColor BorderTextureColor = FLinearColor::White;
 
 	
     // --- Cached State ---

@@ -10,6 +10,7 @@ class UEditableTextBox;
 class UTextBlock;
 class UImage;
 class UWrapBox;
+class UPatrolRoutePreview;
 
 
 UCLASS(Abstract)
@@ -36,9 +37,6 @@ public:
 	UTextBlock* Text_WaypointCount;
 
 	UPROPERTY(meta = (BindWidget))
-	UCustomButtonWidget* Btn_Focus;
-
-	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_SelectUnits;
     
     UPROPERTY(meta = (BindWidget))
@@ -50,11 +48,10 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_DeletePatrol;
     
+    UPROPERTY(meta = (BindWidgetOptional))
+    UPatrolRoutePreview* RoutePreviewWidget;
 protected:
 	virtual void NativeConstruct() override;
-
-	UFUNCTION()
-	void OnFocusClicked(UCustomButtonWidget* Button, int Index);
 
 	UFUNCTION()
 	void OnSelectUnitsClicked(UCustomButtonWidget* Button, int Index);
@@ -78,6 +75,10 @@ protected:
 	int32 CurrentPatrolIndex = -1;
     
     void FocusCamera();
+    
+    UFUNCTION()
+    void FocusCameraHandler() { FocusCamera(); }
+
     void SelectAssignedUnits();
     void DeletePatrol();
 };

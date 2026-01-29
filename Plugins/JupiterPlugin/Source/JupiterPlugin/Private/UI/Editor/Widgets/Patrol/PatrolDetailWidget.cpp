@@ -1,4 +1,5 @@
 #include "UI/Editor/Widgets/Patrol/PatrolDetailWidget.h"
+#include "UI/Editor/Widgets/Patrol/PatrolRoutePreview.h"
 #include "Components/Patrol/UnitPatrolComponent.h"
 #include "Components/EditableTextBox.h"
 #include "Components/TextBlock.h"
@@ -14,11 +15,6 @@
 void UPatrolDetailWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-
-	if (Btn_Focus)
-	{
-		Btn_Focus->OnButtonClicked.AddDynamic(this, &UPatrolDetailWidget::OnFocusClicked);
-	}
 	
 	if (Btn_SelectUnits)
 	{
@@ -44,6 +40,11 @@ void UPatrolDetailWidget::NativeConstruct()
 	{
 		Input_Name->OnTextCommitted.AddDynamic(this, &UPatrolDetailWidget::OnNameCommitted);
 	}
+
+    if (RoutePreviewWidget)
+    {
+        RoutePreviewWidget->OnPreviewClicked.AddDynamic(this, &UPatrolDetailWidget::FocusCameraHandler);
+    }
 }
 
 void UPatrolDetailWidget::SetupDetailWidget(int32 Index, UUnitPatrolComponent* Comp)
@@ -137,11 +138,11 @@ void UPatrolDetailWidget::RefreshUI()
         Btn_LoopToggle->SetIsToggled(Route.PatrolType == EPatrolType::Loop);
     }
 
-}
+    if (RoutePreviewWidget)
+    {
+        RoutePreviewWidget->SetPatrolPoints(Route.PatrolPoints, Route.PatrolType == EPatrolType::Loop);
+    }
 
-void UPatrolDetailWidget::OnFocusClicked(UCustomButtonWidget* Button, int Index)
-{
-	FocusCamera();
 }
 
 void UPatrolDetailWidget::OnSelectUnitsClicked(UCustomButtonWidget* Button, int Index)
