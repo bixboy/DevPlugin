@@ -143,8 +143,7 @@ void UPlacementHandlerComponent::GenerateFormationOffsets(TArray<FVector>& OutOf
         int32 Columns = CustomDimensions.X > 0 ? CustomDimensions.X : 1;
         float Width = (Columns - 1) * Spacing;
 
-        FVector StartPos = -(RightDir * Width * 0.5f); 
-        StartPos = -(RightDir * Width * 0.5f) - (ForwardDir * ((Count/Columns) * Spacing * 0.5f));
+        FVector StartPos = -(RightDir * Width * 0.5f) - (ForwardDir * ((Count/Columns) * Spacing * 0.5f));
 
         for (int32 i = 0; i < Count; i++)
         {

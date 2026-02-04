@@ -19,6 +19,7 @@ ASelectionBox::ASelectionBox()
 
 	Decal = CreateDefaultSubobject<UDecalComponent>(TEXT("Decal"));
 	Decal->SetupAttachment(RootComponent);
+	Decal->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
 	
 	BoxSelect = false;
 }
@@ -44,7 +45,9 @@ void ASelectionBox::Start(FVector Position, const FRotator Rotation)
 
 	SetActorLocation(StartLocation);
 	SetActorRotation(StartRotation);
+	SetActorRotation(StartRotation);
 	SetActorEnableCollision(true);
+	SetActorHiddenInGame(false);
 	
 	Decal->SetVisibility(true);
 	InBox.Empty();
@@ -80,6 +83,7 @@ TArray<AActor*> ASelectionBox::End()
 {
 	BoxSelect = false;
 	SetActorEnableCollision(false);
+	SetActorHiddenInGame(true);
 	Decal->SetVisibility(false);
 
     TArray<AActor*> Selected = CenterInBox;
@@ -135,7 +139,8 @@ void ASelectionBox::HandleHighlight(AActor* ActorInBox, const bool Highlight) co
 void ASelectionBox::OnBoxCollisionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if(!OtherActor || OtherActor == this) return;
+	if(!OtherActor || OtherActor == this) 
+		return;
 
 	if(ISelectable* Selectable = Cast<ISelectable>(OtherActor))
 	{

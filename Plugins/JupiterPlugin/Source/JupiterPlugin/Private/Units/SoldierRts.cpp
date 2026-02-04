@@ -2,6 +2,7 @@
 #include "Components/Combat/CommandComponent.h"
 #include "Components/Unit/SoldierManagerComponent.h"
 #include "Components/Combat/WeaponMaster.h"
+#include "Components/DecalComponent.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
@@ -10,6 +11,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Core/JupiterGameState.h"
+#include "Subsystems/UnitSpatialGridSubsystem.h"
 
 
 ASoldierRts::ASoldierRts(const FObjectInitializer& ObjectInitializer)
@@ -23,6 +25,13 @@ ASoldierRts::ASoldierRts(const FObjectInitializer& ObjectInitializer)
 
     CommandComp = CreateDefaultSubobject<UCommandComponent>(TEXT("CommandComponent"));
     AllyDetectionRange = AttackRange;
+
+    SelectionDecal = CreateDefaultSubobject<UDecalComponent>(TEXT("SelectionDecal"));
+    SelectionDecal->SetupAttachment(GetRootComponent());
+    SelectionDecal->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+    SelectionDecal->DecalSize = FVector(128.0f, 128.0f, 128.0f);
+    SelectionDecal->SetVisibility(false);
+    SelectionDecal->SetHiddenInGame(true);
 }
 
 void ASoldierRts::OnConstruction(const FTransform& Transform)
@@ -165,6 +174,15 @@ void ASoldierRts::Deselect()
 
 void ASoldierRts::Highlight(bool bHighlight)
 {
+    // Toggle Decal
+    if (SelectionDecal)
+    {
+        SelectionDecal->SetVisibility(bHighlight);
+        SelectionDecal->SetHiddenInGame(!bHighlight);
+    }
+    
+    // Original CustomDepth Logic (Optional: Keep it if desired, or remove if user only wants decal)
+    /*
     TArray<UPrimitiveComponent*> Components;
     GetComponents<UPrimitiveComponent>(Components);
 
@@ -176,6 +194,7 @@ void ASoldierRts::Highlight(bool bHighlight)
         VisualComp->SetRenderCustomDepth(bHighlight);
         VisualComp->SetCustomDepthStencilValue(bHighlight ? SelectionStencilValue : 0);
     }
+    */
 }
 
 bool ASoldierRts::GetIsSelected_Implementation()

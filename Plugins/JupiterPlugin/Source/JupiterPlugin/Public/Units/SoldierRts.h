@@ -12,6 +12,7 @@ class USoldierManagerComponent;
 class UWeaponMaster;
 class UCommandComponent;
 class AAiControllerRts;
+class UDecalComponent;
 
 USTRUCT(BlueprintType)
 struct FAttackDetectionSettings
@@ -253,4 +254,8 @@ private:
 
     UPROPERTY(BlueprintReadWrite, Category = "Settings|Weapons", meta = (AllowPrivateAccess = "true"))
     bool bHasWeapon = false;
+
+    // Visuals
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visual", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDecalComponent> SelectionDecal;
 };

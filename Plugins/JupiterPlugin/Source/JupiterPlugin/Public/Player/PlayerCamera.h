@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
 #include "EngineUtils.h"
+#include "Camera/CameraComponent.h"
 #include "PlayerCamera.generated.h"
 
 class ASphereRadius;
@@ -12,6 +13,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
+class UUnitSpatialGridSubsystem;
 
 class UUnitSelectionComponent;
 class UUnitOrderComponent;
@@ -235,7 +237,6 @@ public:
     {
         TArray<T*> VisibleActors;
         
-        // Safety Checks
         if (!World || !Player.IsValid() || !Class)
         	return VisibleActors;
 
@@ -244,25 +245,36 @@ public:
         if (ViewX <= 0 || ViewY <= 0)
         	return VisibleActors;
 
-        // Pre-calculation for distance check (optimization)
-        const FVector CameraLoc = GetActorLocation();
-        const float MaxDistSq = MaxSelectionDistance * MaxSelectionDistance;
+        FVector CamLoc = GetActorLocation();
+        TArray<AActor*> Candidates;
+        
+        if (UGameInstance* GI = World->GetGameInstance())
+        {
+            float Range = FMath::Max(2000.f, CameraComponent ? CameraComponent->OrthoWidth : 3000.f) * 2.0f; 
+            float BoxSize = 5000.f;
+            
+            FVector Forward = GetActorForwardVector();
+            FVector GroundPos = GetActorLocation();
+            
+            if (CameraComponent)
+            {
+                GroundPos = GetActorLocation();
+            }
 
-        // TODO: A remplacer plus tard par : GetJupiterGameState()->GetRegisteredUnits()
-    	
+            FVector2D Min(GroundPos.X - BoxSize, GroundPos.Y - BoxSize);
+            FVector2D Max(GroundPos.X + BoxSize, GroundPos.Y + BoxSize);
+        }
+        
         for (TActorIterator<T> It(World, Class); It; ++It)
         {
             T* Actor = *It;
-            if (!Actor)
-            	continue;
-
-            // 1. Distance Check
-            if (FVector::DistSquared(CameraLoc, Actor->GetActorLocation()) > MaxDistSq)
-            {
+            if (!Actor) 
                 continue;
-            }
 
-            // 2. Screen Projection
+            const float MaxDistSq = MaxSelectionDistance * MaxSelectionDistance;
+            if (FVector::DistSquared(CamLoc, Actor->GetActorLocation()) > MaxDistSq)
+                continue;
+
             FVector2D ScreenPos;
             if (Player->ProjectWorldLocationToScreen(Actor->GetActorLocation(), ScreenPos))
             {

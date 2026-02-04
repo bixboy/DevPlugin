@@ -1,9 +1,6 @@
 ﻿#include "Player/JupiterPlayerSystem/CameraSelectionSystem.h"
 #include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
-#include "Player/JupiterPlayerSystem/CameraSelectionSystem.h"
-#include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
 #include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
-#include "Player/Selections/SelectionBox.h"
 #include "Player/Selections/SelectionBox.h"
 #include "Player/PlayerCamera.h"
 
@@ -14,6 +11,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Interfaces/Selectable.h"
 #include "Engine/World.h"
+#include "Subsystems/UnitSpatialGridSubsystem.h"
 
 
 void UCameraSelectionSystem::Init(APlayerCamera* InOwner)
@@ -243,15 +241,48 @@ void UCameraSelectionSystem::HandleSelectAll()
 
     const ETeams RefTeam = ISelectable::Execute_GetCurrentTeam(ReferenceUnit);
 	
-    TArray<AActor*> VisibleActors = GetOwner()->GetAllActorsOfClassInCameraBound<AActor>(GetWorldSafe(), AActor::StaticClass());
+    TArray<AActor*> Candidates;
+    bool bUseFallback = true;
     
-    TArray<AActor*> ToSelect;
-    ToSelect.Reserve(VisibleActors.Num());
+    if (UGameInstance* GI = GetWorldSafe() ? GetWorldSafe()->GetGameInstance() : nullptr)
+    {
+        if (UUnitSpatialGridSubsystem* Spatial = GI->GetSubsystem<UUnitSpatialGridSubsystem>())
+        {
+            FVector CamLoc = GetOwner()->GetActorLocation();
+            float Range = 6000.f;
+            FVector2D Min(CamLoc.X - Range, CamLoc.Y - Range);
+            FVector2D Max(CamLoc.X + Range, CamLoc.Y + Range);
+            
+            Candidates = Spatial->GetUnitsInBounds(Min, Max);
+            bUseFallback = false;
+        }
+    }
 
-    for (AActor* Actor : VisibleActors)
+    if (bUseFallback)
+    {
+         Candidates = GetOwner()->GetAllActorsOfClassInCameraBound<AActor>(GetWorldSafe(), AActor::StaticClass());
+    }
+
+    TArray<AActor*> ToSelect;
+    ToSelect.Reserve(Candidates.Num());
+
+    int32 ViewX = 0, ViewY = 0;
+    GetOwner()->GetPlayerController()->GetViewportSize(ViewX, ViewY);
+
+    for (AActor* Actor : Candidates)
     {
         if (Actor && Actor->Implements<USelectable>())
         {
+            if (!bUseFallback)
+            {
+                 FVector2D ScreenPos;
+                 if (GetOwner()->GetPlayerController()->ProjectWorldLocationToScreen(Actor->GetActorLocation(), ScreenPos))
+                 {
+                     if (ScreenPos.X < 0 || ScreenPos.X > ViewX || ScreenPos.Y < 0 || ScreenPos.Y > ViewY)
+						continue;
+                 }
+            }
+
             bool bSameClass = Actor->GetClass() == ReferenceUnit->GetClass();
             bool bSameTeam = ISelectable::Execute_GetCurrentTeam(Actor) == RefTeam;
 
