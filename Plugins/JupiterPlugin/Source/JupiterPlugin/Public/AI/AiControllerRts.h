@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "Data/AiData.h"
+#include "Interfaces/PatrolAgentInterface.h"
 #include "AiControllerRts.generated.h"
 
 class ASoldierRts;
@@ -13,7 +14,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnStartAttack, AActor*, Target);
 
 
 UCLASS()
-class JUPITERPLUGIN_API AAiControllerRts : public AAIController
+class JUPITERPLUGIN_API AAiControllerRts : public AAIController, public IPatrolAgentInterface
 {
 	GENERATED_BODY()
 
@@ -31,10 +32,10 @@ public:
 	void CommandPatrol(const FCommandData Cmd);
 
     UFUNCTION(BlueprintCallable, Category="AI")
-    void UpdateCurrentPatrol(const TArray<FVector>& NewPath, bool bLoop, int32 NewStartIndex = -1);
+    virtual void UpdatePatrolRoute(const TArray<FVector>& Points, bool bLoop, int32 StartIndex) override;
 
     UFUNCTION(BlueprintCallable, Category="AI")
-    void StopPatrol();
+    virtual void StopPatrol() override;
 
 	UFUNCTION(BlueprintCallable, Category="AI")
 	void ResetAttack();
@@ -52,7 +53,6 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="AI")
 	FOnStartAttack OnStartAttack;
 
-	/** Accessors */
 	UFUNCTION(BlueprintPure, Category="AI")
 	FCommandData GetCurrentCommand() const { return CurrentCommand; }
 	
@@ -70,7 +70,7 @@ public:
 	void SetAttackTarget(bool bAttack) { bAttackTarget = bAttack; }
 
 	UFUNCTION(BlueprintCallable, Category="AI")
-	int32 GetCurrentPatrolWaypointIndex() const { return CurrentPatrolWaypointIndex; }
+	virtual int32 GetCurrentPatrolWaypointIndex() const override { return CurrentPatrolWaypointIndex; }
 
 	UFUNCTION(BlueprintCallable, Category="AI")
 	ECombatBehavior GetCombatBehavior() const { return CombatBehavior; }
@@ -94,6 +94,7 @@ private:
 
         UPROPERTY() bool bMoveComplete = true;
         UPROPERTY() bool bPatrolling = false;
+        UPROPERTY() bool bWasPatrolling = false; // State to resume patrol after combat
 
         UPROPERTY() bool bAttackTarget = false;
         UPROPERTY() bool bCanAttack = true;

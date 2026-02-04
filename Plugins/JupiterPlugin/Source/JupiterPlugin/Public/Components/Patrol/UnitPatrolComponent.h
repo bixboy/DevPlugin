@@ -10,6 +10,7 @@ class UUnitSelectionComponent;
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPatrolRoutesChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPatrolSelected, const FGuid&, PatrolID);
 
 UENUM(BlueprintType)
 enum class EPatrolModAction : uint8
@@ -18,6 +19,13 @@ enum class EPatrolModAction : uint8
     ChangeType,
     ChangeColor,
     Reverse
+};
+
+UENUM(BlueprintType)
+enum class EPatrolDeleteOption : uint8
+{
+    Disband,
+    JoinNearest
 };
 
 USTRUCT(BlueprintType)
@@ -56,16 +64,21 @@ public:
 	bool GetPatrolRouteForUnit(AActor* Unit, FPatrolRoute& OutRoute) const;
 	FGuid CreatePatrol(const FPatrolCreationParams& Params);
 
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_UpdatePatrolRoute(int32 Index, const FPatrolRoute& NewRoute);
 
-
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+    void Server_UpdatePatrolPoint(FGuid PatrolID, int32 PointIndex, FVector NewLocation);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_RemovePatrolRoute(int32 Index);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_RemovePatrolRouteByID(FGuid PatrolID);
+
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+    void Server_RemovePatrolWithOption(FGuid PatrolID, EPatrolDeleteOption Option);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_RemovePatrolRouteForUnit(AActor* Unit);
@@ -76,19 +89,23 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_ReversePatrolRouteForUnit(AActor* Unit);
 
-    /** Master RPC for all patrol modifications to reduce function bloat */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
     void Server_ModifyPatrol(FGuid PatrolID, EPatrolModAction Action, const FPatrolModPayload& Payload);
 
-	/** Multicast to ensure all clients clear their cache/state for ignored patrol */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+    void Server_AssignUnitsToPatrol(const TArray<AActor*>& Units, FGuid PatrolID);
+
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_RemovePatrolRoute(const TArray<AActor*>& Units, const FGuid& PatrolID);
 
 	UPROPERTY(BlueprintAssignable, Category = "Events")
 	FOnPatrolRoutesChanged OnPatrolRoutesChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Events")
+	FOnPatrolSelected OnPatrolSelected;
+
 	// ============================================================
-	// CALLBACKS (Public for Struct access)
+	// CALLBACKS
 	// ============================================================
 
 	UFUNCTION()
@@ -112,7 +129,6 @@ protected:
 
 	static FPatrolRouteExtended ConvertToExtended(const FPatrolRoute& Route, const FLinearColor& Color = FLinearColor::Blue);
 
-	/** Helper to resolve logical path index for seamless updates */
 	int32 GetTargetPointIndexForUnit(AActor* Unit, int32 NewPathSize, bool bIsReverse) const;
 
 	bool IsLocallyControlled() const;
@@ -126,22 +142,24 @@ protected:
 	UFUNCTION()
 	void OnSelectionChanged(const TArray<AActor*>& SelectedActors);
 
+    UFUNCTION()
+    void OnUnitDestroyed(AActor* DestroyedActor);
+
 	void RefreshRoutesFromSelection();
 
-    /** Helper to push updates to AI */
     void NotifyPatrolUpdate(const FPatrolRoute& Route, bool bIsReverse);
 
 	void ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes);
+	
+	UFUNCTION()
 	void OnRep_ActivePatrolRoutes();
 
 	// ============================================================
 	// DATA - REPLICATED
 	// ============================================================
 
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing=OnRep_ActivePatrolRoutes)
 	FPatrolRouteArray PatrolRoutes;
-	
-
 
 	UPROPERTY()
 	TMap<TWeakObjectPtr<AActor>, FGuid> UnitToRouteMap;
@@ -155,13 +173,18 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UPatrolVisualizerComponent> PatrolVisualizer = nullptr;
 
-
-
 	UPROPERTY()
 	TObjectPtr<UUnitSelectionComponent> SelectionComponent = nullptr;
 
+    UPROPERTY(Transient)
+    FGuid UISelectedPatrolID;
+
+public:
+    UFUNCTION(BlueprintCallable, Category = "Patrol")
+    void SetUISelectedPatrol(FGuid PatrolID);
+
 	// ============================================================
-	// SETTINGS (exposed for per-instance customization)
+	// SETTINGS
 	// ============================================================
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Patrol")

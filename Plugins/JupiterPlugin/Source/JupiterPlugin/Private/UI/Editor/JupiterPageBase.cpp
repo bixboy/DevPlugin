@@ -1,9 +1,9 @@
 #include "UI/Editor/JupiterPageBase.h"
 
 
-void UJupiterPageBase::InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
+void UJupiterPageBase::InitPage(UCameraPlacementSystem* PlacementSys, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
 {
-	SpawnComponent = TWeakObjectPtr(SpawnComp);
+	PlacementSystem = TWeakObjectPtr(PlacementSys);
 	PatrolComponent = TWeakObjectPtr(PatrolComp);
 	SelectionComponent = TWeakObjectPtr(SelComp);
 }

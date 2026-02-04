@@ -1,5 +1,6 @@
 ﻿#include "Player/JupiterPlayerSystem/CameraSystemBase.h"
 #include "Player/PlayerCamera.h"
+#include "Components/Placement/PlacementHandlerComponent.h"
 
 
 void UCameraSystemBase::Init(APlayerCamera* InOwner)
@@ -41,9 +42,9 @@ UUnitFormationComponent* UCameraSystemBase::GetFormationComponent() const
 	return Owner.IsValid() ? Owner->GetFormationComponent() : nullptr;
 }
 
-UUnitSpawnComponent* UCameraSystemBase::GetSpawnComponent() const
+UPlacementHandlerComponent* UCameraSystemBase::GetPlacementComponent() const
 {
-	return Owner.IsValid() ? Owner->GetSpawnComponent() : nullptr;
+	return Owner.IsValid() ? Owner->GetPlacementComponent() : nullptr;
 }
 
 UUnitPatrolComponent* UCameraSystemBase::GetPatrolComponent() const

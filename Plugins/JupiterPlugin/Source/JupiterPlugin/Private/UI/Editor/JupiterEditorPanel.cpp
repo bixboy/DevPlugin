@@ -7,7 +7,8 @@
 #include "GameFramework/Pawn.h"
 
 // Component Includes
-#include "Components/Unit/UnitSpawnComponent.h"
+#include "Player/PlayerCamera.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "Components/Patrol/UnitPatrolComponent.h"
 #include "Components/Unit/UnitSelectionComponent.h"
 
@@ -25,7 +26,7 @@ void UJupiterEditorPanel::NativeOnInitialized()
 		{
 			if (UJupiterPageBase* Page = Cast<UJupiterPageBase>(ContentSwitcher->GetWidgetAtIndex(i)))
 			{
-				Page->InitPage(SpawnComponent, PatrolComponent, SelectionComponent);
+				Page->InitPage(PlacementSystem, PatrolComponent, SelectionComponent);
 			}
 		}
 	}
@@ -43,18 +44,41 @@ void UJupiterEditorPanel::FindComponents()
 		return;
 	}
 
-	SpawnComponent = PlayerPawn->FindComponentByClass<UUnitSpawnComponent>();
+	if (APlayerCamera* CameraPawn = Cast<APlayerCamera>(PlayerPawn))
+	{
+		PlacementSystem = CameraPawn->GetPlacementSystem();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Pawn is not APlayerCamera!"));
+	}
+
 	PatrolComponent = PlayerPawn->FindComponentByClass<UUnitPatrolComponent>();
 	SelectionComponent = PlayerPawn->FindComponentByClass<UUnitSelectionComponent>();
 
-	if (!SpawnComponent) 
-		UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitSpawnComponent on BoardPawn"));
-	
-	if (!PatrolComponent) 
-		UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitPatrolComponent on BoardPawn"));
-	
-	if (!SelectionComponent) 
-		UE_LOG(LogTemp, Error, TEXT("JupiterEditorPanel: Missing UnitSelectionComponent on BoardPawn"));
+    if (!PlacementSystem || !PatrolComponent || !SelectionComponent)
+    {
+        GetWorld()->GetTimerManager().SetTimerForNextTick(this, &UJupiterEditorPanel::FindComponents);
+        // UE_LOG(LogTemp, Warning, TEXT("JupiterEditorPanel: Retrying FindComponents next tick...")); // Optional: reduced log spam
+        return; 
+    }
+    
+    if (ContentSwitcher && PlacementSystem && PatrolComponent && SelectionComponent)
+    {
+         const int32 NumPages = ContentSwitcher->GetChildrenCount();
+         for (int32 i = 0; i < NumPages; ++i)
+         {
+             if (UJupiterPageBase* Page = Cast<UJupiterPageBase>(ContentSwitcher->GetWidgetAtIndex(i)))
+             {
+                 Page->InitPage(PlacementSystem, PatrolComponent, SelectionComponent);
+             }
+         }
+         
+         if (UJupiterPageBase* CurrentPage = Cast<UJupiterPageBase>(ContentSwitcher->GetActiveWidget()))
+         {
+             CurrentPage->OnPageOpened();
+         }
+    }
 }
 
 void UJupiterEditorPanel::SetupSidebar()

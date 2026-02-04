@@ -1,13 +1,12 @@
 ﻿#pragma once
-
+#include "Data/Placement/PlacementUnitData.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "UnitsEntryWidget.generated.h"
 
 class UCustomButtonWidget;
-class UUnitsSelectionDataAsset;
-class ASoldierRts;
-class UUnitSpawnComponent;
+
 
 UCLASS()
 class JUPITERPLUGIN_API UUnitsEntryWidget : public UUserWidget
@@ -18,9 +17,9 @@ public:
 	virtual void NativeOnInitialized() override;
 
 	UFUNCTION()
-	void InitEntry(UUnitsSelectionDataAsset* DataAsset);
+	void InitEntry(const UPlacementUnitData* Data);
 
-	void SetSpawnComponent(TWeakObjectPtr<UUnitSpawnComponent> InSpawnComponent);
+	void SetPlacementSystem(UCameraPlacementSystem* InPlacementSystem);
 
 	FText GetUnitDisplayName() const { return CachedUnitName; }
 	const TArray<FName>& GetUnitTags() const { return UnitTags; }
@@ -37,10 +36,10 @@ protected:
 	void OnUnitSelected(UCustomButtonWidget* Button, int Index);
 
 	UPROPERTY()
-	TSubclassOf<ASoldierRts> UnitClass;
+	TWeakObjectPtr<const UPlacementUnitData> PlacementData;
 
 	UPROPERTY()
-	TWeakObjectPtr<UUnitSpawnComponent> SpawnComponent;
+	TWeakObjectPtr<UCameraPlacementSystem> PlacementSystem;
 
 	UPROPERTY()
 	FText CachedUnitName;

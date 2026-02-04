@@ -1,13 +1,19 @@
 ﻿#include "Player/JupiterPlayerSystem/CameraSelectionSystem.h"
-
-#include "Components/Unit/UnitSelectionComponent.h"
-#include "Player/PlayerCamera.h"
+#include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
+#include "Player/JupiterPlayerSystem/CameraSelectionSystem.h"
+#include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "Player/Selections/SelectionBox.h"
+#include "Player/Selections/SelectionBox.h"
+#include "Player/PlayerCamera.h"
+
+#include "Components/Patrol/PatrolVisualizerComponent.h"
+#include "Components/Unit/UnitSelectionComponent.h"
+#include "Components/Patrol/UnitPatrolComponent.h"
+
+#include "GameFramework/PlayerController.h"
 #include "Interfaces/Selectable.h"
 #include "Engine/World.h"
-#include "GameFramework/PlayerController.h"
-#include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
-#include "Player/JupiterPlayerSystem/CameraSpawnSystem.h"
 
 
 void UCameraSelectionSystem::Init(APlayerCamera* InOwner)
@@ -40,6 +46,11 @@ void UCameraSelectionSystem::Init(APlayerCamera* InOwner)
 
 void UCameraSelectionSystem::Tick(float DeltaTime)
 {
+    if (bIsDraggingPatrol)
+    {
+        UpdatePatrolDrag();
+    }
+
     if (bBoxSelect && SelectionBox)
     {
         UpdateBoxSelection();
@@ -55,23 +66,32 @@ void UCameraSelectionSystem::HandleSelectionPressed()
     	return;
 
     if (CommandSystem && CommandSystem->IsBuildingPatrolPath())
-    {
         return;
-    }
     
-    // Raycast Terrain
+    if (TryStartPatrolDrag())
+        return;
+    
     FHitResult Hit;
     if (!GetMouseHitOnTerrain(Hit))
     {
         bMouseGrounded = false;
         return;
     }
-
+    
     bMouseGrounded = true;
     ClickStartLocation = Hit.Location;
+    
+    if (APlayerController* PC = GetOwner()->GetPlayerController())
+    {
+         double X, Y;
+         if (PC->GetMousePosition(X, Y))
+         {
+             ClickScreenLocation = FVector2D(X, Y);
+         }
+    }
 
-    if (SpawnSystem)
-    	SpawnSystem->ResetSpawnState();
+    if (PlacementSystem)
+    	PlacementSystem->CancelPlacement();
 	
 }
 
@@ -80,9 +100,20 @@ void UCameraSelectionSystem::HandleSelectionPressed()
 // --------------------------------------------------
 void UCameraSelectionSystem::HandleSelectionReleased()
 {
-    if (!bMouseGrounded)
-    	return;
+    if (bIsDraggingPatrol)
+    {
+        EndPatrolDrag();
+        bMouseGrounded = false;
+        return;
+    }
 
+    if (!bMouseGrounded)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("HandleSelectionReleased: Skipped because !bMouseGrounded"));
+    	return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("HandleSelectionReleased: Executing FinalizeSelection"));
     bMouseGrounded = false;
 
     if (bBoxSelect)
@@ -111,8 +142,16 @@ void UCameraSelectionSystem::HandleSelectionHold(const FInputActionValue& Value)
 
     if (TimeDown >= LeftMouseHoldThreshold && !bBoxSelect)
     {
-        StartBoxSelection();
-        bBoxSelect = true;
+        double X, Y;
+        if (PC->GetMousePosition(X, Y))
+        {
+             float Dist = FVector2D::Distance(FVector2D(X, Y), ClickScreenLocation);
+             if (Dist > DragStartThreshold)
+             {
+                 StartBoxSelection();
+                 bBoxSelect = true;
+             }
+        }
     }
 }
 
@@ -177,6 +216,11 @@ void UCameraSelectionSystem::FinalizeSelection()
     else
     {
         GetSelectionComponent()->Handle_Selection(nullptr);
+        
+        if (UUnitPatrolComponent* PatrolComp = GetOwner()->FindComponentByClass<UUnitPatrolComponent>())
+        {
+            PatrolComp->SetUISelectedPatrol(FGuid());
+        }
     }
 }
 
@@ -322,4 +366,89 @@ AActor* UCameraSelectionSystem::GetHoveredActor() const
         }
     }
     return nullptr;
+}
+
+// --------------------------------------------------
+// PATROL DRAG LOGIC
+// --------------------------------------------------
+
+bool UCameraSelectionSystem::TryStartPatrolDrag()
+{
+    if (!GetOwner() || !GetWorldSafe())
+        return false;
+
+    APlayerController* PC = GetOwner()->GetPlayerController();
+    if (!PC)
+        return false;
+
+    FHitResult Hit;
+    if (PC->GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, true, Hit))
+    {
+         if (AActor* HitActor = Hit.GetActor())
+         {
+             if (UPatrolVisualizerComponent* Visualizer = HitActor->FindComponentByClass<UPatrolVisualizerComponent>())
+             {
+                 if (Hit.Item != INDEX_NONE)
+                 {
+                     if (Visualizer->GetPatrolPointFromHitIndex(Hit.Item, DraggedPatrolID, DraggedPointIndex))
+                     {
+                         UE_LOG(LogTemp, Warning, TEXT("[CameraSelection] Drag Started: Patrol %s Point %d"), *DraggedPatrolID.ToString(), DraggedPointIndex);
+                         bIsDraggingPatrol = true;
+                         DraggingPlaneLocation = Hit.Location; 
+                         return true;
+                     }
+                 }
+             }
+         }
+    }
+    
+    return false;
+}
+
+void UCameraSelectionSystem::UpdatePatrolDrag()
+{
+    if (!bIsDraggingPatrol)
+        return;
+
+    APlayerController* PC = GetOwner()->GetPlayerController();
+    if (!PC)
+        return;
+
+    FVector WorldLoc, WorldDir;
+    if (PC->DeprojectMousePositionToWorld(WorldLoc, WorldDir))
+    {
+        FVector End = WorldLoc + WorldDir * 1000000.0f;
+        FHitResult Hit;
+        FCollisionQueryParams Params;
+        Params.AddIgnoredActor(GetOwner());
+
+        if (GetWorldSafe()->LineTraceSingleByChannel(Hit, WorldLoc, End, ECC_Visibility, Params))
+        {
+             FVector NewLocation = Hit.Location;
+             
+             if (UPatrolVisualizerComponent* Visualizer = GetOwner()->FindComponentByClass<UPatrolVisualizerComponent>())
+             {
+                 Visualizer->UpdatePointPosition(DraggedPatrolID, DraggedPointIndex, NewLocation);
+             }
+             
+             DraggingPlaneLocation = NewLocation;
+        }
+    }
+}
+
+void UCameraSelectionSystem::EndPatrolDrag()
+{
+    if (!bIsDraggingPatrol)
+        return;
+        
+    UE_LOG(LogTemp, Warning, TEXT("[CameraSelection] Drag Ended"));
+
+    if (UUnitPatrolComponent* PatrolComp = GetOwner()->FindComponentByClass<UUnitPatrolComponent>())
+    {
+        PatrolComp->Server_UpdatePatrolPoint(DraggedPatrolID, DraggedPointIndex, DraggingPlaneLocation);
+    }
+
+    bIsDraggingPatrol = false;
+    DraggedPointIndex = -1;
+    DraggedPatrolID.Invalidate();
 }

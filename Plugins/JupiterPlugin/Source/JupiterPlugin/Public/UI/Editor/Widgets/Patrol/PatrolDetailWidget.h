@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "UI/JupiterToggleSwitch.h"
+#include "Components/Patrol/UnitPatrolComponent.h"
 #include "PatrolDetailWidget.generated.h"
 
 class UUnitPatrolComponent;
@@ -11,6 +12,7 @@ class UTextBlock;
 class UImage;
 class UWrapBox;
 class UPatrolRoutePreview;
+class UCustomContextMenu;
 
 
 UCLASS(Abstract)
@@ -38,6 +40,9 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_SelectUnits;
+
+	UPROPERTY(meta = (BindWidget))
+	UCustomButtonWidget* Btn_AddSelectedUnits;
     
     UPROPERTY(meta = (BindWidget))
 	UJupiterToggleSwitch* Btn_LoopToggle;
@@ -50,11 +55,21 @@ public:
     
     UPROPERTY(meta = (BindWidgetOptional))
     UPatrolRoutePreview* RoutePreviewWidget;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UCustomContextMenu> ContextMenuClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    float NotificationDuration = 4.0f;
+	
 protected:
 	virtual void NativeConstruct() override;
 
 	UFUNCTION()
 	void OnSelectUnitsClicked(UCustomButtonWidget* Button, int Index);
+
+	UFUNCTION()
+	void OnAddSelectedUnitsClicked(UCustomButtonWidget* Button, int Index);
 
     UFUNCTION()
 	void OnLoopToggled(bool bIsToggled);
@@ -66,6 +81,9 @@ protected:
 	void OnDeletePatrolClicked(UCustomButtonWidget* Button, int Index);
 
 	UFUNCTION()
+	void OnDeletePatrolRightClicked(UCustomButtonWidget* Button, int Index);
+
+	UFUNCTION()
 	void OnNameCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
 	void RefreshUI();
@@ -73,6 +91,10 @@ protected:
 	TWeakObjectPtr<UUnitPatrolComponent> WeakPatrolComponent;
 	FGuid BoundPatrolID;
 	int32 CurrentPatrolIndex = -1;
+    EPatrolDeleteOption CurrentDeleteOption = EPatrolDeleteOption::Disband;
+
+    UPROPERTY()
+    UCustomContextMenu* ActiveContextMenu;
     
     void FocusCamera();
     

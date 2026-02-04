@@ -5,7 +5,7 @@
 #include "Interfaces/Selectable.h"
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/Pawn.h"
-#include "AI/AiControllerRts.h"
+#include "Interfaces/PatrolAgentInterface.h"
 
 
 UUnitPatrolComponent::UUnitPatrolComponent()
@@ -86,6 +86,11 @@ bool UUnitPatrolComponent::HasAuthority() const
 	return GetOwner() && GetOwner()->HasAuthority();
 }
 
+void UUnitPatrolComponent::OnUnitDestroyed(AActor* DestroyedActor)
+{
+    UnitToRouteMap.Remove(DestroyedActor);
+}
+
 void UUnitPatrolComponent::RefreshRoutesFromSelection()
 {
 	if (!SelectionComponent || !IsLocallyControlled())
@@ -128,10 +133,6 @@ void UUnitPatrolComponent::RefreshRoutesFromSelection()
 	ApplyRoutes(NewRoutes);
 }
 
-// (Orphaned lines removed)
-
-// ... 
-
 void UUnitPatrolComponent::OnSelectionChanged(const TArray<AActor*>& SelectedActors)
 {
 	RefreshRoutesFromSelection();
@@ -148,13 +149,37 @@ void UUnitPatrolComponent::ApplyRoutes(const TArray<FPatrolRoute>& NewRoutes)
 	}
 }
 
+void UUnitPatrolComponent::OnRep_ActivePatrolRoutes()
+{
+	RebuildUnitLookupMap();
+	
+	if (IsLocallyControlled())
+	{
+		UpdateVisualization();
+		OnPatrolRoutesChanged.Broadcast();
+	}
+}
+
 // ============================================================
-// CALLBACK IMPLEMENTATION
+// CALLBACK
 // ============================================================
 
 void UUnitPatrolComponent::OnPatrolRouteAdded(const FPatrolRoute& Route)
 {
-    RebuildUnitLookupMap();
+    for (const TObjectPtr<AActor>& UnitPtr : Route.AssignedUnits)
+    {
+        if (AActor* Unit = UnitPtr.Get())
+        {
+            if (IsValid(Unit))
+            {
+                 UnitToRouteMap.Add(Unit, Route.PatrolID);
+                 if (!Unit->OnDestroyed.IsAlreadyBound(this, &UUnitPatrolComponent::OnUnitDestroyed))
+                 {
+                     Unit->OnDestroyed.AddDynamic(this, &UUnitPatrolComponent::OnUnitDestroyed);
+                 }
+            }
+        }
+    }
 
     if (IsLocallyControlled())
     {
@@ -165,7 +190,31 @@ void UUnitPatrolComponent::OnPatrolRouteAdded(const FPatrolRoute& Route)
 
 void UUnitPatrolComponent::OnPatrolRouteChanged(const FPatrolRoute& Route)
 {
-    RebuildUnitLookupMap();
+    TSet<AActor*> CurrentUnits;
+    for (const auto& UnitPtr : Route.AssignedUnits)
+    {
+        if (AActor* Unit = UnitPtr.Get())
+        {
+             CurrentUnits.Add(Unit);
+             UnitToRouteMap.Add(Unit, Route.PatrolID);
+             if (!Unit->OnDestroyed.IsAlreadyBound(this, &UUnitPatrolComponent::OnUnitDestroyed))
+             {
+                 Unit->OnDestroyed.AddDynamic(this, &UUnitPatrolComponent::OnUnitDestroyed);
+             }
+        }
+    }
+
+    for (auto It = UnitToRouteMap.CreateIterator(); It; ++It)
+    {
+        if (It.Value() == Route.PatrolID)
+        {
+            AActor* Unit = It.Key().Get();
+            if (!Unit || !CurrentUnits.Contains(Unit))
+            {
+                It.RemoveCurrent();
+            }
+        }
+    }
 
     if (IsLocallyControlled())
     {
@@ -176,7 +225,20 @@ void UUnitPatrolComponent::OnPatrolRouteChanged(const FPatrolRoute& Route)
 
 void UUnitPatrolComponent::OnPatrolRouteRemoved(const FPatrolRoute& Route)
 {
-    RebuildUnitLookupMap();
+    for (const TObjectPtr<AActor>& UnitPtr : Route.AssignedUnits)
+    {
+        if (AActor* Unit = UnitPtr.Get())
+        {
+             if (FGuid* FoundID = UnitToRouteMap.Find(Unit))
+             {
+                 if (*FoundID == Route.PatrolID)
+                 {
+                     UnitToRouteMap.Remove(Unit);
+                     Unit->OnDestroyed.RemoveDynamic(this, &UUnitPatrolComponent::OnUnitDestroyed);
+                 }
+             }
+        }
+    }
 
     if (HasAuthority())
     {
@@ -184,11 +246,18 @@ void UUnitPatrolComponent::OnPatrolRouteRemoved(const FPatrolRoute& Route)
         {
             if (AActor* Unit = UnitPtr.Get())
             {
-                if (APawn* Pawn = Cast<APawn>(Unit))
+	            if (Unit->Implements<UPatrolAgentInterface>())
+	            {
+		             if (IPatrolAgentInterface* Agent = Cast<IPatrolAgentInterface>(Unit))
+		             {
+			             Agent->StopPatrol();
+		             }
+	            }
+                else if (APawn* Pawn = Cast<APawn>(Unit))
                 {
-                    if (AAiControllerRts* AI = Cast<AAiControllerRts>(Pawn->GetController()))
+                    if (IPatrolAgentInterface* AgentController = Cast<IPatrolAgentInterface>(Pawn->GetController()))
                     {
-                        AI->StopPatrol();
+                        AgentController->StopPatrol();
                     }
                 }
             }
@@ -213,7 +282,6 @@ void UUnitPatrolComponent::Server_UpdatePatrolRoute_Implementation(int32 Index, 
 		UE_LOG(LogTemp, Log, TEXT("[UnitPatrolComponent] Updating patrol route %d (ID: %s) for %d units"), 
 			Index, *NewRoute.PatrolID.ToString(), NewRoute.AssignedUnits.Num());
 
-        // Notify AI (Standard Update)
         NotifyPatrolUpdate(NewRoute, false);
 
 		OnPatrolRouteChanged(NewRoute);
@@ -238,18 +306,88 @@ void UUnitPatrolComponent::Server_RemovePatrolRoute_Implementation(int32 Index)
 	}
 }
 
+void UUnitPatrolComponent::Server_AssignUnitsToPatrol_Implementation(const TArray<AActor*>& Units, FGuid PatrolID)
+{
+    int32 RouteIndex = -1;
+    for (int32 i = 0; i < PatrolRoutes.Items.Num(); ++i)
+    {
+        if (PatrolRoutes.Items[i].RouteData.PatrolID == PatrolID)
+        {
+            RouteIndex = i;
+            break;
+        }
+    }
+
+    if (RouteIndex == INDEX_NONE)
+    {
+        return;
+    }
+
+    FPatrolRoute& RouteData = PatrolRoutes.Items[RouteIndex].RouteData;
+    if (RouteData.PatrolPoints.Num() < 2) 
+        return;
+        
+    APlayerController* PC = Cast<APlayerController>(GetOwner());
+
+    bool bChanged = false;
+
+    for (AActor* Unit : Units)
+    {
+        if (!IsValid(Unit)) 
+			continue;
+
+        if (RouteData.AssignedUnits.Contains(Unit))
+        {
+            continue;
+        }
+
+        Server_RemovePatrolRouteForUnit(Unit);
+
+        RouteData.AssignedUnits.Add(Unit);
+        bChanged = true;
+
+        UE_LOG(LogTemp, Warning, TEXT("Server_AssignUnitsToPatrol - Processing Unit: %s"), *Unit->GetName());
+
+             FCommandData Data(PC, RouteData.PatrolPoints[0], FRotator::ZeroRotator, ECommandType::CommandPatrol);
+             Data.PatrolPath = RouteData.PatrolPoints;
+             Data.bPatrolLoop = (RouteData.PatrolType == EPatrolType::Loop);
+             Data.PatrolID = PatrolID;
+             
+             UE_LOG(LogTemp, Warning, TEXT("Server_AssignUnitsToPatrol - Issuing CommandMove to %s | PatrolID: %s | Points: %d"), 
+                *Unit->GetName(), *PatrolID.ToString(), Data.PatrolPath.Num());
+
+             if (Unit->Implements<USelectable>())
+             {
+                 ISelectable::Execute_CommandMove(Unit, Data);
+             }
+             else
+             {
+                 UE_LOG(LogTemp, Error, TEXT("Server_AssignUnitsToPatrol - Unit %s does not implement ISelectable!"), *Unit->GetName());
+             }
+    }
+
+    if (bChanged)
+    {
+        PatrolRoutes.MarkItemDirty(PatrolRoutes.Items[RouteIndex]);
+        NotifyPatrolUpdate(RouteData, false);
+        OnPatrolRouteChanged(RouteData);
+    }
+}
+
 void UUnitPatrolComponent::Multicast_RemovePatrolRoute_Implementation(const TArray<AActor*>& Units, const FGuid& PatrolID)
 {
 	for (int32 i = PatrolRoutes.Items.Num() - 1; i >= 0; --i)
 	{
 		if (PatrolRoutes.Items[i].RouteData.PatrolID == PatrolID)
 		{
+			const FPatrolRoute RemovedRoute = PatrolRoutes.Items[i].RouteData;
+			
 			PatrolRoutes.Items.RemoveAt(i);
 			PatrolRoutes.MarkArrayDirty();
+			
+			OnPatrolRouteRemoved(RemovedRoute);
 		}
 	}
-    
-    RebuildUnitLookupMap();
 
 	if (IsLocallyControlled())
 	{
@@ -281,11 +419,115 @@ void UUnitPatrolComponent::Server_RemovePatrolRouteByID_Implementation(FGuid Pat
 	}
 }
 
+void UUnitPatrolComponent::Server_RemovePatrolWithOption_Implementation(FGuid PatrolID, EPatrolDeleteOption Option)
+{
+	int32 IndexToRemove = -1;
+	FPatrolRoute RouteToRemove;
+	bool bFound = false;
+
+	for (int32 i = 0; i < PatrolRoutes.Items.Num(); ++i)
+	{
+		if (PatrolRoutes.Items[i].RouteData.PatrolID == PatrolID)
+		{
+			IndexToRemove = i;
+			RouteToRemove = PatrolRoutes.Items[i].RouteData;
+			bFound = true;
+			break;
+		}
+	}
+
+	if (!bFound)
+	{
+		 UE_LOG(LogTemp, Warning, TEXT("[UnitPatrolComponent] Could not find Patrol ID: %s to remove"), *PatrolID.ToString());
+		 return;
+	}
+
+	if (Option == EPatrolDeleteOption::JoinNearest && RouteToRemove.AssignedUnits.Num() > 0)
+	{
+		FVector OldCenter = FVector::ZeroVector;
+		int32 ValidPoints = 0;
+		if (RouteToRemove.PatrolPoints.Num() > 0)
+		{
+			for (const FVector& Pt : RouteToRemove.PatrolPoints)
+			{
+				OldCenter += Pt;
+			}
+			if (RouteToRemove.PatrolPoints.Num() > 0)
+            {
+			    OldCenter /= RouteToRemove.PatrolPoints.Num();
+            }
+		}
+
+		FGuid NearestPatrolID;
+		float MinDistSq = MAX_FLT;
+		bool bHasNearest = false;
+
+		for (const FPatrolRouteItem& Item : PatrolRoutes.Items)
+		{
+			if (Item.RouteData.PatrolID == PatrolID) 
+				continue;
+
+            if (Item.RouteData.PatrolPoints.Num() == 0) 
+				continue;
+
+			FVector NewCenter = FVector::ZeroVector;
+			for (const FVector& Pt : Item.RouteData.PatrolPoints)
+			{
+				NewCenter += Pt;
+			}
+			NewCenter /= Item.RouteData.PatrolPoints.Num();
+
+			float DistSq = FVector::DistSquared(OldCenter, NewCenter);
+			if (DistSq < MinDistSq)
+			{
+				MinDistSq = DistSq;
+				NearestPatrolID = Item.RouteData.PatrolID;
+				bHasNearest = true;
+			}
+		}
+
+		if (bHasNearest)
+		{
+			TArray<AActor*> UnitsToMove;
+			 for (const auto& UnitPtr : RouteToRemove.AssignedUnits)
+			{
+				if (AActor* Unit = UnitPtr.Get())
+				{
+					UnitsToMove.Add(Unit);
+				}
+			}
+			
+			 for (int32 i = 0; i < PatrolRoutes.Items.Num(); ++i)
+			 {
+				 if (PatrolRoutes.Items[i].RouteData.PatrolID == NearestPatrolID)
+				 {
+					  for(AActor* U : UnitsToMove)
+					  {
+						  PatrolRoutes.Items[i].RouteData.AssignedUnits.AddUnique(U);
+					  }
+					  
+					  PatrolRoutes.MarkItemDirty(PatrolRoutes.Items[i]);
+					  NotifyPatrolUpdate(PatrolRoutes.Items[i].RouteData, false);
+					  OnPatrolRouteChanged(PatrolRoutes.Items[i].RouteData);
+					  
+					  UE_LOG(LogTemp, Log, TEXT("[UnitPatrolComponent] Moved %d units to patrol %s"), UnitsToMove.Num(), *NearestPatrolID.ToString());
+					  
+                      if (PatrolRoutes.Items.IsValidIndex(IndexToRemove))
+                      {
+                            PatrolRoutes.Items[IndexToRemove].RouteData.AssignedUnits.Empty();
+                      }
+                      
+                      break;
+				 }
+			 }
+		}
+	}
+
+	Server_RemovePatrolRoute(IndexToRemove);
+}
+
 void UUnitPatrolComponent::Server_RemovePatrolRouteForUnit_Implementation(AActor* Unit)
 {
-	if (!Unit)
-		return;
-
 	if (!Unit)
 		return;
 
@@ -310,6 +552,28 @@ void UUnitPatrolComponent::Server_RemovePatrolRouteForUnit_Implementation(AActor
 	}
 	
 	RefreshRoutesFromSelection();
+}
+
+void UUnitPatrolComponent::Server_UpdatePatrolPoint_Implementation(FGuid PatrolID, int32 PointIndex, FVector NewLocation)
+{
+    for (int32 i = 0; i < PatrolRoutes.Items.Num(); ++i)
+    {
+        if (PatrolRoutes.Items[i].RouteData.PatrolID == PatrolID)
+        {
+            if (PatrolRoutes.Items[i].RouteData.PatrolPoints.IsValidIndex(PointIndex))
+            {
+                PatrolRoutes.Items[i].RouteData.PatrolPoints[PointIndex] = NewLocation;
+
+                PatrolRoutes.MarkItemDirty(PatrolRoutes.Items[i]);
+                const FPatrolRoute& Route = PatrolRoutes.Items[i].RouteData;
+
+                OnPatrolRouteChanged(Route);
+                NotifyPatrolUpdate(Route, false);
+            }
+			
+            break;
+        }
+    }
 }
 
 void UUnitPatrolComponent::Server_ReversePatrolRoute_Implementation(int32 Index)
@@ -383,6 +647,10 @@ void UUnitPatrolComponent::RebuildUnitLookupMap()
                 if (IsValid(Unit))
                 {
                     UnitToRouteMap.Add(Unit, Item.RouteData.PatrolID);
+                    if (!Unit->OnDestroyed.IsAlreadyBound(this, &UUnitPatrolComponent::OnUnitDestroyed))
+                    {
+                        Unit->OnDestroyed.AddDynamic(this, &UUnitPatrolComponent::OnUnitDestroyed);
+                    }
                 }
             }
         }
@@ -390,7 +658,7 @@ void UUnitPatrolComponent::RebuildUnitLookupMap()
 }
 
 // ============================================================
-// NEW API & HELPERS
+// HELPERS
 // ============================================================
 
 void UUnitPatrolComponent::Server_CreatePatrol_Implementation(const FPatrolCreationParams& Params)
@@ -412,7 +680,10 @@ FGuid UUnitPatrolComponent::CreatePatrol(const FPatrolCreationParams& Params)
 	for (AActor* Unit : Params.Units)
 	{
 		if (Unit)
+        {
+            Server_RemovePatrolRouteForUnit(Unit);
 			NewRoute.AssignedUnits.AddUnique(Unit);
+        }
 	}
 
 	if (NewRoute.PatrolPoints.Num() < 2)
@@ -467,7 +738,11 @@ void UUnitPatrolComponent::UpdateVisualization()
 		{
             bool bIsRouteVisible = false;
 
-            if (SelectionComponent)
+            if (Route.PatrolID == UISelectedPatrolID)
+            {
+                bIsRouteVisible = true;
+            }
+            else if (SelectionComponent)
             {
                 for (AActor* Unit : Route.AssignedUnits)
                 {
@@ -501,6 +776,7 @@ void UUnitPatrolComponent::UpdateVisualization()
 FPatrolRouteExtended UUnitPatrolComponent::ConvertToExtended(const FPatrolRoute& Route, const FLinearColor& Color)
 {
 	FPatrolRouteExtended Extended;
+	Extended.PatrolID = Route.PatrolID;
 	Extended.PatrolPoints = Route.PatrolPoints;
 	Extended.PatrolType = Route.PatrolType;
 	Extended.RouteColor = Route.RouteColor;
@@ -527,12 +803,15 @@ void UUnitPatrolComponent::Server_ModifyPatrol_Implementation(FGuid PatrolID, EP
                 case EPatrolModAction::Rename:
                     Route.RouteName = Payload.NewName;
                     break;
+
                 case EPatrolModAction::ChangeType:
                     Route.PatrolType = Payload.NewType;
                     break;
+
                 case EPatrolModAction::ChangeColor:
                     Route.RouteColor = Payload.NewColor;
                     break;
+
                 case EPatrolModAction::Reverse:
                     Algo::Reverse(Route.PatrolPoints);
                     bIsReverse = true;
@@ -556,7 +835,7 @@ int32 UUnitPatrolComponent::GetTargetPointIndexForUnit(AActor* Unit, int32 NewPa
 
 	if (APawn* Pawn = Cast<APawn>(Unit))
 	{
-		if (AAiControllerRts* AI = Cast<AAiControllerRts>(Pawn->GetController()))
+		if (IPatrolAgentInterface* AI = Cast<IPatrolAgentInterface>(Pawn->GetController()))
 		{
 			int32 CurrentIndex = AI->GetCurrentPatrolWaypointIndex();
 			
@@ -573,6 +852,22 @@ int32 UUnitPatrolComponent::GetTargetPointIndexForUnit(AActor* Unit, int32 NewPa
 			return FMath::Clamp(CurrentIndex, 0, NewPathSize - 1);
 		}
 	}
+	else if (IPatrolAgentInterface* Agent = Cast<IPatrolAgentInterface>(Unit))
+	{
+		int32 CurrentIndex = Agent->GetCurrentPatrolWaypointIndex();
+
+		if (bIsReverse)
+		{
+			if (CurrentIndex > 0)
+			{
+				return (NewPathSize - CurrentIndex);
+			}
+			
+			return 0;
+		}
+		
+		return FMath::Clamp(CurrentIndex, 0, NewPathSize - 1);
+	}
 
 	return 0;
 }
@@ -586,16 +881,39 @@ void UUnitPatrolComponent::NotifyPatrolUpdate(const FPatrolRoute& Route, bool bI
     const bool bLoop = (Route.PatrolType == EPatrolType::Loop);
     const int32 NumPoints = Route.PatrolPoints.Num();
 
-    for (TObjectPtr UnitPtr : Route.AssignedUnits)
+    for (const auto& UnitPtr : Route.AssignedUnits)
     {
         AActor* Unit = UnitPtr.Get();
         if (APawn* Pawn = Cast<APawn>(Unit))
         {
-            if (AAiControllerRts* AI = Cast<AAiControllerRts>(Pawn->GetController()))
+            if (IPatrolAgentInterface* AI = Cast<IPatrolAgentInterface>(Pawn->GetController()))
             {
                 int32 NewStartIndex = GetTargetPointIndexForUnit(Unit, NumPoints, bIsReverse);
-                AI->UpdateCurrentPatrol(Route.PatrolPoints, bLoop, NewStartIndex);
+                AI->UpdatePatrolRoute(Route.PatrolPoints, bLoop, NewStartIndex);
             }
+            else if (IPatrolAgentInterface* Agent = Cast<IPatrolAgentInterface>(Unit))
+            {
+				int32 NewStartIndex = GetTargetPointIndexForUnit(Unit, NumPoints, bIsReverse);
+                Agent->UpdatePatrolRoute(Route.PatrolPoints, bLoop, NewStartIndex);
+            }
+        }
+		else if (IPatrolAgentInterface* Agent = Cast<IPatrolAgentInterface>(Unit))
+		{
+			int32 NewStartIndex = GetTargetPointIndexForUnit(Unit, NumPoints, bIsReverse);
+			Agent->UpdatePatrolRoute(Route.PatrolPoints, bLoop, NewStartIndex);
+		}
+    }
+}
+
+void UUnitPatrolComponent::SetUISelectedPatrol(FGuid PatrolID)
+{
+    if (UISelectedPatrolID != PatrolID)
+    {
+        UISelectedPatrolID = PatrolID;
+        if (IsLocallyControlled())
+        {
+            UpdateVisualization();
+            OnPatrolSelected.Broadcast(UISelectedPatrolID);
         }
     }
 }

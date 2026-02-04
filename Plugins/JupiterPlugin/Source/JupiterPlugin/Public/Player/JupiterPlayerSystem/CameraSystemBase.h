@@ -7,13 +7,11 @@ class APlayerCamera;
 class UUnitSelectionComponent;
 class UUnitOrderComponent;
 class UUnitFormationComponent;
-class UUnitSpawnComponent;
+class UPlacementHandlerComponent;
 class UUnitPatrolComponent;
 
 
-/**
- * Base class for all PlayerCamera systems.
- */
+
 UCLASS(Abstract)
 class JUPITERPLUGIN_API UCameraSystemBase : public UObject
 {
@@ -34,7 +32,7 @@ protected:
 	UUnitSelectionComponent* GetSelectionComponent() const;
 	UUnitOrderComponent* GetOrderComponent() const;
 	UUnitFormationComponent* GetFormationComponent() const;
-	UUnitSpawnComponent* GetSpawnComponent() const;
+	UPlacementHandlerComponent* GetPlacementComponent() const;
 	UUnitPatrolComponent* GetPatrolComponent() const;
 
 	UWorld* GetWorldSafe() const;

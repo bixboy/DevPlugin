@@ -1,11 +1,11 @@
 ﻿#pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/Unit/UnitSpawnComponent.h"
+#include "Data/Placement/PlacementTypes.h"
 #include "UnitSpawnAxisWidget.generated.h"
 
 class UEditableTextBox;
-class UUnitSpawnComponent;
+class UCameraPlacementSystem;
 
 
 UCLASS()
@@ -20,7 +20,7 @@ public:
 	virtual void NativeDestruct() override;
 	
 	UFUNCTION()
-	void SetupWithComponent(UUnitSpawnComponent* InSpawnComponent);
+	void SetupWithSystem(UCameraPlacementSystem* InPlacementSystem);
 
 protected:
 	
@@ -45,7 +45,7 @@ protected:
 	UEditableTextBox* FormationY;
 	
 	UPROPERTY()
-	TWeakObjectPtr<UUnitSpawnComponent> SpawnComponent;
+	TWeakObjectPtr<UCameraPlacementSystem> PlacementSystem;
 
 private:
 	bool bIsUpdatingFromUI = false;

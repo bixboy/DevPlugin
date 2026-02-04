@@ -1,7 +1,7 @@
 ﻿#include "UI/Editor/Widgets/Spawn/UnitSpawnCountWidget.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "Components/EditableTextBox.h"
 #include "UI/CustomSliderWidget.h"
-#include "Components/Unit/UnitSpawnComponent.h"
 
 
 void UUnitSpawnCountWidget::NativeOnInitialized()
@@ -37,26 +37,26 @@ void UUnitSpawnCountWidget::NativeDestruct()
 	if (SpawnCountSlider)
 		SpawnCountSlider->OnValueChanged.RemoveDynamic(this, &UUnitSpawnCountWidget::OnSliderValueChanged);
 
-	if (SpawnComponent.IsValid())
-		SpawnComponent->OnSpawnCountChanged.RemoveDynamic(this, &UUnitSpawnCountWidget::HandleSpawnCountChanged);
+	if (PlacementSystem.IsValid())
+		PlacementSystem->OnSpawnCountChanged.RemoveDynamic(this, &UUnitSpawnCountWidget::HandleSpawnCountChanged);
 		
 }
 
-void UUnitSpawnCountWidget::SetupWithComponent(UUnitSpawnComponent* InSpawnComponent)
+void UUnitSpawnCountWidget::SetupWithSystem(UCameraPlacementSystem* InPlacementSystem)
 {
-	UE_LOG(LogTemp, Warning, TEXT("UnitSpawnCountWidget::SetupWithComponent - InSpawnComponent: %s"), InSpawnComponent ? *InSpawnComponent->GetName() : TEXT("NULL"));
+	UE_LOG(LogTemp, Warning, TEXT("UnitSpawnCountWidget::SetupWithSystem - InPlacementSystem: %s"), InPlacementSystem ? *InPlacementSystem->GetName() : TEXT("NULL"));
 
-    if (SpawnComponent.IsValid())
+    if (PlacementSystem.IsValid())
     {
-        SpawnComponent->OnSpawnCountChanged.RemoveDynamic(this, &UUnitSpawnCountWidget::HandleSpawnCountChanged);
+        PlacementSystem->OnSpawnCountChanged.RemoveDynamic(this, &UUnitSpawnCountWidget::HandleSpawnCountChanged);
     }
 
-	SpawnComponent = InSpawnComponent;
+	PlacementSystem = InPlacementSystem;
 
-	if (SpawnComponent.IsValid())
+	if (PlacementSystem.IsValid())
 	{
-		CachedSpawnCount = FMath::Max(1, SpawnComponent->GetUnitsPerSpawn());
-		SpawnComponent->OnSpawnCountChanged.AddUniqueDynamic(this, &UUnitSpawnCountWidget::HandleSpawnCountChanged);
+		CachedSpawnCount = FMath::Max(1, PlacementSystem->CurrentSpawnCount);
+		PlacementSystem->OnSpawnCountChanged.AddUniqueDynamic(this, &UUnitSpawnCountWidget::HandleSpawnCountChanged);
 	}
 
 	RefreshDisplay();
@@ -73,8 +73,8 @@ void UUnitSpawnCountWidget::OnSpawnCountCommitted(const FText& Text, ETextCommit
 	const int32 Clamped = FMath::Clamp(ParsedValue, 1, MaxSpawnCount);
 	CachedSpawnCount = Clamped;
 
-	if (SpawnComponent.IsValid())
-		SpawnComponent->SetUnitsPerSpawn(Clamped);
+	if (PlacementSystem.IsValid())
+		PlacementSystem->SetSpawnCount(Clamped);
 
 	RefreshDisplay();
 }
@@ -85,9 +85,9 @@ void UUnitSpawnCountWidget::OnSliderValueChanged(float Value)
 	if (NewValue != CachedSpawnCount)
 	{
 		CachedSpawnCount = NewValue;
-		if (SpawnComponent.IsValid())
+		if (PlacementSystem.IsValid())
 		{
-			SpawnComponent->SetUnitsPerSpawn(CachedSpawnCount);
+			PlacementSystem->SetSpawnCount(CachedSpawnCount);
 		}
 		RefreshDisplay();
 	}

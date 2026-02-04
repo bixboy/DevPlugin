@@ -81,6 +81,20 @@ void AAiControllerRts::CommandMove(const FCommandData Cmd, bool bAttack)
         if (!bShouldAttack && bAttackTarget)
                 StopAttack();
 
+        // If attacking, save patrol state to resume later
+        if (bShouldAttack)
+        {
+             if (bPatrolling)
+             {
+                 bWasPatrolling = true;
+             }
+        }
+        else
+        {
+             // Explicit move command cancels any pending patrol resume
+             bWasPatrolling = false;
+        }
+
         CurrentCommand = Cmd;
         bPatrolling = false;
         bMoveComplete = false;
@@ -199,6 +213,15 @@ void AAiControllerRts::StopAttack()
         CurrentCommand.Target = nullptr;
 
         StopMovement();
+
+        // Auto-Resume Patrol
+        if (bWasPatrolling)
+        {
+            UE_LOG(LogTemp, Log, TEXT("AAiControllerRts::StopAttack - Resuming Patrol"));
+            bPatrolling = true;
+            bWasPatrolling = false; // Consumed
+            StartPatrol();
+        }
 }
 
 void AAiControllerRts::AdvancePatrolWaypoint()
@@ -329,11 +352,11 @@ void AAiControllerRts::StartPatrol()
     OnNewDestination.Broadcast(CurrentCommand);
 }
 
-void AAiControllerRts::UpdateCurrentPatrol(const TArray<FVector>& NewPath, bool bLoop, int32 NewStartIndex)
+void AAiControllerRts::UpdatePatrolRoute(const TArray<FVector>& Points, bool bLoop, int32 StartIndex)
 {
     if (!bPatrolling) return;
 
-    CurrentPatrolPath = NewPath;
+    CurrentPatrolPath = Points;
     bPatrolLoopPattern = bLoop;
 
     // Safety: Ensure index is valid for new path
@@ -343,9 +366,9 @@ void AAiControllerRts::UpdateCurrentPatrol(const TArray<FVector>& NewPath, bool 
         return;
     }
 
-    if (NewStartIndex >= 0 && NewStartIndex < CurrentPatrolPath.Num())
+    if (StartIndex >= 0 && StartIndex < CurrentPatrolPath.Num())
     {
-        CurrentPatrolWaypointIndex = NewStartIndex;
+        CurrentPatrolWaypointIndex = StartIndex;
     }
 
     // Clamp index if path shrank
@@ -361,6 +384,7 @@ void AAiControllerRts::UpdateCurrentPatrol(const TArray<FVector>& NewPath, bool 
 void AAiControllerRts::StopPatrol()
 {
     bPatrolling = false;
+    bWasPatrolling = false; // Manual stop clears resume state
     StopMovement();
 }
 

@@ -7,15 +7,6 @@
 #include "Components/ScaleBoxSlot.h"
 #include "Styling/SlateBrush.h"
 
-namespace
-{
-    FSlateBrush CreateUpdatedBrush(const FSlateBrush& InBrush, const FLinearColor& TintColor)
-    {
-       FSlateBrush Result = InBrush;
-       Result.TintColor = FSlateColor(TintColor);
-       return Result;
-    }
-}
 
 void UCustomButtonWidget::SetButtonColor(FLinearColor NewColor)
 {
@@ -23,6 +14,11 @@ void UCustomButtonWidget::SetButtonColor(FLinearColor NewColor)
     bOverride_FillColor = true;
     bEnableFill = true;
     SetButtonSettings();
+}
+
+UCustomButtonWidget::UCustomButtonWidget(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
+{
+    bHasScriptImplementedTick = false;
 }
 
 void UCustomButtonWidget::NativePreConstruct()
@@ -43,6 +39,27 @@ void UCustomButtonWidget::NativePreConstruct()
 
     UpdateButtonText(ButtonText);
     SetButtonSettings();
+}
+
+FReply UCustomButtonWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+    if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+    {
+        return FReply::Handled();
+    }
+    
+    return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UCustomButtonWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		OnButtonRightClicked.Broadcast(this, ButtonIndex);
+		return FReply::Handled();
+	}
+	
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UCustomButtonWidget::SetButtonText(const FText& InText)
@@ -156,6 +173,14 @@ void UCustomButtonWidget::SetButtonSettings()
     bUsingTextureSizeOverride = static_cast<bool>(bOverride_Texture_Size);
     CachedTextureSize = bOverride_Texture_Size ? TextureSize : FVector2D(32.f, 32.f);
 
+    if (CurrentTextureScale == 0.0f) 
+    {
+         CurrentTextureScale = CachedTextureScale;
+         CurrentTextureAlpha = CachedTextureAlpha;
+         CurrentFillColor = CachedFillColor;
+         CurrentBorderColor = CachedBorderColor;
+    }
+
     // --- 2. (ButtonImage) ---
     if (ButtonImage)
     {
@@ -165,7 +190,7 @@ void UCustomButtonWidget::SetButtonSettings()
           
           if (bUsingTextureSizeOverride)
           {
-             ButtonImage->SetBrushSize(CachedTextureSize);
+              ButtonImage->SetDesiredSizeOverride(CachedTextureSize);
           }
            
           ButtonImage->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -200,46 +225,106 @@ void UCustomButtonWidget::UpdateButtonVisuals(const bool bForceStateUpdate)
 {
     const bool bShouldUseHoverState = bIsHovered || bIsSelected;
 
-    // --- A. (ButtonBorder) ---
-    if (ButtonBorder)
+    // Target Values
+    const FLinearColor TargetFillColor = (bUseFill) ? (bShouldUseHoverState ? CachedFillHoverColor : CachedFillColor) : FLinearColor::Transparent;
+    const FLinearColor TargetBorderColor = (bUseBorderTexture && BorderImage) ? (bShouldUseHoverState ? CachedBorderHoverColor : CachedBorderColor) : FLinearColor::Transparent;
+    
+    // Texture Targets
+    const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
+    const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
+    
+    if (!bEnableTransition || bForceStateUpdate)
     {
-       if (bUseFill)
-       {
-           const FLinearColor TargetColor = bShouldUseHoverState ? CachedFillHoverColor : CachedFillColor;
-           ButtonBorder->SetBrushColor(TargetColor);
-       }
-       else
-       {
-           ButtonBorder->SetBrushColor(FLinearColor::Transparent);
-       }
+        CurrentFillColor = TargetFillColor;
+        CurrentBorderColor = TargetBorderColor;
+        CurrentTextureAlpha = TargetAlpha;
+        CurrentTextureScale = TargetScale;
+    }
+        
+    if (!bEnableTransition || bForceStateUpdate)
+    {
+         if (ButtonBorder) 
+            ButtonBorder->SetBrushColor(CurrentFillColor);
+
+         if (BorderImage) 
+            BorderImage->SetBrushColor(CurrentBorderColor);
+
+         if (ButtonImage && bUseTexture)
+         {
+             FLinearColor CurrentColor = ButtonImage->GetColorAndOpacity();
+             CurrentColor.A = CurrentTextureAlpha;
+             ButtonImage->SetColorAndOpacity(CurrentColor);
+             ButtonImage->SetRenderScale(FVector2D(CurrentTextureScale, CurrentTextureScale));
+             ButtonImage->SetRenderTranslation(CachedTextureShift);
+         }
+    }
+    
+    if (bEnableTransition && !bForceStateUpdate)
+    {
+         bIsAnimating = true;
+    }
+}
+
+void UCustomButtonWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+
+    if (!bEnableTransition || !bIsAnimating)
+        return;
+
+    const bool bShouldUseHoverState = bIsHovered || bIsSelected;
+
+    // --- Calculate Targets ---
+    const FLinearColor TargetFillColor = (bUseFill) ? (bShouldUseHoverState ? CachedFillHoverColor : CachedFillColor) : FLinearColor::Transparent;
+    
+    // Border
+    FLinearColor TargetBorderColor = FLinearColor::Transparent;
+    if (BorderImage && bUseBorderTexture)
+    {
+         TargetBorderColor = bShouldUseHoverState ? CachedBorderHoverColor : CachedBorderColor;
     }
 
-    // --- B. (BorderImage) ---
+    // Texture
+    const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
+    const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
+
+    // --- INTERPOLATE ---
+    CurrentFillColor = FMath::CInterpTo(CurrentFillColor, TargetFillColor, InDeltaTime, TransitionSpeed);
+    CurrentBorderColor = FMath::CInterpTo(CurrentBorderColor, TargetBorderColor, InDeltaTime, TransitionSpeed);
+    CurrentTextureAlpha = FMath::FInterpTo(CurrentTextureAlpha, TargetAlpha, InDeltaTime, TransitionSpeed);
+    CurrentTextureScale = FMath::FInterpTo(CurrentTextureScale, TargetScale, InDeltaTime, TransitionSpeed);
+
+    // --- APPLY ---
+    if (ButtonBorder) 
+    {
+        ButtonBorder->SetBrushColor(CurrentFillColor);
+    }
+    
     if (BorderImage)
     {
-        if (bUseBorderTexture)
-        {
-            const FLinearColor TargetBorderColor = bShouldUseHoverState ? CachedBorderHoverColor : CachedBorderColor;
-            BorderImage->SetBrushColor(TargetBorderColor);
-        }
-        else
-        {
-            BorderImage->SetBrushColor(FLinearColor::Transparent);
-        }
+        BorderImage->SetBrushColor(CurrentBorderColor);
     }
 
-    // --- C. (ButtonImage) ---
     if (ButtonImage && bUseTexture)
     {
-        const float TargetAlpha = bShouldUseHoverState ? CachedTextureHoverAlpha : CachedTextureAlpha;
-        const float TargetScale = bShouldUseHoverState ? CachedTextureHoverScale : CachedTextureScale;
-
         FLinearColor CurrentColor = ButtonImage->GetColorAndOpacity();
-        CurrentColor.A = TargetAlpha;
+        CurrentColor.A = CurrentTextureAlpha;
         ButtonImage->SetColorAndOpacity(CurrentColor);
-
-        ButtonImage->SetRenderScale(FVector2D(TargetScale, TargetScale));
         ButtonImage->SetRenderTranslation(CachedTextureShift);
+    }
+
+    // --- CHECK COMPLETION ---
+    bool bComplete = true;
+    const float Tolerance = 0.001f;
+    
+    if (!CurrentFillColor.Equals(TargetFillColor, Tolerance)) bComplete = false;
+    else if (!CurrentBorderColor.Equals(TargetBorderColor, Tolerance)) bComplete = false;
+    else if (!FMath::IsNearlyEqual(CurrentTextureAlpha, TargetAlpha, Tolerance)) bComplete = false;
+    else if (!FMath::IsNearlyEqual(CurrentTextureScale, TargetScale, Tolerance)) bComplete = false;
+
+    if (bComplete)
+    {
+        bIsAnimating = false;
     }
 }
 

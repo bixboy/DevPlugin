@@ -8,12 +8,12 @@
 #include "Components/Unit/UnitOrderComponent.h"
 #include "Components/Patrol/UnitPatrolComponent.h"
 #include "Components/Unit/UnitSelectionComponent.h"
-#include "Components/Unit/UnitSpawnComponent.h"
+#include "Components/Placement/PlacementHandlerComponent.h"
 #include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
 #include "Player/JupiterPlayerSystem/CameraMovementSystem.h"
 #include "Player/JupiterPlayerSystem/CameraPreviewSystem.h"
 #include "Player/JupiterPlayerSystem/CameraSelectionSystem.h"
-#include "Player/JupiterPlayerSystem/CameraSpawnSystem.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 
 
 APlayerCamera::APlayerCamera()
@@ -37,7 +37,7 @@ APlayerCamera::APlayerCamera()
     SelectionComponent = CreateDefaultSubobject<UUnitSelectionComponent>(TEXT("Selection"));
     OrderComponent = CreateDefaultSubobject<UUnitOrderComponent>(TEXT("Order"));
     FormationComponent = CreateDefaultSubobject<UUnitFormationComponent>(TEXT("Formation"));
-    SpawnComponent = CreateDefaultSubobject<UUnitSpawnComponent>(TEXT("Spawn"));
+    PlacementComponent = CreateDefaultSubobject<UPlacementHandlerComponent>(TEXT("Placement"));
     PatrolComponent = CreateDefaultSubobject<UUnitPatrolComponent>(TEXT("Patrol"));
 }
 
@@ -89,8 +89,8 @@ void APlayerCamera::Tick(float DeltaTime)
     if (CommandSystem)
     	CommandSystem->Tick(DeltaTime);
 	
-    if (SpawnSystem)
-    	SpawnSystem->Tick(DeltaTime);
+    if (PlacementSystem)
+    	PlacementSystem->Tick(DeltaTime);
 	
     if (PreviewSystem)
     	PreviewSystem->Tick(DeltaTime);
@@ -158,9 +158,9 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
     // ----------------------------------------------------
     // Spawn System
     // ----------------------------------------------------
-    if (SpawnSystem)
+    if (PlacementSystem)
     {
-        Bind(SpawnUnitAction, ETriggerEvent::Completed, SpawnSystem, &UCameraSpawnSystem::HandleSpawnInput);
+        Bind(SpawnUnitAction, ETriggerEvent::Completed, PlacementSystem, &UCameraPlacementSystem::HandlePlacementInput);
     }
 }
 
@@ -195,10 +195,10 @@ void APlayerCamera::InitializeSystems()
         CommandSystem->Init(this);
     }
 
-    if (!SpawnSystem && SpawnSystemClass)
+    if (!PlacementSystem && PlacementSystemClass)
     {
-        SpawnSystem = CreateSystem<UCameraSpawnSystem>(SpawnSystemClass);
-        SpawnSystem->Init(this);
+        PlacementSystem = CreateSystem<UCameraPlacementSystem>(PlacementSystemClass);
+        PlacementSystem->Init(this);
     }
 
     if (!SelectionSystem && SelectionSystemClass)
@@ -214,23 +214,23 @@ void APlayerCamera::InitializeSystems()
         if (PreviewSystem)
         	CommandSystem->SetPreviewSystem(PreviewSystem);
     	
-        if (SpawnSystem)
-        	CommandSystem->SetSpawnSystem(SpawnSystem);
+        if (PlacementSystem)
+        	CommandSystem->SetPlacementSystem(PlacementSystem);
     }
 
-    if (SpawnSystem)
+    if (PlacementSystem)
     {
         if (PreviewSystem)
-        	SpawnSystem->SetPreviewSystem(PreviewSystem);
+        	PlacementSystem->SetPreviewSystem(PreviewSystem);
     	
         if (CommandSystem)
-        	SpawnSystem->SetCommandSystem(CommandSystem);
+        	PlacementSystem->SetCommandSystem(CommandSystem);
     }
 
     if (PreviewSystem)
     {
-        if (SpawnSystem)
-        	PreviewSystem->SetSpawnSystem(SpawnSystem);
+        // if (PlacementSystem)
+        // 	PreviewSystem->SetPlacementSystem(PlacementSystem); 
     }
 
     if (SelectionSystem)
@@ -238,8 +238,8 @@ void APlayerCamera::InitializeSystems()
         if (CommandSystem)
         	SelectionSystem->SetCommandSystem(CommandSystem);
     	
-        if (SpawnSystem)
-        	SelectionSystem->SetSpawnSystem(SpawnSystem);
+        if (PlacementSystem)
+        	SelectionSystem->SetPlacementSystem(PlacementSystem);
     }
 }
 

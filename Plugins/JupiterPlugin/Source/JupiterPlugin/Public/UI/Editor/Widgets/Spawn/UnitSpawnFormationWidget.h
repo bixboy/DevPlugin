@@ -3,10 +3,12 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
-#include "Components/Unit/UnitSpawnComponent.h"
+#include "Components/TextBlock.h"
+#include "Data/Placement/PlacementTypes.h"
 #include "UnitSpawnFormationWidget.generated.h"
 
 class UComboBoxString;
+class UCameraPlacementSystem;
 
 
 UCLASS()
@@ -19,7 +21,7 @@ public:
 	virtual void NativeDestruct() override;
 
 	UFUNCTION(BlueprintCallable, Category="Jupiter|UI")
-	void SetupWithComponent(UUnitSpawnComponent* InSpawnComponent);
+	void SetupWithSystem(UCameraPlacementSystem* InPlacementSystem);
 
 protected:
 	UFUNCTION()
@@ -28,8 +30,8 @@ protected:
 	void InitializeFormationOptions();
 
 	UFUNCTION()
-	void UpdateSelectionFromComponent(ESpawnFormation NewFormation);
-	void UpdateSelectionFromComponent();
+	void UpdateSelectionFromSystem(ESpawnFormation NewFormation);
+	void UpdateSelectionFromSystem();
 
 	UFUNCTION()
 	UWidget* HandleGenerateWidget(FString Item);
@@ -49,7 +51,7 @@ protected:
 	TObjectPtr<UTextBlock> SelectedLabel;
 
 	UPROPERTY()
-	TWeakObjectPtr<UUnitSpawnComponent> SpawnComponent;
+	TWeakObjectPtr<UCameraPlacementSystem> PlacementSystem;
 
 	TMap<FString, ESpawnFormation> OptionToFormation;
 	TMap<ESpawnFormation, FString> FormationToOption;

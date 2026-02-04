@@ -28,6 +28,9 @@ struct FPatrolRouteExtended
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")
+	FGuid PatrolID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")
 	TArray<FVector> PatrolPoints;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Patrol")

@@ -34,8 +34,8 @@ public class JupiterPlugin : ModuleRules
 				"Niagara", 
 				"EnhancedInput", 
 				"UMG",
-				"DeveloperSettings",  // Required for UPatrolSystemSettings
-				"NetCore", // Required for FFastArraySerializer
+				"DeveloperSettings",
+				"NetCore",
 			}
 			);
 			

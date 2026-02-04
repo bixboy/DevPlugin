@@ -5,7 +5,7 @@
 #include "CameraSelectionSystem.generated.h"
 
 class ASelectionBox;
-class UCameraSpawnSystem;
+class UCameraPlacementSystem;
 class UCameraCommandSystem;
 
 
@@ -32,7 +32,7 @@ public:
 
 	// --- Dependency Injection ---
 	void SetCommandSystem(UCameraCommandSystem* InCmd) { CommandSystem = InCmd; }
-	void SetSpawnSystem(UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
+	void SetPlacementSystem(UCameraPlacementSystem* InPlacement) { PlacementSystem = InPlacement; }
 
 private:
 	void FinalizeSelection();
@@ -57,14 +57,29 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Settings")
 	float LeftMouseHoldThreshold = 0.15f;
+    
+    UPROPERTY(EditDefaultsOnly, Category = "Settings")
+    float DragStartThreshold = 20.0f; // Pixels
+
+    FVector2D ClickScreenLocation;
 
 	// Systems
 	UPROPERTY()
 	TObjectPtr<UCameraCommandSystem> CommandSystem;
     
 	UPROPERTY()
-	TObjectPtr<UCameraSpawnSystem> SpawnSystem;
+	TObjectPtr<UCameraPlacementSystem> PlacementSystem;
 
 	UPROPERTY()
 	TObjectPtr<ASelectionBox> SelectionBox;
+
+    // --- Patrol Drag State ---
+    bool bIsDraggingPatrol = false;
+    FGuid DraggedPatrolID;
+    int32 DraggedPointIndex = -1;
+    FVector DraggingPlaneLocation;
+
+    bool TryStartPatrolDrag();
+    void UpdatePatrolDrag();
+    void EndPatrolDrag();
 };

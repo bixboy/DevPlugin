@@ -2,7 +2,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Patrol/UnitPatrolComponent.h"
-#include "Components/Unit/UnitSpawnComponent.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "Components/Unit/UnitSelectionComponent.h"
 #include "JupiterPageBase.generated.h"
 
@@ -13,7 +13,7 @@ class JUPITERPLUGIN_API UJupiterPageBase : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual void InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp);
+	virtual void InitPage(UCameraPlacementSystem* PlacementSys, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp);
 	
 	virtual void OnPageOpened();
 	
@@ -27,7 +27,7 @@ public:
 
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Dependencies")
-	TWeakObjectPtr<UUnitSpawnComponent> SpawnComponent;
+	TWeakObjectPtr<UCameraPlacementSystem> PlacementSystem;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dependencies")
 	TWeakObjectPtr<UUnitPatrolComponent> PatrolComponent;

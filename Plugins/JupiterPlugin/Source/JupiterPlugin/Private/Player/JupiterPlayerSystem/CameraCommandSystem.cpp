@@ -9,6 +9,7 @@
 #include "Components/Unit/UnitSelectionComponent.h"
 #include "Engine/World.h"
 #include "Data/PatrolData.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 
 
 void UCameraCommandSystem::Init(APlayerCamera* InOwner)
@@ -32,6 +33,8 @@ void UCameraCommandSystem::Init(APlayerCamera* InOwner)
     RotationHoldThreshold = GetOwner()->RotationHoldThreshold;
     DragThreshold = GetOwner()->DragThreshold;
     LoopThreshold = GetOwner()->LoopThreshold;
+
+    PreviewPatrolID = FGuid::NewGuid();
 }
 
 void UCameraCommandSystem::Tick(float DeltaTime)
@@ -326,6 +329,7 @@ void UCameraCommandSystem::UpdatePatrolPreview(const FVector& CurrentMouseLocati
     DisplayPoints.Add(CurrentMouseLocation);
     
     FPatrolRouteExtended PreviewRoute;
+    PreviewRoute.PatrolID = PreviewPatrolID;
     PreviewRoute.PatrolPoints = DisplayPoints;
     PreviewRoute.PatrolType = EPatrolType::Once;
     PreviewRoute.RouteColor = FLinearColor::Yellow;

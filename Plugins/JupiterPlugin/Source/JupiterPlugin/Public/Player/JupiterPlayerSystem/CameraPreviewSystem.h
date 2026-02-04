@@ -5,7 +5,6 @@
 
 class APreviewPoseMesh;
 class APlayerCamera;
-class UCameraSpawnSystem;
 
 
 UCLASS()
@@ -37,17 +36,11 @@ public:
 	void UpdateInstances(const TArray<FTransform>& Transforms);
 	void SetPreviewTransform(const FVector& Location, const FRotator& Rotation);
 
-	// --- Dependency Injection ---
-	void SetSpawnSystem(UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
-
 private:
 	bool InternalCreatePreviewActor(TSubclassOf<APreviewPoseMesh> PreviewClass);
 
 	UPROPERTY()
 	TObjectPtr<APreviewPoseMesh> PreviewActor;
-
-	UPROPERTY()
-	TObjectPtr<UCameraSpawnSystem> SpawnSystem;
 
 	bool bPreviewVisible = false;
 };

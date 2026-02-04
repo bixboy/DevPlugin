@@ -13,6 +13,7 @@ class UButton;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FButtonClicked, UCustomButtonWidget*, Button, int, Index);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FButtonHovered, UCustomButtonWidget*, Button, int, Index);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FButtonUnHovered, UCustomButtonWidget*, Button, int, Index);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FButtonRightClicked, UCustomButtonWidget*, Button, int, Index);
 
 UCLASS()
 class JUPITERPLUGIN_API UCustomButtonWidget : public UUserWidget
@@ -20,7 +21,18 @@ class JUPITERPLUGIN_API UCustomButtonWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
+    UCustomButtonWidget(const FObjectInitializer& ObjectInitializer);
+
     virtual void NativePreConstruct() override;
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Transition")
+    bool bEnableTransition = true;
+
+    UPROPERTY(EditAnywhere, Category = "Jupiter UI | Transition", meta = (EditCondition = "bEnableTransition"))
+    float TransitionSpeed = 10.0f;
 
     UFUNCTION(BlueprintCallable)
     void SetButtonText(const FText& InText);
@@ -45,6 +57,9 @@ public:
 
     UPROPERTY(BlueprintReadOnly, BlueprintCallable)
     FButtonUnHovered OnButtonUnHovered;
+
+	UPROPERTY(BlueprintReadOnly, BlueprintCallable)
+	FButtonRightClicked OnButtonRightClicked;
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
     UButton* Button;
@@ -226,6 +241,19 @@ protected:
     
     UPROPERTY(Transient)
     bool bUsingTextureSizeOverride = false;
+    
+    UPROPERTY(Transient)
+    bool bIsAnimating = false;
+
+    // --- Interpolation State ---
+    UPROPERTY(Transient)
+    FLinearColor CurrentFillColor;
+    UPROPERTY(Transient)
+    FLinearColor CurrentBorderColor;
+    UPROPERTY(Transient)
+    float CurrentTextureAlpha;
+    UPROPERTY(Transient)
+    float CurrentTextureScale;
 
 #pragma endregion
 };

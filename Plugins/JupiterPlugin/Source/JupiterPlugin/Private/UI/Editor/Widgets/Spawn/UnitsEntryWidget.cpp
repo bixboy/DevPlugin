@@ -1,7 +1,5 @@
 ﻿#include "UI/Editor/Widgets/Spawn/UnitsEntryWidget.h"
-#include "Components/Unit/UnitSpawnComponent.h"
-#include "Data/UnitsSelectionDataAsset.h"
-#include "Units/SoldierRts.h"
+#include "UI/Editor/Widgets/Spawn/UnitsEntryWidget.h"
 #include "UI/CustomButtonWidget.h"
 
 
@@ -16,36 +14,33 @@ void UUnitsEntryWidget::NativeOnInitialized()
 	}
 }
 
-void UUnitsEntryWidget::SetSpawnComponent(TWeakObjectPtr<UUnitSpawnComponent> InSpawnComponent)
+void UUnitsEntryWidget::SetPlacementSystem(UCameraPlacementSystem* InPlacementSystem)
 {
-	SpawnComponent = InSpawnComponent;
+	PlacementSystem = InPlacementSystem;
 }
 
-void UUnitsEntryWidget::InitEntry(UUnitsSelectionDataAsset* DataAsset)
+void UUnitsEntryWidget::InitEntry(const UPlacementUnitData* Data)
 {
-	if (!DataAsset)
+	if (!Data)
 		return;
 
-	FUnitsSelectionData UnitData = DataAsset->UnitSelectionData;
-
-	CachedUnitName = UnitData.UnitName;
-	UnitTags = UnitData.UnitTags;
-
+	PlacementData = Data;
+	CachedUnitName = Data->DisplayName;
+	UnitTags = Data->Tags;
+    
 	if (UnitButton)
 	{
-		UnitButton->SetButtonTexture(UnitData.UnitImage);
+		UnitButton->SetButtonTexture(Data->Icon);
 		UnitButton->SetButtonText(CachedUnitName);
 	}
-	
-	UnitClass = UnitData.UnitClass;
 }
 
 void UUnitsEntryWidget::OnUnitSelected(UCustomButtonWidget* Button, int Index)
 {
-	if (!UnitClass || !SpawnComponent.IsValid())
+	if (!PlacementData.IsValid() || !PlacementSystem.IsValid())
 		return;
 
-	SpawnComponent->SetUnitToSpawn(UnitClass);
+	PlacementSystem->StartPlacement(PlacementData.Get());
 }
 
 bool UUnitsEntryWidget::MatchesSearch(const FString& SearchLower) const

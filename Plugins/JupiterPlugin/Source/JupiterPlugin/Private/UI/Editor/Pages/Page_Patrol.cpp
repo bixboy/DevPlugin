@@ -1,4 +1,5 @@
 #include "UI/Editor/Pages/Page_Patrol.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "UI/Editor/Widgets/Patrol/PatrolEntryWidget.h"
 #include "UI/Editor/Widgets/Patrol/PatrolDetailWidget.h"
 #include "Components/Patrol/UnitPatrolComponent.h"
@@ -6,9 +7,9 @@
 #include "GameFramework/PlayerController.h"
 
 
-void UPage_Patrol::InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
+void UPage_Patrol::InitPage(UCameraPlacementSystem* PlacementSys, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
 {
-	Super::InitPage(SpawnComp, PatrolComp, SelComp);
+	Super::InitPage(PlacementSys, PatrolComp, SelComp);
 }
 
 void UPage_Patrol::OnPageOpened()
@@ -19,6 +20,9 @@ void UPage_Patrol::OnPageOpened()
 	{
         PatrolComponent->OnPatrolRoutesChanged.RemoveDynamic(this, &UPage_Patrol::HandleRoutesChanged);
 		PatrolComponent->OnPatrolRoutesChanged.AddDynamic(this, &UPage_Patrol::HandleRoutesChanged);
+        
+        PatrolComponent->OnPatrolSelected.RemoveDynamic(this, &UPage_Patrol::HandlePatrolSelected);
+        PatrolComponent->OnPatrolSelected.AddDynamic(this, &UPage_Patrol::HandlePatrolSelected);
 		
 		RefreshList();
 	}
@@ -33,6 +37,7 @@ void UPage_Patrol::OnPageClosed()
 	if (PatrolComponent.IsValid())
 	{
 		PatrolComponent->OnPatrolRoutesChanged.RemoveDynamic(this, &UPage_Patrol::HandleRoutesChanged);
+        PatrolComponent->OnPatrolSelected.RemoveDynamic(this, &UPage_Patrol::HandlePatrolSelected);
 	}
 
     if (PatrolDetail)
@@ -48,6 +53,17 @@ void UPage_Patrol::OnPageClosed()
 void UPage_Patrol::HandleRoutesChanged()
 {
 	RefreshList();
+}
+
+void UPage_Patrol::HandlePatrolSelected(const FGuid& PatrolID)
+{
+    SelectPatrolByID(PatrolID);
+}
+
+void UPage_Patrol::SelectPatrolByID(const FGuid& PatrolID)
+{
+    SelectedPatrolID = PatrolID;
+    RefreshList();
 }
 
 void UPage_Patrol::RefreshList()
@@ -66,9 +82,10 @@ void UPage_Patrol::RefreshList()
 	int32 RouteIndex = 0;
 	for (const FPatrolRouteItem& RouteItem : Routes)
 	{
-		const FPatrolRoute& Route = RouteItem.RouteData;
+		const FPatrolRoute& Route = RouteItem.RouteData;    
+        bool bIsTargetSelection = (Route.PatrolID == SelectedPatrolID && SelectedPatrolID.IsValid());
 
-	    if (MyPawn && MaxDisplayDistance > 0.f && !Route.PatrolPoints.IsEmpty())
+	    if (!bIsTargetSelection && MyPawn && MaxDisplayDistance > 0.f && !Route.PatrolPoints.IsEmpty())
 	    {
             const float DistSq = FVector::DistSquared(MyLoc, Route.PatrolPoints[0]);
             if (DistSq > (MaxDisplayDistance * MaxDisplayDistance))

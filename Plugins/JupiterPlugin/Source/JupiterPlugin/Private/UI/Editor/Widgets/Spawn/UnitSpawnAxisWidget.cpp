@@ -1,6 +1,6 @@
 ﻿#include "UI/Editor/Widgets/Spawn/UnitSpawnAxisWidget.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "Components/EditableTextBox.h"
-#include "Components/Unit/UnitSpawnComponent.h"
 
 void UUnitSpawnAxisWidget::NativeOnInitialized()
 {
@@ -23,44 +23,43 @@ void UUnitSpawnAxisWidget::NativeDestruct()
         FormationY->OnTextCommitted.RemoveDynamic(this, &UUnitSpawnAxisWidget::OnCustomFormationYCommitted);
     }
 
-    if (SpawnComponent.IsValid())
+    if (PlacementSystem.IsValid())
     {
-        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::RefreshCustomFormationInputs);
-        SpawnComponent->OnCustomFormationDimensionsChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::HandleCustomFormationDimensionsChanged);
-        SpawnComponent = nullptr;
+        PlacementSystem->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::RefreshCustomFormationInputs);
+        PlacementSystem->OnCustomFormationDimensionsChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::HandleCustomFormationDimensionsChanged);
+        PlacementSystem = nullptr;
     }
 }
 
-void UUnitSpawnAxisWidget::SetupWithComponent(UUnitSpawnComponent* InSpawnComponent)
+void UUnitSpawnAxisWidget::SetupWithSystem(UCameraPlacementSystem* InPlacementSystem)
 {
-    if (SpawnComponent.IsValid())
+    if (PlacementSystem.IsValid())
     {
-        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::RefreshCustomFormationInputs);
-        SpawnComponent->OnCustomFormationDimensionsChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::HandleCustomFormationDimensionsChanged);
+        PlacementSystem->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::RefreshCustomFormationInputs);
+        PlacementSystem->OnCustomFormationDimensionsChanged.RemoveDynamic(this, &UUnitSpawnAxisWidget::HandleCustomFormationDimensionsChanged);
     }
 
-    SpawnComponent = InSpawnComponent;
+    PlacementSystem = InPlacementSystem;
 
-    if (SpawnComponent.IsValid())
+    if (PlacementSystem.IsValid())
     {
-        SpawnComponent->OnSpawnFormationChanged.AddDynamic(this, &UUnitSpawnAxisWidget::RefreshCustomFormationInputs);
-        SpawnComponent->OnCustomFormationDimensionsChanged.AddDynamic(this, &UUnitSpawnAxisWidget::HandleCustomFormationDimensionsChanged);
+        PlacementSystem->OnSpawnFormationChanged.AddDynamic(this, &UUnitSpawnAxisWidget::RefreshCustomFormationInputs);
+        PlacementSystem->OnCustomFormationDimensionsChanged.AddDynamic(this, &UUnitSpawnAxisWidget::HandleCustomFormationDimensionsChanged);
     }
 
-    RefreshCustomFormationInputs(SpawnComponent.IsValid() ? SpawnComponent->GetSpawnFormation() : ESpawnFormation::Square);
+    RefreshCustomFormationInputs(PlacementSystem.IsValid() ? PlacementSystem->CurrentFormation : ESpawnFormation::Square);
 }
 
 void UUnitSpawnAxisWidget::OnCustomFormationXCommitted(const FText& Text, ETextCommit::Type /*CommitMethod*/)
 {
-    if (!SpawnComponent.IsValid())
+    if (!PlacementSystem.IsValid())
         return;
 
-    const int32 CurrentY = SpawnComponent->GetCustomFormationDimensions().Y;
+    const int32 CurrentY = PlacementSystem->CustomFormationDimensions.Y;
     int32 NewX = FMath::Max(1, FCString::Atoi(*Text.ToString()));
 
-    // ✅ Évite les boucles de rafraîchissement forcées
     bIsUpdatingFromUI = true;
-    SpawnComponent->SetCustomFormationDimensions(FIntPoint(NewX, CurrentY));
+    PlacementSystem->SetCustomFormationDimensions(FIntPoint(NewX, CurrentY));
     bIsUpdatingFromUI = false;
 
     ApplyCustomFormationToSpawnCount();
@@ -68,14 +67,14 @@ void UUnitSpawnAxisWidget::OnCustomFormationXCommitted(const FText& Text, ETextC
 
 void UUnitSpawnAxisWidget::OnCustomFormationYCommitted(const FText& Text, ETextCommit::Type /*CommitMethod*/)
 {
-    if (!SpawnComponent.IsValid())
+    if (!PlacementSystem.IsValid())
         return;
 
-    const int32 CurrentX = SpawnComponent->GetCustomFormationDimensions().X;
+    const int32 CurrentX = PlacementSystem->CustomFormationDimensions.X;
     int32 NewY = FMath::Max(1, FCString::Atoi(*Text.ToString()));
 
     bIsUpdatingFromUI = true;
-    SpawnComponent->SetCustomFormationDimensions(FIntPoint(CurrentX, NewY));
+    PlacementSystem->SetCustomFormationDimensions(FIntPoint(CurrentX, NewY));
     bIsUpdatingFromUI = false;
 
     ApplyCustomFormationToSpawnCount();
@@ -84,16 +83,16 @@ void UUnitSpawnAxisWidget::OnCustomFormationYCommitted(const FText& Text, ETextC
 void UUnitSpawnAxisWidget::HandleCustomFormationDimensionsChanged(FIntPoint /*NewDimensions*/)
 {
     if (bIsUpdatingFromUI)
-        return; // ✅ Empêche d’écraser la saisie manuelle
+        return; 
 
-    const ESpawnFormation CurrentFormation = SpawnComponent.IsValid() ? SpawnComponent->GetSpawnFormation() : ESpawnFormation::Square;
+    const ESpawnFormation CurrentFormation = PlacementSystem.IsValid() ? PlacementSystem->CurrentFormation : ESpawnFormation::Square;
     RefreshCustomFormationInputs(CurrentFormation);
 }
 
 void UUnitSpawnAxisWidget::RefreshCustomFormationInputs(ESpawnFormation NewFormation)
 {
     const bool bIsCustom = NewFormation == ESpawnFormation::Custom;
-    const FIntPoint Dimensions = SpawnComponent.IsValid() ? SpawnComponent->GetCustomFormationDimensions() : FIntPoint(1, 1);
+    const FIntPoint Dimensions = PlacementSystem.IsValid() ? PlacementSystem->CustomFormationDimensions : FIntPoint(1, 1);
 
     if (FormationX && !bIsUpdatingFromUI)
     {
@@ -110,14 +109,14 @@ void UUnitSpawnAxisWidget::RefreshCustomFormationInputs(ESpawnFormation NewForma
 
 void UUnitSpawnAxisWidget::ApplyCustomFormationToSpawnCount() const
 {
-    if (!SpawnComponent.IsValid() || SpawnComponent->GetSpawnFormation() != ESpawnFormation::Custom)
+    if (!PlacementSystem.IsValid() || PlacementSystem->CurrentFormation != ESpawnFormation::Custom)
         return;
 
-    const FIntPoint Dimensions = SpawnComponent->GetCustomFormationDimensions();
+    const FIntPoint Dimensions = PlacementSystem->CustomFormationDimensions;
     const int32 DesiredCount = FMath::Max(1, Dimensions.X * Dimensions.Y);
 
-    if (SpawnComponent->GetUnitsPerSpawn() == DesiredCount)
+    if (PlacementSystem->CurrentSpawnCount == DesiredCount)
         return;
 
-    SpawnComponent->SetUnitsPerSpawn(DesiredCount);
+    PlacementSystem->SetSpawnCount(DesiredCount);
 }

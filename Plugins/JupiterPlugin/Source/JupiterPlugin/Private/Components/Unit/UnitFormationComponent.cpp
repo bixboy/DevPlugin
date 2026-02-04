@@ -87,7 +87,6 @@ void UUnitFormationComponent::BuildFormationCommands(const FCommandData& BaseCom
     UFormationDataAsset* FormationData = GetFormationData();
     bool bHandledByLib;
 
-    // 1. Try Slots first
     if (FormationData && FormationData->SlotOffsets.Num() >= Count)
     {
         for (int32 i = 0; i < Count; ++i)
@@ -99,7 +98,6 @@ void UUnitFormationComponent::BuildFormationCommands(const FCommandData& BaseCom
     }
     else
     {
-        // 2. Try Library
         switch (CurrentFormation)
         {
             case EFormation::Square:
@@ -118,7 +116,6 @@ void UUnitFormationComponent::BuildFormationCommands(const FCommandData& BaseCom
         }
     }
 
-    // 3. If handled by Lib, apply Data Offset if present
     if (bHandledByLib && FormationData)
     {
          for (FVector& Off : Offsets)
@@ -127,7 +124,6 @@ void UUnitFormationComponent::BuildFormationCommands(const FCommandData& BaseCom
          }
     }
 
-    // 4. Fallback or specific logic
     if (!bHandledByLib)
     {
         for (int32 Index = 0; Index < Count; ++Index)

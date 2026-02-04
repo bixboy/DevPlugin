@@ -16,12 +16,12 @@ class UInputAction;
 class UUnitSelectionComponent;
 class UUnitOrderComponent;
 class UUnitFormationComponent;
-class UUnitSpawnComponent;
+class UPlacementHandlerComponent;
 class UUnitPatrolComponent;
 class UCameraMovementSystem;
 class UCameraSelectionSystem;
 class UCameraCommandSystem;
-class UCameraSpawnSystem;
+class UCameraPlacementSystem;
 class UCameraPreviewSystem;
 
 
@@ -43,7 +43,7 @@ public:
     FORCEINLINE UCameraMovementSystem* GetMovementSystem() const { return MovementSystem; }
     FORCEINLINE UCameraSelectionSystem* GetSelectionSystem() const { return SelectionSystem; }
     FORCEINLINE UCameraCommandSystem* GetCommandSystem() const { return CommandSystem; }
-    FORCEINLINE UCameraSpawnSystem* GetSpawnSystem() const { return SpawnSystem; }
+    FORCEINLINE UCameraPlacementSystem* GetPlacementSystem() const { return PlacementSystem; }
     FORCEINLINE UCameraPreviewSystem* GetPreviewSystem() const { return PreviewSystem; }
     
     FORCEINLINE APlayerController* GetPlayerController() const { return Player.IsValid() ? Player.Get() : nullptr; }
@@ -53,7 +53,7 @@ public:
     FORCEINLINE TSubclassOf<APreviewPoseMesh> GetPreviewMeshClass() const { return PreviewMeshClass; }
 
     // -------- Components Public Access --------
-    FORCEINLINE UUnitSpawnComponent* GetSpawnComponent() const { return SpawnComponent; }
+    FORCEINLINE UPlacementHandlerComponent* GetPlacementComponent() const { return PlacementComponent; }
     FORCEINLINE UUnitFormationComponent* GetFormationComponent() const { return FormationComponent; }
     FORCEINLINE UUnitOrderComponent* GetOrderComponent() const { return OrderComponent; }
     FORCEINLINE UUnitSelectionComponent* GetSelectionComponent() const { return SelectionComponent; }
@@ -85,7 +85,7 @@ public:
     TObjectPtr<UUnitFormationComponent> FormationComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jupiter|Components")
-    TObjectPtr<UUnitSpawnComponent> SpawnComponent;
+    TObjectPtr<UPlacementHandlerComponent> PlacementComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jupiter|Components")
     TObjectPtr<UUnitPatrolComponent> PatrolComponent;
@@ -148,7 +148,7 @@ protected:
     UPROPERTY(Transient)
     TObjectPtr<UCameraCommandSystem> CommandSystem;
     UPROPERTY(Transient)
-    TObjectPtr<UCameraSpawnSystem> SpawnSystem;
+    TObjectPtr<UCameraPlacementSystem> PlacementSystem;
     UPROPERTY(Transient)
     TObjectPtr<UCameraPreviewSystem> PreviewSystem;
 
@@ -160,7 +160,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
     TSubclassOf<UCameraCommandSystem> CommandSystemClass;
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
-    TSubclassOf<UCameraSpawnSystem> SpawnSystemClass;
+    TSubclassOf<UCameraPlacementSystem> PlacementSystemClass;
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
     TSubclassOf<UCameraPreviewSystem> PreviewSystemClass;
 

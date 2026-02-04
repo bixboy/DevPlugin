@@ -1,15 +1,27 @@
-#pragma once
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Data/PatrolData.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "PatrolVisualizerComponent.generated.h"
 
 class UCameraComponent;
-class UInstancedStaticMeshComponent;
 class UTextRenderComponent;
 class UPatrolSystemSettings;
 struct FPatrolRouteExtended;
 
+struct FPatrolInstanceTracker
+{
+    TObjectPtr<UInstancedStaticMeshComponent> ISMComponent;
+
+    TMap<FGuid, TArray<int32>> RouteToIndices;
+    TMap<int32, FGuid> IndexToRoute;
+
+    void SetComponent(UInstancedStaticMeshComponent* InComp);
+    void Clear();
+    void AddInstances(const FGuid& RouteID, const TArray<FTransform>& Transforms, const TArray<float>& CustomData1, const TArray<float>& CustomData2, const TArray<float>& CustomData3);
+    void RemoveInstances(const FGuid& RouteID);
+    bool FindRouteAndIndex(int32 InstanceIndex, FGuid& OutRouteID, int32& OutPointIndex) const;
+};
 
 USTRUCT()
 struct FPatrolVisualizationCache
@@ -54,37 +66,53 @@ public:
     void UpdateVisualization(const TArray<FPatrolRouteExtended>& Routes);
 
     UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    bool GetPatrolPointFromHitIndex(int32 HitIndex, FGuid& OutPatrolID, int32& OutPointIndex) const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
+    void UpdatePointPosition(FGuid PatrolID, int32 PointIndex, FVector NewLocation); // For Local visual feedback
+
+    UFUNCTION(BlueprintCallable, Category = "RTS|Patrol")
     void SetVisibility(bool bVisible);
 
 protected:
 	
     // --- Core ---
     void EnsureComponents(const UPatrolSystemSettings* Settings);
+
     void RebuildGeometry();
-    void RenderActiveRoutes(const UPatrolSystemSettings* Settings);
-    void RenderRouteCached(const FPatrolRouteExtended& Route, int32 CacheIndex, const UPatrolSystemSettings* Settings);
+
+    void RenderRouteCached(const FPatrolRouteExtended& Route, const UPatrolSystemSettings* Settings);
 
     // --- Drawing Helpers ---
-    void DrawSplinePolyline(const TArray<FVector>& Samples, const FLinearColor& Color, float Thickness, bool bDashed = false);
+    void DrawSplinePolyline(const FGuid& RouteID, const TArray<FVector>& Samples, const FLinearColor& Color, float Thickness, bool bDashed = false);
 
-    void DrawWaypoints(const TArray<FVector>& Points, const FLinearColor& Color, bool bShowNumbers, const FPatrolRouteExtended& Route, const UPatrolSystemSettings* Settings);
-    void DrawDirectionArrows(const TArray<FVector>& Samples, const FLinearColor& Color, const UPatrolSystemSettings* Settings);
+    void DrawWaypoints(const FGuid& RouteID, const TArray<FVector>& Points, const FLinearColor& Color, const FPatrolRouteExtended& Route, const UPatrolSystemSettings* Settings);
+   
+    void DrawDirectionArrows(const FGuid& RouteID, const TArray<FVector>& Samples, const FLinearColor& Color, const UPatrolSystemSettings* Settings);
 
     // --- Geometry ---
     void BuildSplineSamples(const TArray<FVector>& Points, EPatrolType Type, TArray<FVector>& OutSamples, const UPatrolSystemSettings* Settings);
+    
     static FVector EvaluateCatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T);
+    
     static uint32 HashGeometry(const TArray<FVector>& Points, EPatrolType Type);
+    
     static FBox CalculateRouteBounds(const TArray<FVector>& Points);
 
     // --- LOD & Utilities ---
     void UpdateLOD(const UPatrolSystemSettings* Settings);
+    
     bool ShouldCullRoute(const FBox& RouteBounds, const UPatrolSystemSettings* Settings) const;
+    
     float GetDistanceToCamera() const;
+    
     UCameraComponent* GetViewCamera() const;
 
-    // --- Visual Helpers ---
+    // --- Visual Helpers --- 
     FLinearColor GetRouteColor(const FPatrolRouteExtended& Route, EPatrolVisualizationState State, const UPatrolSystemSettings* Settings) const;
+    
     FLinearColor ApplyColorAnimation(const FLinearColor& BaseColor, float Time, const UPatrolSystemSettings* Settings) const;
+    
     bool ShouldAnimate(const UPatrolSystemSettings* Settings) const;
 
 protected:
@@ -92,8 +120,13 @@ protected:
     UPROPERTY()
     TArray<FPatrolRouteExtended> CurrentRoutes;
 
-    UPROPERTY()
-    TArray<FPatrolVisualizationCache> VisualizationCache;
+    // Cache keyed by PatrolID
+    TMap<FGuid, FPatrolVisualizationCache> VisualizationCache;
+    
+    // Trackers
+    FPatrolInstanceTracker WaypointTracker;
+    FPatrolInstanceTracker ArrowTracker;
+    FPatrolInstanceTracker PathLineTracker;
 
     // --- Components ---
     UPROPERTY(Transient)

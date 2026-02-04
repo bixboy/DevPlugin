@@ -15,17 +15,22 @@ class JUPITERPLUGIN_API UPage_Patrol : public UJupiterPageBase
 	GENERATED_BODY()
 
 public:
-	virtual void InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp) override;
+	virtual void InitPage(UCameraPlacementSystem* PlacementSys, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp) override;
 	virtual void OnPageOpened() override;
 	virtual void OnPageClosed() override;
-
-protected:
-
+	
 	UFUNCTION(BlueprintCallable, Category = "Patrol List")
 	void RefreshList();
+    
+    UFUNCTION(BlueprintCallable, Category = "Patrol List")
+    void SelectPatrolByID(const FGuid& PatrolID);
 
+protected:
 	UFUNCTION()
 	void HandleRoutesChanged();
+
+    UFUNCTION()
+    void HandlePatrolSelected(const FGuid& PatrolID);
 
 	UFUNCTION()
 	void OnEntrySelected(int32 LoopIndex, UPatrolEntryWidget* Entry);

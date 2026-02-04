@@ -63,6 +63,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS|Selection")
     void DestroyHud();
 
+    UFUNCTION(BlueprintPure, Category = "RTS|Selection")
+    UJupiterHudWidget* GetHudWidget() const { return HudInstance; }
+
     /** Sets the current selection to the specified control group index (0-9). */
     UFUNCTION(BlueprintCallable, Category = "RTS|Selection|Groups")
     void SetControlGroup(int32 GroupIndex);

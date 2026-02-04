@@ -1,4 +1,5 @@
 ﻿#include "UI/Editor/Widgets/Spawn/UnitSpawnFormationWidget.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "Components/ComboBoxString.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -29,29 +30,27 @@ void UUnitSpawnFormationWidget::NativeOnInitialized()
 
 void UUnitSpawnFormationWidget::NativeDestruct()
 {
-    if (SpawnComponent.IsValid())
+    if (PlacementSystem.IsValid())
     {
-        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelectionFromComponent);
+        PlacementSystem->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelectionFromSystem);
     }
     
     Super::NativeDestruct();
 }
 
-void UUnitSpawnFormationWidget::SetupWithComponent(UUnitSpawnComponent* InSpawnComponent)
+void UUnitSpawnFormationWidget::SetupWithSystem(UCameraPlacementSystem* InPlacementSystem)
 {
-    UE_LOG(LogTemp, Warning, TEXT("UnitSpawnFormationWidget::SetupWithComponent - InSpawnComponent: %s"), InSpawnComponent ? *InSpawnComponent->GetName() : TEXT("NULL"));
-    
-    if (SpawnComponent.IsValid())
+    if (PlacementSystem.IsValid())
     {
-        SpawnComponent->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelectionFromComponent);
+        PlacementSystem->OnSpawnFormationChanged.RemoveDynamic(this, &UUnitSpawnFormationWidget::UpdateSelectionFromSystem);
     }
 
-    SpawnComponent = InSpawnComponent;
-    UpdateSelectionFromComponent();
+    PlacementSystem = InPlacementSystem;
+    UpdateSelectionFromSystem();
 
-    if (SpawnComponent.IsValid())
+    if (PlacementSystem.IsValid())
     {
-        SpawnComponent->OnSpawnFormationChanged.AddUniqueDynamic(this, &UUnitSpawnFormationWidget::UpdateSelectionFromComponent);
+        PlacementSystem->OnSpawnFormationChanged.AddUniqueDynamic(this, &UUnitSpawnFormationWidget::UpdateSelectionFromSystem);
     }
 }
 
@@ -90,12 +89,12 @@ void UUnitSpawnFormationWidget::InitializeFormationOptions()
 	}
 }
 
-void UUnitSpawnFormationWidget::UpdateSelectionFromComponent(ESpawnFormation /*NewFormation*/)
+void UUnitSpawnFormationWidget::UpdateSelectionFromSystem(ESpawnFormation /*NewFormation*/)
 {
-    if (!FormationDropdown || !SpawnComponent.IsValid())
+    if (!FormationDropdown || !PlacementSystem.IsValid())
     	return;
 
-    const ESpawnFormation CurrentFormation = SpawnComponent->GetSpawnFormation();
+    const ESpawnFormation CurrentFormation = PlacementSystem->CurrentFormation;
 
     if (const FString* FoundLabel = FormationToOption.Find(CurrentFormation))
     {
@@ -106,21 +105,21 @@ void UUnitSpawnFormationWidget::UpdateSelectionFromComponent(ESpawnFormation /*N
     }
 }
 
-void UUnitSpawnFormationWidget::UpdateSelectionFromComponent()
+void UUnitSpawnFormationWidget::UpdateSelectionFromSystem()
 {
-    UpdateSelectionFromComponent(ESpawnFormation::Square); 
+    UpdateSelectionFromSystem(ESpawnFormation::Square); 
 }
 
 void UUnitSpawnFormationWidget::OnFormationChanged(FString SelectedItem, ESelectInfo::Type /*SelectionType*/)
 {
 	UpdateMainDisplay(SelectedItem);
 	
-    if (bUpdatingSelection || !SpawnComponent.IsValid())
+    if (bUpdatingSelection || !PlacementSystem.IsValid())
     	return;
 
     if (const ESpawnFormation* FoundFormation = OptionToFormation.Find(SelectedItem))
     {
-        SpawnComponent->SetSpawnFormation(*FoundFormation);
+        PlacementSystem->SetFormation(*FoundFormation);
     }
 }
 

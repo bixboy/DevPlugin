@@ -6,7 +6,7 @@
 class UPanelWidget;
 class UWidgetSwitcher;
 class UJupiterPageBase;
-class UUnitSpawnComponent;
+class UCameraPlacementSystem;
 class UUnitPatrolComponent;
 class UUnitSelectionComponent;
 class UCustomButtonWidget;
@@ -22,6 +22,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Navigation")
 	void SwitchToPage(int32 PageIndex);
+    
+    UWidgetSwitcher* GetContentSwitcher() const { return ContentSwitcher; }
+
+protected:
 
 protected:
 	void FindComponents();
@@ -46,7 +50,7 @@ protected:
 	// --- Component References ---
 
 	UPROPERTY()
-	UUnitSpawnComponent* SpawnComponent;
+	UCameraPlacementSystem* PlacementSystem;
 
 	UPROPERTY()
 	UUnitPatrolComponent* PatrolComponent;

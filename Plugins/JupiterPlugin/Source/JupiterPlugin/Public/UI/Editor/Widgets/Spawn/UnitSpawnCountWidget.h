@@ -5,7 +5,7 @@
 
 class UEditableTextBox;
 class UCustomButtonWidget;
-class UUnitSpawnComponent;
+class UCameraPlacementSystem;
 
 
 UCLASS()
@@ -20,7 +20,7 @@ public:
 	virtual void NativeDestruct() override;
 
 	UFUNCTION()
-	void SetupWithComponent(UUnitSpawnComponent* InSpawnComponent);
+	void SetupWithSystem(UCameraPlacementSystem* InPlacementSystem);
 
 protected:
 	
@@ -43,7 +43,7 @@ protected:
 	class UCustomSliderWidget* SpawnCountSlider;
 
 	UPROPERTY()
-	TWeakObjectPtr<UUnitSpawnComponent> SpawnComponent;
+	TWeakObjectPtr<UCameraPlacementSystem> PlacementSystem;
 
 	int32 CachedSpawnCount = 1;
 	int32 MaxSpawnCount = 50;

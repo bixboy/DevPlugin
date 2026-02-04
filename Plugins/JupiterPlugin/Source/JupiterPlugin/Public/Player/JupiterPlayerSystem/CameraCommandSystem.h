@@ -7,7 +7,8 @@
 class ASphereRadius;
 class UPatrolVisualizerComponent;
 class UCameraPreviewSystem;
-class UCameraSpawnSystem;
+class UCameraPreviewSystem;
+class UCameraPlacementSystem;
 
 UENUM(BlueprintType)
 enum class ECommandMode : uint8
@@ -44,7 +45,7 @@ public:
 
     // --- Dependency Injection ---
     void SetPreviewSystem(UCameraPreviewSystem* InPreview) { PreviewSystem = InPreview; }
-    void SetSpawnSystem(UCameraSpawnSystem* InSpawn) { SpawnSystem = InSpawn; }
+    void SetPlacementSystem(UCameraPlacementSystem* InPlacement) { PlacementSystem = InPlacement; }
 
     // --- Getters ---
     bool IsBuildingPatrolPath() const { return bIsBuildingPatrolPath; }
@@ -79,7 +80,7 @@ protected:
     TObjectPtr<UCameraPreviewSystem> PreviewSystem;
 
     UPROPERTY()
-    TObjectPtr<UCameraSpawnSystem> SpawnSystem;
+    TObjectPtr<UCameraPlacementSystem> PlacementSystem;
 
     UPROPERTY()
     TObjectPtr<UPatrolVisualizerComponent> PatrolVisualizer;
@@ -119,4 +120,5 @@ protected:
     // --- Optimization Flags ---
     FVector LastPreviewMouseLocation = FVector::ZeroVector;
     bool bPatrolPreviewDirty = false;
+    FGuid PreviewPatrolID;
 };

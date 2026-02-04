@@ -1,5 +1,7 @@
 #include "UI/Editor/Pages/Page_UnitSpawn.h"
-#include "Components/Unit/UnitSpawnComponent.h"
+#include "UI/Editor/Pages/Page_UnitSpawn.h"
+#include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
+#include "Data/Placement/PlacementUnitData.h"
 #include "UI/Editor/Widgets/Spawn/UnitSpawnCountWidget.h"
 #include "UI/Editor/Widgets/Spawn/UnitSpawnFormationWidget.h"
 #include "UI/Editor/Widgets/Spawn/UnitSpawnAxisWidget.h"
@@ -47,18 +49,18 @@ void UPage_UnitSpawn::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UPage_UnitSpawn::InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
+void UPage_UnitSpawn::InitPage(UCameraPlacementSystem* PlacementSys, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)
 {
-	Super::InitPage(SpawnComp, PatrolComp, SelComp);
+	Super::InitPage(PlacementSys, PatrolComp, SelComp);
 
 	if (SpawnCountWidget)
-		SpawnCountWidget->SetupWithComponent(SpawnComp);
+		SpawnCountWidget->SetupWithSystem(PlacementSys);
 	
 	if (SpawnFormationWidget)
-		SpawnFormationWidget->SetupWithComponent(SpawnComp);
+		SpawnFormationWidget->SetupWithSystem(PlacementSys);
 	
 	if (SpawnAxisWidget)
-		SpawnAxisWidget->SetupWithComponent(SpawnComp);
+		SpawnAxisWidget->SetupWithSystem(PlacementSys);
 
 	SetupUnitsList();
     InitializeInspectorWidgets();
@@ -78,7 +80,7 @@ void UPage_UnitSpawn::SetupUnitsList()
     EntryList.Reset();
     CachedCategoryTags.Reset();
 
-    for (UUnitsSelectionDataAsset* Data : UnitsSelectionDataAssets)
+    for (UPlacementUnitData* Data : PlacementUnits)
     {
         if (!Data)
         	continue;
@@ -88,7 +90,7 @@ void UPage_UnitSpawn::SetupUnitsList()
         	continue;
 
         UnitWidget->InitEntry(Data);
-        UnitWidget->SetSpawnComponent(SpawnComponent);
+        UnitWidget->SetPlacementSystem(PlacementSystem.Get());
         WrapBox->AddChild(UnitWidget);
         EntryList.Add(UnitWidget);
 
@@ -111,7 +113,6 @@ void UPage_UnitSpawn::SetupCategoryButtons()
     if (!CategoryWrapBox || !CategoryButtonClass)
     	return;
 
-    // Cleanup old bindings
     for (UCustomButtonWidget* Btn : CategoryButtons)
     {
         if (Btn)
@@ -146,7 +147,6 @@ void UPage_UnitSpawn::SetupCategoryButtons()
         CreateBtn(FText::FromName(Tag), Tag);
     }
 
-    // Default Selection
     if (CategoryButtons.Num() > 0)
     {
         UpdateCategoryButtonSelection(CategoryButtons[0]);
@@ -180,7 +180,8 @@ void UPage_UnitSpawn::OnUnitSelected(UCustomButtonWidget* Button, int Index)
             Entry->UnitButton->ToggleButtonIsSelected(false);
     }
 
-    if (Button) Button->ToggleButtonIsSelected(true);
+    if (Button) 
+        Button->ToggleButtonIsSelected(true);
 }
 
 void UPage_UnitSpawn::OnCategoryButtonClicked(UCustomButtonWidget* Button, int Index)
@@ -197,7 +198,8 @@ void UPage_UnitSpawn::UpdateCategoryButtonSelection(UCustomButtonWidget* Selecte
 {
     for (UCustomButtonWidget* Btn : CategoryButtons)
     {
-        if (Btn) Btn->ToggleButtonIsSelected(Btn == SelectedButton);
+        if (Btn) 
+            Btn->ToggleButtonIsSelected(Btn == SelectedButton);
     }
 }
 
@@ -215,7 +217,8 @@ void UPage_UnitSpawn::ApplyFilters()
 
     for (UUnitsEntryWidget* Entry : EntryList)
     {
-        if (!Entry) continue;
+        if (!Entry) 
+            continue;
 
         const bool bMatchesSearch = CurrentSearchText.IsEmpty() || Entry->MatchesSearch(CurrentSearchText);
         const bool bMatchesTag = !bFilterByTag || Entry->HasTag(CurrentTagFilter);

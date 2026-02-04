@@ -9,6 +9,117 @@
 #include "Materials/MaterialInterface.h"
 
 // ------------------------------------------------------------
+// STRUCTURE IMPLEMENTATION
+// ------------------------------------------------------------
+
+void FPatrolInstanceTracker::SetComponent(UInstancedStaticMeshComponent* InComp)
+{
+    if (ISMComponent == InComp) 
+        return;
+
+    ISMComponent = InComp;
+    RouteToIndices.Empty();
+    IndexToRoute.Empty();
+}
+
+void FPatrolInstanceTracker::Clear()
+{
+    if (ISMComponent) 
+        ISMComponent->ClearInstances();
+    
+    RouteToIndices.Empty();
+    IndexToRoute.Empty();
+}
+
+void FPatrolInstanceTracker::AddInstances(const FGuid& RouteID, const TArray<FTransform>& Transforms, const TArray<float>& CustomData1, const TArray<float>& CustomData2, const TArray<float>& CustomData3)
+{
+    if (!ISMComponent) 
+        return;
+
+    TArray<int32>& Indices = RouteToIndices.FindOrAdd(RouteID);
+    
+    for (int32 i = 0; i < Transforms.Num(); ++i)
+    {
+        int32 NewIndex = ISMComponent->AddInstance(Transforms[i], true);
+        
+        if (CustomData1.IsValidIndex(i))
+            ISMComponent->SetCustomDataValue(NewIndex, 0, CustomData1[i], true);
+
+        if (CustomData2.IsValidIndex(i)) 
+            ISMComponent->SetCustomDataValue(NewIndex, 1, CustomData2[i], true);
+
+        if (CustomData3.IsValidIndex(i)) 
+            ISMComponent->SetCustomDataValue(NewIndex, 2, CustomData3[i], true);
+
+        Indices.Add(NewIndex);
+        IndexToRoute.Add(NewIndex, RouteID);
+    }
+}
+
+void FPatrolInstanceTracker::RemoveInstances(const FGuid& RouteID)
+{
+    if (!ISMComponent || !RouteToIndices.Contains(RouteID)) 
+        return;
+
+    TArray<int32> IndicesToRemove = RouteToIndices[RouteID];
+    IndicesToRemove.Sort(TGreater<int32>());
+
+    for (int32 IndexToRemove : IndicesToRemove)
+    {
+        int32 LastIndex = ISMComponent->GetInstanceCount() - 1;
+        
+        if (IndexToRemove == LastIndex)
+        {
+            ISMComponent->RemoveInstance(IndexToRemove);
+            
+            if (IndexToRoute.Contains(IndexToRemove))
+                IndexToRoute.Remove(IndexToRemove);
+        }
+        else
+        {
+            if (IndexToRoute.Contains(LastIndex))
+            {
+                 FGuid MoverID = IndexToRoute[LastIndex]; 
+                 
+                 ISMComponent->RemoveInstance(IndexToRemove);
+                 
+                 IndexToRoute.Remove(LastIndex);
+                 IndexToRoute.Add(IndexToRemove, MoverID);
+                 
+                 TArray<int32>& MoverIndices = RouteToIndices[MoverID];
+                 int32 ParamIndex = MoverIndices.Find(LastIndex);
+                 if (ParamIndex != INDEX_NONE)
+                 {
+                     MoverIndices[ParamIndex] = IndexToRemove;
+                 }
+            }
+            else
+            {
+                ISMComponent->RemoveInstance(IndexToRemove);
+            }
+        }
+    }
+    
+    RouteToIndices.Remove(RouteID);
+}
+
+bool FPatrolInstanceTracker::FindRouteAndIndex(int32 InstanceIndex, FGuid& OutRouteID, int32& OutPointIndex) const
+{
+    if (!IndexToRoute.Contains(InstanceIndex))
+        return false;
+
+    OutRouteID = IndexToRoute[InstanceIndex];
+    if (const TArray<int32>* Indices = RouteToIndices.Find(OutRouteID))
+    {
+        // The index in the array corresponds to the Point Index
+        // because we AddInstances in order of the Points array!
+        OutPointIndex = Indices->Find(InstanceIndex);
+        return (OutPointIndex != INDEX_NONE);
+    }
+    return false;
+}
+
+// ------------------------------------------------------------
 // LIFECYCLE
 // ------------------------------------------------------------
 
@@ -36,16 +147,54 @@ void UPatrolVisualizerComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 
 void UPatrolVisualizerComponent::UpdateVisualization(const TArray<FPatrolRouteExtended>& Routes)
 {
-    CurrentRoutes = Routes;
-
-    if (VisualizationCache.Num() != Routes.Num())
+    if (Routes.IsEmpty() && !CurrentRoutes.IsEmpty())
     {
-        VisualizationCache.SetNum(Routes.Num());
+        CurrentRoutes.Empty();
+        
+        WaypointTracker.Clear();
+        ArrowTracker.Clear();
+        PathLineTracker.Clear();
+        VisualizationCache.Empty();
+        
+        for (UTextRenderComponent* TextComp : TextLabelPool)
+        {
+             if (TextComp) 
+                TextComp->SetVisibility(false);
+        }
+        
+        SetVisibility(false);
+        return;
     }
 
+    CurrentRoutes = Routes;
+    SetVisibility(true);
+    CurrentRoutes = Routes;
     SetVisibility(true);
     RebuildGeometry();
 }
+
+bool UPatrolVisualizerComponent::GetPatrolPointFromHitIndex(int32 HitIndex, FGuid& OutPatrolID, int32& OutPointIndex) const
+{
+    return WaypointTracker.FindRouteAndIndex(HitIndex, OutPatrolID, OutPointIndex);
+}
+
+void UPatrolVisualizerComponent::UpdatePointPosition(FGuid PatrolID, int32 PointIndex, FVector NewLocation)
+{
+    for (FPatrolRouteExtended& Route : CurrentRoutes)
+    {
+        if (Route.PatrolID == PatrolID)
+        {
+            if (Route.PatrolPoints.IsValidIndex(PointIndex))
+            {
+                Route.PatrolPoints[PointIndex] = NewLocation;
+                RebuildGeometry();
+            }
+            break;
+        }
+    }
+}
+
+
 
 void UPatrolVisualizerComponent::SetVisibility(bool bVisible)
 {
@@ -54,6 +203,9 @@ void UPatrolVisualizerComponent::SetVisibility(bool bVisible)
 	
     if (ArrowISM)
     	ArrowISM->SetVisibility(bVisible);
+    
+    if (PathLineISM)
+        PathLineISM->SetVisibility(bVisible);
 
     if (!bVisible)
     {
@@ -85,47 +237,63 @@ void UPatrolVisualizerComponent::RebuildGeometry()
         
     UpdateLOD(Settings);
 
-    if (PathLineISM)
-        PathLineISM->ClearInstances();
+    WaypointTracker.SetComponent(WaypointISM);
+    ArrowTracker.SetComponent(ArrowISM);
+    PathLineTracker.SetComponent(PathLineISM);
 
-    if (WaypointISM)
-    	WaypointISM->ClearInstances();
-	
-    if (ArrowISM)
-    	ArrowISM->ClearInstances();
-
+    TSet<FGuid> IncomingIDs;
+    IncomingIDs.Reserve(CurrentRoutes.Num());
+    
+    for (const auto& R : CurrentRoutes) 
+    {
+        if (R.PatrolID.IsValid())
+            IncomingIDs.Add(R.PatrolID);
+    }
+    
+    TArray<FGuid> IDsToRemove;
+    for (auto& Pair : VisualizationCache)
+    {
+        if (!IncomingIDs.Contains(Pair.Key)) 
+        {
+            IDsToRemove.Add(Pair.Key);
+        }
+    }
+    
+    for (const FGuid& ID : IDsToRemove)
+    {
+        WaypointTracker.RemoveInstances(ID);
+        ArrowTracker.RemoveInstances(ID);
+        PathLineTracker.RemoveInstances(ID);
+        VisualizationCache.Remove(ID);
+    }
+    
     for (UTextRenderComponent* TextComp : TextLabelPool)
     {
         if (TextComp)
         	TextComp->SetVisibility(false);
     }
-	
+
     ActiveTextLabels = 0;
-
-    RenderActiveRoutes(Settings);
-}
-
-void UPatrolVisualizerComponent::RenderActiveRoutes(const UPatrolSystemSettings* Settings)
-{
-    if (CurrentRoutes.IsEmpty())
-    	return;
 
     const int32 MaxRoutes = FMath::Min(CurrentRoutes.Num(), Settings->MaxVisibleRoutes);
     for (int32 i = 0; i < MaxRoutes; ++i)
     {
-        RenderRouteCached(CurrentRoutes[i], i, Settings);
+        RenderRouteCached(CurrentRoutes[i], Settings);
     }
 }
 
-void UPatrolVisualizerComponent::RenderRouteCached(const FPatrolRouteExtended& Route, int32 CacheIndex, const UPatrolSystemSettings* Settings)
+
+void UPatrolVisualizerComponent::RenderRouteCached(const FPatrolRouteExtended& Route, const UPatrolSystemSettings* Settings)
 {
-    if (Route.PatrolPoints.Num() < 2 || !VisualizationCache.IsValidIndex(CacheIndex))
+    if (Route.PatrolPoints.Num() < 2 || !Route.PatrolID.IsValid())
         return;
 
-    FPatrolVisualizationCache& Cache = VisualizationCache[CacheIndex];
+    FPatrolVisualizationCache& Cache = VisualizationCache.FindOrAdd(Route.PatrolID);
 
     const uint32 NewHash = HashGeometry(Route.PatrolPoints, Route.PatrolType);
-    if (NewHash != Cache.GeometryHash)
+    bool bGeometryChanged = (NewHash != Cache.GeometryHash);
+
+    if (bGeometryChanged)
     {
         Cache.ElevatedPoints.Reset(Route.PatrolPoints.Num());
         for (const FVector& Point : Route.PatrolPoints)
@@ -137,38 +305,58 @@ void UPatrolVisualizerComponent::RenderRouteCached(const FPatrolRouteExtended& R
         Cache.RouteBounds = CalculateRouteBounds(Cache.ElevatedPoints);
         Cache.GeometryHash = NewHash;
         Cache.PatrolTypeCached = Route.PatrolType;
+        
+        WaypointTracker.RemoveInstances(Route.PatrolID);
+        ArrowTracker.RemoveInstances(Route.PatrolID);
+        PathLineTracker.RemoveInstances(Route.PatrolID);
     }
 
     if (Settings->bEnableFrustumCulling && ShouldCullRoute(Cache.RouteBounds, Settings))
         return;
 
     FLinearColor RouteColor = GetRouteColor(Route, Cache.State, Settings);
+    const bool bIsPreview = (Cache.State == EPatrolVisualizationState::Preview);
 
-    float Thickness = Settings->LineThickness;
-	
-    const bool bIsPreview = Cache.State == EPatrolVisualizationState::Preview;
-    if (bIsPreview)
+    if (bGeometryChanged)
     {
-        DrawSplinePolyline(Cache.SplineSamples, RouteColor, Thickness, true);
-    }
-    else
-    {
-        DrawSplinePolyline(Cache.SplineSamples, RouteColor, Thickness);
-    }
+        float Thickness = Settings->LineThickness;
+        DrawSplinePolyline(Route.PatrolID, Cache.SplineSamples, RouteColor, Thickness, bIsPreview);
 
+        const bool bRenderWaypoints = (CurrentLODLevel <= 1);
+        const bool bRenderArrows = (CurrentLODLevel == 0) && Route.bShowDirectionArrows;
+                
+        if (bRenderWaypoints)
+        {
+            DrawWaypoints(Route.PatrolID, Cache.ElevatedPoints, RouteColor, Route, Settings);
+        }
 
-    const bool bRenderWaypoints = (CurrentLODLevel <= 1);
-    const bool bRenderArrows = (CurrentLODLevel == 0) && Route.bShowDirectionArrows;
+        if (bRenderArrows && Settings->ArrowSpacing > 0.f && !bIsPreview)
+        {
+            DrawDirectionArrows(Route.PatrolID, Cache.SplineSamples, RouteColor, Settings);
+        }
+    }
+    
     const bool bRenderNumbers = (CurrentLODLevel == 0) && Route.bShowWaypointNumbers;
-
-    if (bRenderWaypoints)
+    if (bRenderNumbers)
     {
-        DrawWaypoints(Cache.ElevatedPoints, RouteColor, bRenderNumbers, Route, Settings);
-    }
-
-    if (bRenderArrows && Settings->ArrowSpacing > 0.f && !bIsPreview)
-    {
-        DrawDirectionArrows(Cache.SplineSamples, RouteColor.ToFColor(true), Settings);
+        for (int32 i = 0; i < Cache.ElevatedPoints.Num(); ++i)
+        {
+             FString LabelText = FString::FromInt(i + 1);
+             FVector Point = Cache.ElevatedPoints[i];
+             
+            if (ActiveTextLabels < TextLabelPool.Num())
+            {
+               UTextRenderComponent* TextComp = TextLabelPool[ActiveTextLabels];
+               if (TextComp)
+               {
+                   TextComp->SetVisibility(true);
+                   TextComp->SetText(FText::FromString(LabelText));
+                   TextComp->SetWorldLocation(Point + FVector(0,0, Settings->WaypointRadius * 2.5f));
+                   TextComp->SetTextRenderColor(RouteColor.ToFColor(true));
+                   ActiveTextLabels++;
+               }
+            }
+        }
     }
 
     Cache.LastAccessTime = GlobalAnimationTime;
@@ -178,10 +366,18 @@ void UPatrolVisualizerComponent::RenderRouteCached(const FPatrolRouteExtended& R
 // DRAWING IMPLEMENTATION
 // ------------------------------------------------------------
 
-void UPatrolVisualizerComponent::DrawSplinePolyline(const TArray<FVector>& Samples, const FLinearColor& Color, float Thickness, bool bDashed)
+void UPatrolVisualizerComponent::DrawSplinePolyline(const FGuid& RouteID, const TArray<FVector>& Samples, const FLinearColor& Color, float Thickness, bool bDashed)
 {
-    if (!PathLineISM || Samples.Num() < 2)
-    	return;
+    if (Samples.Num() < 2) 
+        return;
+
+    TArray<FTransform> Transforms;
+    TArray<float> R, G, B;
+    
+    Transforms.Reserve(Samples.Num());
+    R.Reserve(Samples.Num());
+    G.Reserve(Samples.Num());
+    B.Reserve(Samples.Num());
 
     for (int32 i = 0; i < Samples.Num() - 1; ++i)
     {
@@ -190,32 +386,37 @@ void UPatrolVisualizerComponent::DrawSplinePolyline(const TArray<FVector>& Sampl
         const FVector Delta = End - Start;
         const float Length = Delta.Size();
         
-        if (Length < KINDA_SMALL_NUMBER)
-        	continue;
+        if (Length < KINDA_SMALL_NUMBER) 
+            continue;
 
         const FVector MidPoint = Start + (Delta * 0.5f);
         const FRotator Rotation = FRotationMatrix::MakeFromX(Delta).Rotator();
         const FVector Scale(Length / 100.f, Thickness/100.f, Thickness/100.f);
 
-        FTransform InstanceTransform;
-        InstanceTransform.SetLocation(MidPoint);
-        InstanceTransform.SetRotation(Rotation.Quaternion());
-        InstanceTransform.SetScale3D(Scale);
-
-        const int32 Idx = PathLineISM->AddInstance(InstanceTransform, true);
+        FTransform& T = Transforms.AddDefaulted_GetRef();
+        T.SetLocation(MidPoint);
+        T.SetRotation(Rotation.Quaternion());
+        T.SetScale3D(Scale);
         
-        PathLineISM->SetCustomDataValue(Idx, 0, Color.R, true);
-        PathLineISM->SetCustomDataValue(Idx, 1, Color.G, true);
-        PathLineISM->SetCustomDataValue(Idx, 2, Color.B, true);
+        R.Add(Color.R);
+        G.Add(Color.G);
+        B.Add(Color.B);
     }
+    
+    PathLineTracker.AddInstances(RouteID, Transforms, R, G, B);
 }
 
-void UPatrolVisualizerComponent::DrawWaypoints(const TArray<FVector>& Points, const FLinearColor& Color, bool bShowNumbers, const FPatrolRouteExtended& Route, const UPatrolSystemSettings* Settings)
+void UPatrolVisualizerComponent::DrawWaypoints(const FGuid& RouteID, const TArray<FVector>& Points, const FLinearColor& Color, const FPatrolRouteExtended& Route, const UPatrolSystemSettings* Settings)
 {
-    if (!WaypointISM || Points.IsEmpty())
-    	return;
+    if (Points.IsEmpty()) 
+        return;
 
-    const float ScaleMult = 1.0f;
+    TArray<FTransform> Transforms;
+    TArray<float> R, G, B;
+    Transforms.Reserve(Points.Num());
+    R.Reserve(Points.Num());
+    G.Reserve(Points.Num());
+    B.Reserve(Points.Num());
 
     for (int32 i = 0; i < Points.Num(); ++i)
     {
@@ -224,100 +425,61 @@ void UPatrolVisualizerComponent::DrawWaypoints(const TArray<FVector>& Points, co
         FLinearColor PointColor = Color;
         if (i == 0 && Route.PatrolType != EPatrolType::Loop)
         {
-	        PointColor = FLinearColor::Green;
+            PointColor = FLinearColor::Green;
         }
         else if (i == Points.Num() - 1 && Route.PatrolType != EPatrolType::Loop)
         {
-	        PointColor = FLinearColor::Red;
+            PointColor = FLinearColor::Red;
         }
 
-        FTransform InstanceTransform;
-        InstanceTransform.SetLocation(Point);
-        InstanceTransform.SetScale3D(FVector(ScaleMult));
+        FTransform& T = Transforms.AddDefaulted_GetRef();
+        T.SetLocation(Point);
+        T.SetScale3D(FVector(1.0f));
         
-        const int32 InstIdx = WaypointISM->AddInstance(InstanceTransform, true);
-    	
-        WaypointISM->SetCustomDataValue(InstIdx, 0, PointColor.R, true);
-        WaypointISM->SetCustomDataValue(InstIdx, 1, PointColor.G, true);
-        WaypointISM->SetCustomDataValue(InstIdx, 2, PointColor.B, true);
-
-        if (bShowNumbers)
-        {
-            FString LabelText = FString::FromInt(i + 1);
-            if (Route.WaitTimeAtWaypoints > 0.f)
-            {
-                LabelText += FString::Printf(TEXT("\n(%.1fs)"), Route.WaitTimeAtWaypoints);
-            }
-
-            const FVector TextLocation = Point + FVector(0, 0, Settings->WaypointRadius * 2.5f);
-            
-            UTextRenderComponent* TextComp = nullptr;
-            if (ActiveTextLabels < TextLabelPool.Num())
-            {
-                TextComp = TextLabelPool[ActiveTextLabels];
-            }
-            else
-            {
-                TextComp = NewObject<UTextRenderComponent>(GetOwner());
-                TextComp->SetupAttachment(GetOwner()->GetRootComponent());
-                TextComp->RegisterComponent();
-                TextLabelPool.Add(TextComp);
-            }
-            
-            if (TextComp)
-            {
-                TextComp->SetVisibility(true);
-                TextComp->SetText(FText::FromString(LabelText));
-                TextComp->SetTextRenderColor(PointColor.ToFColor(true));
-                TextComp->SetWorldLocation(TextLocation);
-                TextComp->SetWorldScale3D(FVector(Settings->WaypointNumberScale));
-                TextComp->SetHorizontalAlignment(EHTA_Center);
-                TextComp->SetVerticalAlignment(EVRTA_TextCenter);
-                
-                if (UCameraComponent* Cam = GetViewCamera())
-                {
-                    TextComp->SetWorldRotation(Cam->GetComponentRotation());
-                }
-                
-                ActiveTextLabels++;
-            }
-        }
+        R.Add(PointColor.R);
+        G.Add(PointColor.G);
+        B.Add(PointColor.B);
     }
+
+    WaypointTracker.AddInstances(RouteID, Transforms, R, G, B);
 }
 
-void UPatrolVisualizerComponent::DrawDirectionArrows(const TArray<FVector>& Samples, const FLinearColor& Color, const UPatrolSystemSettings* Settings)
+void UPatrolVisualizerComponent::DrawDirectionArrows(const FGuid& RouteID, const TArray<FVector>& Samples, const FLinearColor& Color, const UPatrolSystemSettings* Settings)
 {
-    if (!ArrowISM || Samples.Num() < 2)
-    	return;
+    if (Samples.Num() < 2) 
+        return;
 
     const float ArrowSpacing = Settings->ArrowSpacing;
     float AccumulatedDistance = 0.f;
 
+    TArray<FTransform> Transforms;
+    TArray<float> R, G, B;
+
     for (int32 i = 1; i < Samples.Num(); ++i)
     {
-        const FVector& A = Samples[i - 1];
-        const FVector& B = Samples[i];
-        const float SegmentLength = FVector::Distance(A, B);
+        const FVector& SegStart = Samples[i - 1];
+        const FVector& SegEnd = Samples[i];
+        float SegLen = FVector::Distance(SegStart, SegEnd);
 
-        AccumulatedDistance += SegmentLength;
-        if (AccumulatedDistance < ArrowSpacing)
-        	continue;
-
-        AccumulatedDistance = 0.f;
-
-        const FVector Direction = (B - A).GetSafeNormal();
-        const FRotator Rotation = Direction.Rotation() + FRotator(-90.f, 0.f, 0.f);
-
-        FTransform InstanceTransform;
-        InstanceTransform.SetLocation(B);
-        InstanceTransform.SetRotation(Rotation.Quaternion());
-        InstanceTransform.SetScale3D(FVector(0.5f)); 
-
-        const int32 InstIdx = ArrowISM->AddInstance(InstanceTransform, true);
-        ArrowISM->SetCustomDataValue(InstIdx, 0, Color.R, true);
-        ArrowISM->SetCustomDataValue(InstIdx, 1, Color.G, true);
-        ArrowISM->SetCustomDataValue(InstIdx, 2, Color.B, true);
+        AccumulatedDistance += SegLen;
+        if (AccumulatedDistance >= ArrowSpacing)
+        {
+             AccumulatedDistance = 0.f;
+             const FVector Dir = (SegEnd - SegStart).GetSafeNormal();
+             FRotator Rot = Dir.Rotation() + FRotator(-90.f, 0.f, 0.f);
+             
+             FTransform& T = Transforms.AddDefaulted_GetRef();
+             T.SetLocation(SegEnd);
+             T.SetRotation(Rot.Quaternion());
+             T.SetScale3D(FVector(0.5f));
+             
+             R.Add(Color.R);
+             G.Add(Color.G);
+             B.Add(Color.B);
+        }
     }
+    
+    ArrowTracker.AddInstances(RouteID, Transforms, R, G, B);
 }
 
 // ------------------------------------------------------------
@@ -327,19 +489,32 @@ void UPatrolVisualizerComponent::DrawDirectionArrows(const TArray<FVector>& Samp
 void UPatrolVisualizerComponent::EnsureComponents(const UPatrolSystemSettings* Settings)
 {
     AActor* Owner = GetOwner();
-    if (!Owner || !Settings) return;
+    if (!Owner || !Settings) 
+        return;
 
     auto CreateISM = [&](TObjectPtr<UInstancedStaticMeshComponent>& Comp, FName Name, TSoftObjectPtr<UStaticMesh> MeshAsset, TSoftObjectPtr<UMaterialInterface> MatAsset, bool bIsLine = false)
     {
-        if (Comp) return;
+        if (Comp) 
+            return;
         
         Comp = NewObject<UInstancedStaticMeshComponent>(Owner, Name);
-        if (!Comp) return;
+        if (!Comp) 
+            return;
 
         Comp->SetupAttachment(Owner->GetRootComponent());
         Comp->SetUsingAbsoluteLocation(true);
         Comp->RegisterComponent();
-        Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        if (Name == "PatrolWaypointISM")
+        {
+            Comp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            Comp->SetCollisionResponseToAllChannels(ECR_Ignore);
+            Comp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+        }
+        else
+        {
+            Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        }
+        
         Comp->SetCastShadow(false);
         Comp->SetNumCustomDataFloats(3);
 
@@ -449,7 +624,8 @@ FVector UPatrolVisualizerComponent::EvaluateCatmullRom(const FVector& P0, const 
 
 uint32 UPatrolVisualizerComponent::HashGeometry(const TArray<FVector>& Points, EPatrolType Type)
 {
-    if (Points.IsEmpty()) return 0u;
+    if (Points.IsEmpty()) 
+        return 0u;
     
     uint32 Hash = 2166136261u;
     for (const FVector& P : Points)
@@ -466,7 +642,9 @@ FBox UPatrolVisualizerComponent::CalculateRouteBounds(const TArray<FVector>& Poi
 {
     FBox Bounds(ForceInit);
     for (const FVector& Point : Points)
-    	Bounds += Point;
+    {
+        Bounds += Point;
+    }
 	
     return Bounds.ExpandBy(100.f);
 }
@@ -498,6 +676,7 @@ UCameraComponent* UPatrolVisualizerComponent::GetViewCamera() const
             }
         }
     }
+
     return nullptr;
 }
 
@@ -521,7 +700,9 @@ FLinearColor UPatrolVisualizerComponent::GetRouteColor(const FPatrolRouteExtende
         default: break;
     }
 
-    if (Route.RouteColor != FLinearColor(0.f, 1.f, 1.f)) return Route.RouteColor;
+    if (Route.RouteColor != FLinearColor(0.f, 1.f, 1.f)) 
+        return Route.RouteColor;
+
     return Settings->ActiveRouteColor;
 }
 

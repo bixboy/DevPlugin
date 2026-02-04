@@ -4,7 +4,7 @@
 #include "UI/Editor/JupiterPageBase.h"
 #include "Page_UnitSpawn.generated.h"
 
-class UUnitSpawnComponent;
+class UCameraPlacementSystem;
 class UUnitsEntryWidget;
 class UWrapBox;
 class UBorder;
@@ -27,7 +27,7 @@ public:
 	virtual void NativeDestruct() override;
 
 	// --- UJupiterPageBase Interface ---
-	virtual void InitPage(UUnitSpawnComponent* SpawnComp, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp) override;
+	virtual void InitPage(UCameraPlacementSystem* PlacementSys, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp) override;
 	virtual void OnPageOpened() override;
 	// ----------------------------------
 
@@ -75,7 +75,7 @@ protected:
 	TSubclassOf<UCustomButtonWidget> CategoryButtonClass;
 
 	UPROPERTY(EditAnywhere, Category = "Settings")
-	TArray<UUnitsSelectionDataAsset*> UnitsSelectionDataAssets;
+	TArray<class UPlacementUnitData*> PlacementUnits;
 
 	// --- UI Elements ---
 

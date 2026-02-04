@@ -12,9 +12,6 @@ void USoldierManagerComponent::BeginPlay()
 {
     Super::BeginPlay();
 
-    // RECOMMENDED: Attach this component to the GameState for global management, 
-    // rather than the PlayerController, to ensure it persists across possession changes and handles all soldiers server-wide.
-
     if (GetOwner()->HasAuthority())
     {
         TArray<AActor*> FoundSoldiers;
