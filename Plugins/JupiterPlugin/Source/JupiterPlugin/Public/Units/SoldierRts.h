@@ -1,13 +1,15 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Data/AiData.h"
 #include "GameFramework/Character.h"
 #include "Interfaces/Damageable.h"
 #include "Interfaces/Selectable.h"
 
+#include "Interfaces/WorldTooltipTarget.h"
+#include "Interfaces/ContextMenuTarget.h"
 #include "SoldierRts.generated.h"
 
+// Forward Declarations
 class USoldierManagerComponent;
 class UWeaponMaster;
 class UCommandComponent;
@@ -19,39 +21,30 @@ struct FAttackDetectionSettings
 {
     GENERATED_BODY()
 
-    /** How often the detection should be refreshed when using the calculation based detection. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true", ClampMin = "0.05"))
     float RefreshInterval = 0.25f;
 
-    /** Maximum number of enemies to keep in range. 0 means no limit. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true", ClampMin = "0"))
     int32 MaxEnemiesTracked = 0;
 
-    /** Maximum number of allies to keep in range. 0 means no limit. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true", ClampMin = "0"))
     int32 MaxAlliesTracked = 0;
 
-    /** When true the tracked actors are sorted by distance before being stored. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (AllowPrivateAccess = "true"))
     bool bPrioritizeClosestTargets = true;
 
-    /** Enable to visualize the attack range and detected actors. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true"))
     bool bDebugDrawDetection = false;
 
-    /** Color used when drawing the debug information. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection"))
     FLinearColor DebugColor = FLinearColor::Red;
 
-    /** Duration in seconds for which debug shapes stay visible. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection", ClampMin = "0.0"))
     float DebugDuration = 0.1f;
 
-    /** Draw a line to every detected target when debugging. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection"))
     bool bDrawTargetLines = true;
 
-    /** Thickness of the debug lines when enabled. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack|Debug", meta = (AllowPrivateAccess = "true", EditCondition = "bDebugDrawDetection", ClampMin = "0.0"))
     float DebugLineThickness = 1.5f;
 };
@@ -60,13 +53,23 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FActionEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FBehaviorUpdatedDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSelectedDelegate, bool, bIsSelected);
 
+
 UCLASS(Blueprintable)
-class JUPITERPLUGIN_API ASoldierRts : public ACharacter, public ISelectable, public IDamageable
+class JUPITERPLUGIN_API ASoldierRts : public ACharacter, public ISelectable, public IDamageable, public IWorldTooltipTarget, public IContextMenuTarget
 {
+
     GENERATED_BODY()
 
 public:
     ASoldierRts(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+    // Context Menu Actions
+    UFUNCTION(Server, Reliable)
+    void Server_DestroySelf();
+    
+    // Callbacks
+    void OnContextAction_Delete();
+    void OnContextAction_Inspect();
 
     // AActor interface
     virtual void OnConstruction(const FTransform& Transform) override;
@@ -90,6 +93,9 @@ public:
     virtual void TakeDamage_Implementation(AActor* DamageOwner) override;
     virtual bool GetIsInAttack_Implementation() override;
     virtual bool GetCanAttack_Implementation() override;
+
+    virtual bool GetTooltipData_Implementation(FTooltipData& OutData) override;
+    virtual void GetContextMenuOptions_Implementation(TArray<FContextMenuItem>& OutOptions) override;
 
     UFUNCTION(BlueprintCallable, BlueprintPure)
     UCommandComponent* GetCommandComponent() const;

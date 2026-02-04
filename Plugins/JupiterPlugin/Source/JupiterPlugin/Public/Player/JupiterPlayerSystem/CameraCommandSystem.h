@@ -87,6 +87,9 @@ protected:
 
     UPROPERTY()
     TObjectPtr<ASphereRadius> SphereRadius;
+	
+	UPROPERTY()
+	APlayerController* PC;
 
     // --- Settings ---
     UPROPERTY(EditDefaultsOnly, Category = "Settings|Input")

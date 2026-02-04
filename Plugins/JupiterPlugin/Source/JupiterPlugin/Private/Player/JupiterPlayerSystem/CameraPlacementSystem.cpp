@@ -74,25 +74,7 @@ void UCameraPlacementSystem::StartPlacement(const UPlacementItemData* ItemToPlac
 
     CurrentItemData = ItemToPlace;
     bIsPlacementActive = true;
-    
-    // PERSISTENCE CHANGE: We do NOT reset Count/Formation/Spacing from defaults anymore.
-    // We keep the user's last used settings.
-    /*
-    if (const UPlacementUnitData* UnitData = Cast<UPlacementUnitData>(ItemToPlace))
-    {
-        CurrentSpawnCount = UnitData->DefaultUnitCount;
-        CurrentFormation = UnitData->DefaultFormation;
-        CurrentSpacing = UnitData->FormationSpacing;
-    }
-    else
-    {
-        CurrentSpawnCount = 1;
-        CurrentFormation = ESpawnFormation::Square;
-        CurrentSpacing = 150.f;
-    }
-    */
-
-    // Broadcast changes so UI matches internal state (which might be old persistence)
+	
     OnSpawnCountChanged.Broadcast(CurrentSpawnCount);
     OnSpawnFormationChanged.Broadcast(CurrentFormation);
     OnCustomFormationDimensionsChanged.Broadcast(CustomFormationDimensions);
@@ -143,15 +125,14 @@ void UCameraPlacementSystem::HandlePlacementInput()
             UE_LOG(LogTemp, Error, TEXT("CameraPlacementSystem: Missing PlacementHandlerComponent on PlayerCamera!"));
         }
     }
-
-    // Reuse Logic: Do we stay in placement mode?
-    // For now, let's exit to be safe, or we could keep it active if Shift is held?
+	
     CancelPlacement();
 }
 
 void UCameraPlacementSystem::UpdatePreviewVisuals()
 {
-    if (!PreviewSystem || !CurrentItemData) return;
+    if (!PreviewSystem || !CurrentItemData) 
+    	return;
 
     UStreamableRenderAsset* Asset = nullptr;
 
@@ -177,8 +158,8 @@ void UCameraPlacementSystem::UpdatePreviewVisuals()
     if (Asset)
     {
         int32 Count = CurrentSpawnCount;
-        bool bSuccess = false;
-        
+        bool bSuccess;
+    	
         if (USkeletalMesh* Skel = Cast<USkeletalMesh>(Asset))
         {
             bSuccess = PreviewSystem->ShowSkeletalPreview(Skel, CurrentItemData->InternalScale, Count);
@@ -187,6 +168,7 @@ void UCameraPlacementSystem::UpdatePreviewVisuals()
         {
             bSuccess = PreviewSystem->ShowStaticPreview(Static, CurrentItemData->InternalScale, Count);
         }
+    	
         return;
     }
 
@@ -215,7 +197,8 @@ void UCameraPlacementSystem::UpdateMouseFollow(float CurrentTime)
          FHitResult Hit = SelComp->GetMousePositionOnTerrain();
          FVector MousePos = Hit.Location;
 
-         if (MousePos.IsNearlyZero()) return;
+         if (MousePos.IsNearlyZero()) 
+         	return;
          
          if (APlayerController* PC = GetOwner()->GetPlayerController())
          {
@@ -266,10 +249,10 @@ void UCameraPlacementSystem::UpdateMouseFollow(float CurrentTime)
 
 void UCameraPlacementSystem::UpdateTransforms(const FVector& Center, const FRotator& Facing)
 {
-    if (!PreviewSystem || !CurrentItemData) return;
+    if (!PreviewSystem || !CurrentItemData) 
+    	return;
     
     PreviewSystem->SetPreviewTransform(Center, Facing);
-    
     CachedTransforms.Reset();
 
     if (const UPlacementUnitData* UnitData = Cast<UPlacementUnitData>(CurrentItemData))
@@ -329,9 +312,8 @@ void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* Unit
         int32 Row = 0;
         while (CurrentIdx < Count)
         {
-            int32 UnitsInRow = Row + 1; // 1, 2, 3...
+            int32 UnitsInRow = Row + 1;
             float RowWidth = (UnitsInRow - 1) * Spacing;
-            // Center - DepthOffset
             FVector RowStart = Center - (RightDir * RowWidth * 0.5f) - (ForwardDir * Row * Spacing);
 
             for (int32 k = 0; k < UnitsInRow && CurrentIdx < Count; k++)
@@ -357,7 +339,7 @@ void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* Unit
     }
     else // Square / Default
     {
-        int32 RowSize = FMath::CeilToInt(FMath::Sqrt((float)Count));
+        int32 RowSize = FMath::CeilToInt(FMath::Sqrt(static_cast<float>(Count)));
         float Width = (RowSize - 1) * Spacing;
         FVector StartPos = Center - (RightDir * Width * 0.5f) - (ForwardDir * Width * 0.5f);
 
@@ -393,7 +375,6 @@ void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* Unit
              }
         }
         
-        // Convert to Local Space of the Preview Actor (Centered)
         FTransform RootTransform(Facing, Center);
         FVector LocalPos = RootTransform.InverseTransformPosition(TargetPos);
         

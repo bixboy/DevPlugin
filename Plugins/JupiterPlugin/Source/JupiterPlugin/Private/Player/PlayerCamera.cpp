@@ -207,7 +207,7 @@ void APlayerCamera::InitializeSystems()
         SelectionSystem->Init(this);
     }
 
-    // 2. Injection des dépendances (Cross-dependency)
+    // 2. Injection des dépendances
     
     if (CommandSystem)
     {
@@ -225,12 +225,6 @@ void APlayerCamera::InitializeSystems()
     	
         if (CommandSystem)
         	PlacementSystem->SetCommandSystem(CommandSystem);
-    }
-
-    if (PreviewSystem)
-    {
-        // if (PlacementSystem)
-        // 	PreviewSystem->SetPlacementSystem(PlacementSystem); 
     }
 
     if (SelectionSystem)

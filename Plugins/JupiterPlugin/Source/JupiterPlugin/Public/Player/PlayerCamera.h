@@ -103,21 +103,28 @@ protected:
     // Movement Actions
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
     TObjectPtr<UInputAction> MoveAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
     TObjectPtr<UInputAction> ZoomAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
     TObjectPtr<UInputAction> RotateHorizontalAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
     TObjectPtr<UInputAction> RotateVerticalAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Movement")
     TObjectPtr<UInputAction> EnableRotateAction;
 
+	
     // Selection Actions
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Selection")
     TObjectPtr<UInputAction> SelectAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Selection")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Selection")
     TObjectPtr<UInputAction> SelectHoldAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Selection")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Selection")
     TObjectPtr<UInputAction> DoubleTapAction;
     
 	UPROPERTY(EditAnywhere, Category="Settings|Inputs")
@@ -126,17 +133,23 @@ protected:
     // Command Actions
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
     TObjectPtr<UInputAction> CommandAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
+   
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
     TObjectPtr<UInputAction> AltCommandAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
     TObjectPtr<UInputAction> AltCommandHoldAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
     TObjectPtr<UInputAction> PatrolAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
-    TObjectPtr<UInputAction> DeleteAction;
-    UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
+	TObjectPtr<UInputAction> DeleteAction;
+    
+	UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Commands")
     TObjectPtr<UInputAction> CancelAction;
 
+	
     // Spawn Actions
     UPROPERTY(EditAnywhere, Category="Settings|Inputs|Actions|Spawn")
     TObjectPtr<UInputAction> SpawnUnitAction;
@@ -145,30 +158,41 @@ protected:
     // -------- Systems Instances --------
     UPROPERTY(Transient)
     TObjectPtr<UCameraMovementSystem> MovementSystem;
+	
     UPROPERTY(Transient)
     TObjectPtr<UCameraSelectionSystem> SelectionSystem;
+	
     UPROPERTY(Transient)
     TObjectPtr<UCameraCommandSystem> CommandSystem;
+	
     UPROPERTY(Transient)
     TObjectPtr<UCameraPlacementSystem> PlacementSystem;
+	
     UPROPERTY(Transient)
     TObjectPtr<UCameraPreviewSystem> PreviewSystem;
+	
 
     // System Classes
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
     TSubclassOf<UCameraMovementSystem> MovementSystemClass;
+	
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
     TSubclassOf<UCameraSelectionSystem> SelectionSystemClass;
+	
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
     TSubclassOf<UCameraCommandSystem> CommandSystemClass;
+	
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
     TSubclassOf<UCameraPlacementSystem> PlacementSystemClass;
+	
     UPROPERTY(EditAnywhere, Category="Settings|Class|Systems")
     TSubclassOf<UCameraPreviewSystem> PreviewSystemClass;
+	
 
     // Helper Classes
     UPROPERTY(EditAnywhere, Category="Settings|Class|Other")
     TSubclassOf<ASelectionBox> SelectionBoxClass;
+	
     UPROPERTY(EditAnywhere, Category="Settings|Class|Other")
     TSubclassOf<APreviewPoseMesh> PreviewMeshClass;
 
@@ -201,7 +225,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
     bool CanEdgeScroll = true;
 
-    // Distance max pour considérer une unité affichable (Optimisation)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Performance")
     float MaxSelectionDistance = 15000.f; 
     
@@ -242,28 +265,12 @@ public:
 
         int32 ViewX = 0, ViewY = 0;
         Player->GetViewportSize(ViewX, ViewY);
+    	
         if (ViewX <= 0 || ViewY <= 0)
         	return VisibleActors;
 
         FVector CamLoc = GetActorLocation();
         TArray<AActor*> Candidates;
-        
-        if (UGameInstance* GI = World->GetGameInstance())
-        {
-            float Range = FMath::Max(2000.f, CameraComponent ? CameraComponent->OrthoWidth : 3000.f) * 2.0f; 
-            float BoxSize = 5000.f;
-            
-            FVector Forward = GetActorForwardVector();
-            FVector GroundPos = GetActorLocation();
-            
-            if (CameraComponent)
-            {
-                GroundPos = GetActorLocation();
-            }
-
-            FVector2D Min(GroundPos.X - BoxSize, GroundPos.Y - BoxSize);
-            FVector2D Max(GroundPos.X + BoxSize, GroundPos.Y + BoxSize);
-        }
         
         for (TActorIterator<T> It(World, Class); It; ++It)
         {

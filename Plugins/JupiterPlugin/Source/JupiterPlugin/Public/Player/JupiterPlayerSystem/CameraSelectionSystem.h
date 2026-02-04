@@ -2,9 +2,15 @@
 #include "CoreMinimal.h"
 #include "CameraSystemBase.h"
 #include "InputActionValue.h"
+#include "UI/CustomButtonWidget.h"
 #include "CameraSelectionSystem.generated.h"
 
 class ASelectionBox;
+class UInputMappingContext;
+class UInputAction;
+class UUnitSpatialGridSubsystem;
+class UTooltipSubsystem;
+class AActor;
 class UCameraPlacementSystem;
 class UCameraCommandSystem;
 
@@ -30,6 +36,26 @@ public:
 	void HandleSetGroup(int32 Index);
 	void HandleClearGroup(int32 Index);
 
+protected:
+    // Tooltip Logic
+    void UpdateTooltipHover(float DeltaTime);
+    
+    UPROPERTY(EditDefaultsOnly, Category = "Settings|Tooltip")
+    float TooltipDelay = 1.f;
+
+    UPROPERTY(Transient)
+    float CurrentHoverTime = 0.0f;
+
+    UPROPERTY(Transient)
+    bool bTooltipShown = false;
+    
+    UPROPERTY(Transient)
+    TWeakObjectPtr<AActor> LastTooltipActor;
+
+    UPROPERTY()
+    TObjectPtr<UCustomButtonWidget> HoveredButton = nullptr;
+
+public:	
 	// --- Dependency Injection ---
 	void SetCommandSystem(UCameraCommandSystem* InCmd) { CommandSystem = InCmd; }
 	void SetPlacementSystem(UCameraPlacementSystem* InPlacement) { PlacementSystem = InPlacement; }
@@ -37,19 +63,20 @@ public:
 private:
 	void FinalizeSelection();
 
-	// Helpers
 	bool GetMouseHitOnTerrain(FHitResult& OutHit) const;
 	AActor* GetHoveredActor() const;
     
-	// Box Logic
 	void StartBoxSelection();
 	void UpdateBoxSelection();
 	void EndBoxSelection();
     
-	// Logic Utils
 	bool ShouldAddToSelection() const;
 
 private:
+	
+	UPROPERTY()
+	APlayerController* PC;
+	
 	bool bMouseGrounded = false;
 	bool bBoxSelect = false;
 
@@ -59,7 +86,7 @@ private:
 	float LeftMouseHoldThreshold = 0.15f;
     
     UPROPERTY(EditDefaultsOnly, Category = "Settings")
-    float DragStartThreshold = 20.0f; // Pixels
+    float DragStartThreshold = 20.0f;
 
     FVector2D ClickScreenLocation;
 

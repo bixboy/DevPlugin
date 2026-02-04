@@ -30,9 +30,13 @@ protected:
 	APlayerCamera* GetOwner() const;
 
 	UUnitSelectionComponent* GetSelectionComponent() const;
+	
 	UUnitOrderComponent* GetOrderComponent() const;
+	
 	UUnitFormationComponent* GetFormationComponent() const;
+	
 	UPlacementHandlerComponent* GetPlacementComponent() const;
+	
 	UUnitPatrolComponent* GetPatrolComponent() const;
 
 	UWorld* GetWorldSafe() const;

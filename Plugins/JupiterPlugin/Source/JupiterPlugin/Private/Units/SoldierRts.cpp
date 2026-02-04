@@ -560,3 +560,45 @@ ETeams ASoldierRts::GetCurrentTeam_Implementation()
 {
     return CurrentTeam;
 }
+
+bool ASoldierRts::GetTooltipData_Implementation(FTooltipData& OutData)
+{
+    OutData.Title = FText::FromString(GetName());
+    OutData.Description = FText::Format(NSLOCTEXT("RTS", "SoldierDesc", "Team: {0}\nHealth: {1}"), 
+        FText::FromString(UEnum::GetValueAsString(CurrentTeam)), 
+        FText::AsNumber(100));
+        
+    return true;
+}
+
+void ASoldierRts::GetContextMenuOptions_Implementation(TArray<FContextMenuItem>& OutOptions)
+{
+    // Option 1: Delete
+    FContextMenuItem DeleteItem;
+    DeleteItem.Label = NSLOCTEXT("RTS", "ActionDelete", "Delete");
+    DeleteItem.Tooltip = NSLOCTEXT("RTS", "ActionDeleteTip", "Destroy this unit.");
+    // DeleteItem.Icon = ... // Provide a texture if available
+    DeleteItem.Action.BindUObject(this, &ASoldierRts::OnContextAction_Delete);
+    OutOptions.Add(DeleteItem);
+
+    // Option 2: Inspect (Log for now)
+    FContextMenuItem InspectItem;
+    InspectItem.Label = NSLOCTEXT("RTS", "ActionInspect", "Inspect");
+    InspectItem.Action.BindUObject(this, &ASoldierRts::OnContextAction_Inspect);
+    OutOptions.Add(InspectItem);
+}
+
+void ASoldierRts::OnContextAction_Delete()
+{
+    Server_DestroySelf();
+}
+
+void ASoldierRts::OnContextAction_Inspect()
+{
+    UE_LOG(LogTemp, Log, TEXT("Inspecting Unit: %s | Team: %s"), *GetName(), *UEnum::GetValueAsString(CurrentTeam));
+}
+
+void ASoldierRts::Server_DestroySelf_Implementation()
+{
+    Destroy();
+}

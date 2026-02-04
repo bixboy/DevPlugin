@@ -43,9 +43,7 @@ void UCameraMovementSystem::Tick(float DeltaTime)
         return;
     }
 
-    // ----------------------------------------------------
     // 1. INPUT GATHERING
-    // ----------------------------------------------------
     FVector2D TotalMoveInput = PendingMoveInput;
     
     if (Cam->CanEdgeScroll)
@@ -58,13 +56,9 @@ void UCameraMovementSystem::Tick(float DeltaTime)
     }
 
     if (TotalMoveInput.SizeSquared() > 1.0f)
-    {
-        TotalMoveInput.Normalize();
-    }
+		TotalMoveInput.Normalize();
 
-    // ----------------------------------------------------
     // 2. MOVEMENT APPLICATION
-    // ----------------------------------------------------
     if (!TotalMoveInput.IsZero())
     {
         FRotator CamRot = Cam->GetSpringArm()->GetTargetRotation();
@@ -76,21 +70,14 @@ void UCameraMovementSystem::Tick(float DeltaTime)
 
         FVector MoveDir = (Forward * TotalMoveInput.Y) + (Right * TotalMoveInput.X);
         
-        // Vitesse ajustée par la hauteur (Plus on est haut, plus on bouge vite ?)
-        // Optionnel : float HeightSpeedMod = FMath::GetMappedRangeValueClamped(..., Cam->TargetZoom, ...);
-        
         FVector DesiredOffset = MoveDir * Cam->CameraSpeed * DeltaTime * 100.f; 
         Cam->AddActorWorldOffset(DesiredOffset);
     }
 
-    // ----------------------------------------------------
     // 3. TERRAIN FOLLOW
-    // ----------------------------------------------------
     UpdateTerrainFollow(DeltaTime);
 
-    // ----------------------------------------------------
     // 4. ZOOM
-    // ----------------------------------------------------
     if (FMath::Abs(PendingZoomInput) > 0.01f)
     {
         float ZoomSpeedFactor = Cam->TargetZoom * 0.15f; 
@@ -101,9 +88,7 @@ void UCameraMovementSystem::Tick(float DeltaTime)
         PendingZoomInput = 0.f;
     }
 
-    // ----------------------------------------------------
     // 5. ROTATION
-    // ----------------------------------------------------
     if (bRotateEnabled)
     {
         float YawDelta = PendingRotateH * Cam->RotateSpeed * DeltaTime * 50.f;
@@ -129,7 +114,8 @@ void UCameraMovementSystem::Tick(float DeltaTime)
 
 FVector2D UCameraMovementSystem::GetEdgeScrollInput() const
 {
-    if (!GetWorldSafe()) return FVector2D::ZeroVector;
+    if (!GetWorldSafe()) 
+    	return FVector2D::ZeroVector;
 
     FVector2D MousePos = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorldSafe());
     const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(GetWorldSafe());

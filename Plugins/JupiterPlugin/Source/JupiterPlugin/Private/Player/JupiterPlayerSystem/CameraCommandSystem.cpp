@@ -10,13 +10,18 @@
 #include "Engine/World.h"
 #include "Data/PatrolData.h"
 #include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
+#include "Interfaces/ContextMenuTarget.h"
+#include "Subsystems/ContextMenuSubsystem.h"
 
 
 void UCameraCommandSystem::Init(APlayerCamera* InOwner)
 {
     Super::Init(InOwner);
 
-    if (!GetOwner() || !GetWorldSafe()) return;
+    if (!GetOwner() || !GetWorldSafe()) 
+    	return;
+	
+	PC = GetOwner()->GetPlayerController();
     
     if (GetOwner()->SphereRadiusClass)
     {
@@ -60,12 +65,13 @@ void UCameraCommandSystem::Tick(float DeltaTime)
     if (bIsRightClickDown)
     {
         FHitResult Hit;
-        if (!GetMouseHitOnTerrain(Hit)) return;
+        if (!GetMouseHitOnTerrain(Hit)) 
+        	return;
         
         float TimeHeld = GetWorldSafe()->GetTimeSeconds() - ClickStartTime;
         float DistMoved = FVector::Dist2D(CommandStartLocation, Hit.Location);
 
-        // CAS 1 : ALT + DRAG (Cercle Rayon)
+        // CAS 1 : ALT + DRAG
         if (IsAltDown())
         {
             if (!bIsBuildingPatrolPath)
@@ -77,7 +83,7 @@ void UCameraCommandSystem::Tick(float DeltaTime)
                 }
             }
         }
-        // CAS 2 : STANDARD DRAG (Rotation Formation)
+        // CAS 2 : STANDARD DRAG
         else 
         {
             if (TimeHeld > RotationHoldThreshold || CurrentMode == ECommandMode::MoveRotation)
@@ -154,7 +160,7 @@ void UCameraCommandSystem::HandleCommandActionCompleted()
         return;
     }
 
-    // 3. Click Simple -> On décide quoi faire
+    // 3. Click Simple
     FHitResult Hit;
     if (GetMouseHitOnTerrain(Hit))
     {
@@ -200,13 +206,36 @@ void UCameraCommandSystem::ExecuteFinalCommand(const FHitResult& HitResult)
 
     // C. Commandes Standard (Attaque ou Mouvement)
     AActor* Target = GetHoveredActor();
-    
+    if (Target && Target->Implements<UContextMenuTarget>())
+    {
+        if (UContextMenuSubsystem* CtxSys = GetWorldSafe()->GetGameInstance()->GetSubsystem<UContextMenuSubsystem>())
+        {
+             CtxSys->HideContextMenu();
+             
+             TArray<FContextMenuItem> Options;
+             IContextMenuTarget::Execute_GetContextMenuOptions(Target, Options);
+             
+             if (Options.Num() > 0)
+             {
+                 double X, Y;
+                 if (PC->GetMousePosition(X, Y))
+                 {
+                     CtxSys->ShowContextMenu(Options, FVector2D(X, Y));
+                     return;
+                 }
+             }
+        }
+    }
+
     if (Target && Target->Implements<USelectable>() && Target != GetOwner())
     {
         IssueAttackCommand(Target);
     }
     else
     {
+        if (UContextMenuSubsystem* CtxSys = GetWorldSafe()->GetGameInstance()->GetSubsystem<UContextMenuSubsystem>())
+			CtxSys->HideContextMenu();
+
         IssueMoveCommand(HitResult.Location, BaseRotation);
     }
 }
@@ -305,9 +334,7 @@ void UCameraCommandSystem::UpdateRotationPreview(const FVector& MouseLocation)
 void UCameraCommandSystem::AddPatrolWaypoint(const FVector& Location)
 {
     if (PatrolWaypoints.Num() > 0 && FVector::DistSquared(PatrolWaypoints.Last(), Location) < 10000.0f)
-    {
-        return;
-    }
+		return;
     
     PatrolWaypoints.Add(Location);
     bPatrolPreviewDirty = true;
@@ -401,8 +428,7 @@ AActor* UCameraCommandSystem::GetHoveredActor() const
 {
     if (!GetOwner() || !GetWorldSafe())
     	return nullptr;
-
-    APlayerController* PC = GetOwner()->GetPlayerController();
+	
     if (!PC)
     	return nullptr;
 

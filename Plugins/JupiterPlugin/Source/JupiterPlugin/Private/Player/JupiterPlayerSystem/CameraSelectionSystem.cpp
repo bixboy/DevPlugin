@@ -10,8 +10,10 @@
 
 #include "GameFramework/PlayerController.h"
 #include "Interfaces/Selectable.h"
+#include "Interfaces/WorldTooltipTarget.h"
 #include "Engine/World.h"
 #include "Subsystems/UnitSpatialGridSubsystem.h"
+#include "Subsystems/TooltipSubsystem.h"
 
 
 void UCameraSelectionSystem::Init(APlayerCamera* InOwner)
@@ -20,6 +22,8 @@ void UCameraSelectionSystem::Init(APlayerCamera* InOwner)
 
     if (!GetWorldSafe() || !InOwner)
     	return;
+	
+	PC = GetOwner()->GetPlayerController();
 
     if (InOwner->GetSelectionBoxClass())
     {
@@ -53,6 +57,8 @@ void UCameraSelectionSystem::Tick(float DeltaTime)
     {
         UpdateBoxSelection();
     }
+    
+    UpdateTooltipHover(DeltaTime);
 }
 
 // --------------------------------------------------
@@ -79,7 +85,7 @@ void UCameraSelectionSystem::HandleSelectionPressed()
     bMouseGrounded = true;
     ClickStartLocation = Hit.Location;
     
-    if (APlayerController* PC = GetOwner()->GetPlayerController())
+    if (PC)
     {
          double X, Y;
          if (PC->GetMousePosition(X, Y))
@@ -132,7 +138,6 @@ void UCameraSelectionSystem::HandleSelectionHold(const FInputActionValue& Value)
     if (!bMouseGrounded)
     	return;
 
-    APlayerController* PC = GetOwner()->GetPlayerController();
     if (!PC)
     	return;
 
@@ -305,7 +310,6 @@ void UCameraSelectionSystem::HandleSelectAll()
 
 void UCameraSelectionSystem::HandleControlGroupInput(const FInputActionValue& Value)
 {
-	APlayerController* PC = GetOwner() ? GetOwner()->GetPlayerController() : nullptr;
 	if (!PC)
 		return;
 	
@@ -372,7 +376,6 @@ AActor* UCameraSelectionSystem::GetHoveredActor() const
     if (!GetOwner() || !GetWorldSafe())
     	return nullptr;
 
-    APlayerController* PC = GetOwner()->GetPlayerController();
     if (!PC)
     	return nullptr;
 
@@ -408,7 +411,6 @@ bool UCameraSelectionSystem::TryStartPatrolDrag()
     if (!GetOwner() || !GetWorldSafe())
         return false;
 
-    APlayerController* PC = GetOwner()->GetPlayerController();
     if (!PC)
         return false;
 
@@ -441,7 +443,6 @@ void UCameraSelectionSystem::UpdatePatrolDrag()
     if (!bIsDraggingPatrol)
         return;
 
-    APlayerController* PC = GetOwner()->GetPlayerController();
     if (!PC)
         return;
 
@@ -482,4 +483,71 @@ void UCameraSelectionSystem::EndPatrolDrag()
     bIsDraggingPatrol = false;
     DraggedPointIndex = -1;
     DraggedPatrolID.Invalidate();
+}
+
+void UCameraSelectionSystem::UpdateTooltipHover(float DeltaTime)
+{
+    if (!GetOwner() || !GetWorldSafe())
+        return;
+
+    if (!PC)
+        return;
+
+    UTooltipSubsystem* TooltipSys = GetWorldSafe()->GetGameInstance() ? GetWorldSafe()->GetGameInstance()->GetSubsystem<UTooltipSubsystem>() : nullptr;
+    if (!TooltipSys)
+        return;
+
+    FVector WLoc, WDir;
+    bool bHitSomething = false;
+
+    if (PC->DeprojectMousePositionToWorld(WLoc, WDir))
+    {
+        FVector End = WLoc + WDir * 1000000.f;
+        FHitResult Hit;
+        FCollisionQueryParams Params;
+        Params.AddIgnoredActor(GetOwner());
+        if (SelectionBox) 
+        	Params.AddIgnoredActor(SelectionBox);
+    	
+        if (GetWorldSafe()->LineTraceSingleByChannel(Hit, WLoc, End, ECC_Visibility, Params))
+        {
+            AActor* HitActor = Hit.GetActor();
+            if (HitActor && HitActor->Implements<UWorldTooltipTarget>())
+            {
+                bHitSomething = true;
+
+                if (HitActor != LastTooltipActor.Get())
+                {
+                    LastTooltipActor = HitActor;
+                    CurrentHoverTime = 0.0f;
+                    bTooltipShown = false;
+                    TooltipSys->HideTooltip();
+                }
+                else
+                {
+                    if (!bTooltipShown)
+                    {
+                        CurrentHoverTime += DeltaTime;
+                        if (CurrentHoverTime >= TooltipDelay)
+                        {
+                            FTooltipData Data;
+                            if (IWorldTooltipTarget::Execute_GetTooltipData(HitActor, Data))
+                            {
+                                TooltipSys->ShowTooltip(Data);
+                                bTooltipShown = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!bHitSomething && LastTooltipActor.IsValid())
+    {
+        TooltipSys->HideTooltip();
+        LastTooltipActor = nullptr;
+        CurrentHoverTime = 0.0f;
+        bTooltipShown = false;
+    }
 }

@@ -86,6 +86,7 @@ void UCameraPreviewSystem::HidePreview()
     if (PreviewActor)
     {
         PreviewActor->SetActorHiddenInGame(true);
+    	
         // Vider les instances pour libérer la mémoire GPU si masqué longtemps
         // PreviewActor->ClearInstances(); 
     }

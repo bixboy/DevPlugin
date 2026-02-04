@@ -1,6 +1,7 @@
 #include "Subsystems/UnitSpatialGridSubsystem.h"
 #include "GameFramework/Actor.h"
 
+
 void UUnitSpatialGridSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
