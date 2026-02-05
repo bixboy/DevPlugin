@@ -505,6 +505,7 @@ void UCameraSelectionSystem::UpdateTooltipHover(float DeltaTime)
         FVector End = WLoc + WDir * 1000000.f;
         FHitResult Hit;
         FCollisionQueryParams Params;
+        
         Params.AddIgnoredActor(GetOwner());
         if (SelectionBox) 
         	Params.AddIgnoredActor(SelectionBox);

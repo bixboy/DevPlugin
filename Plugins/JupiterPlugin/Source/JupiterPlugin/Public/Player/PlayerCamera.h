@@ -199,16 +199,19 @@ protected:
 private:
     TWeakObjectPtr<APlayerController> Player;
 
+    UFUNCTION()
+    void ApplySettings();
+
 public:
     // -------- Camera Settings --------
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
+    UPROPERTY(BlueprintReadWrite)
     float CameraSpeed = 20.f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
+    UPROPERTY(BlueprintReadWrite)
     float EdgeScrollSpeed = 2.f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
-    float RotateSpeed = 2.f;
+    UPROPERTY(BlueprintReadWrite)
+    float RotateSpeed = 5.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
     float RotatePitchMin = 10.f;
@@ -216,14 +219,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
     float RotatePitchMax = 80.f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
+    UPROPERTY(BlueprintReadWrite)
     float MinZoom = 500.f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
+    UPROPERTY(BlueprintReadWrite)
     float MaxZoom = 4000.f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Settings|Camera")
-    bool CanEdgeScroll = true;
+    UPROPERTY(BlueprintReadWrite)
+    bool CanEdgeScroll = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Performance")
     float MaxSelectionDistance = 15000.f; 

@@ -58,6 +58,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Placement")
 	void SetCustomFormationDimensions(FIntPoint NewDimensions);
 
+    UFUNCTION(BlueprintCallable, Category = "Placement")
+    void SetCurrentSpacing(float NewSpacing);
+
 	UFUNCTION(BlueprintCallable, Category = "Placement")
 	void StartPlacement(const UPlacementItemData* ItemToPlace);
 

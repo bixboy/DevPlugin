@@ -15,6 +15,7 @@ class JUPITERPLUGIN_API UCustomSliderWidget : public UUserWidget
 
 public:
 	virtual void NativePreConstruct() override;
+	
 	virtual void NativeOnInitialized() override;
 
 	// --- Commandes Publiques ---

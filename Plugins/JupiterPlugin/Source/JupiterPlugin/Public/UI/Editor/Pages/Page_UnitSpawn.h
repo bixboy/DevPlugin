@@ -58,6 +58,13 @@ protected:
 	UFUNCTION()
 	void OnInspectorToggleClicked(UCustomButtonWidget* Button, int Index);
 
+    // --- Placement Settings ---
+    UFUNCTION(BlueprintCallable)
+    void SetPlacementSpacing(float Val);
+
+    UFUNCTION(BlueprintCallable)
+    float GetPlacementSpacing() const;
+
 	virtual void OnAnimationFinished_Implementation(const UWidgetAnimation* Animation) override;
 
 	// --- Helpers ---
@@ -75,14 +82,13 @@ protected:
 	TSubclassOf<UCustomButtonWidget> CategoryButtonClass;
 
 	UPROPERTY(EditAnywhere, Category = "Settings")
-	TArray<class UPlacementUnitData*> PlacementUnits;
+	TArray<UPlacementUnitData*> PlacementUnits;
 
 	// --- UI Elements ---
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	UButton* Btn_ShowUnitsSelection;
 	
-
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UWrapBox* WrapBox;
 

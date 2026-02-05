@@ -64,6 +64,11 @@ void UCameraPlacementSystem::SetCustomFormationDimensions(FIntPoint NewDimension
 	}
 }
 
+void UCameraPlacementSystem::SetCurrentSpacing(float NewSpacing)
+{
+    CurrentSpacing = FMath::Max(50.0f, NewSpacing);
+}
+
 void UCameraPlacementSystem::StartPlacement(const UPlacementItemData* ItemToPlace)
 {
     if (!ItemToPlace)

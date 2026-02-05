@@ -262,6 +262,23 @@ void UPage_UnitSpawn::OnInspectorToggleClicked(UCustomButtonWidget* Button, int 
 	}
 }
 
+void UPage_UnitSpawn::SetPlacementSpacing(float Val)
+{
+    if (PlacementSystem.IsValid())
+    {
+        PlacementSystem->SetCurrentSpacing(Val);
+    }
+}
+
+float UPage_UnitSpawn::GetPlacementSpacing() const
+{
+    if (PlacementSystem.IsValid())
+    {
+        return PlacementSystem->CurrentSpacing;
+    }
+    return GetDefault<UCameraPlacementSystem>()->CurrentSpacing;
+}
+
 void UPage_UnitSpawn::OnAnimationFinished_Implementation(const UWidgetAnimation* Animation)
 {
 	Super::OnAnimationFinished_Implementation(Animation);

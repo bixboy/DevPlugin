@@ -20,12 +20,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Notification")
 	void ClearAll();
 
-    UFUNCTION(BlueprintCallable, Category = "Notification")
-	void NativeNotify(const FText& Title, const FText& Message, FLinearColor Color = FLinearColor::White, float Duration = 5.0f);
+	UFUNCTION(BlueprintCallable, Category = "Notification")
+	void NativeNotify(const FText& Title, const FText& Message, FLinearColor Color = FLinearColor::White, float Duration = -1.0f);
 
-	UPROPERTY(BlueprintAssignable, Category = "Notification")
+    UFUNCTION(BlueprintCallable, Category = "Notification")
+    void SetDefaultDuration(float NewDuration) { DefaultDuration = NewDuration; }
+
+    UFUNCTION(BlueprintCallable, Category = "Notification")
+    float GetDefaultDuration() const { return DefaultDuration; }
+
+public:
+    UPROPERTY(BlueprintAssignable, Category = "Notification")
 	FOnNotificationAdded OnNotificationAdded;
 
     UPROPERTY(BlueprintAssignable, Category = "Notification")
     FOnNotificationAdded OnClearAll;
+
+private:
+    float DefaultDuration = 5.0f;
 };

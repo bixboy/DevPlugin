@@ -26,8 +26,6 @@ public:
     UWidgetSwitcher* GetContentSwitcher() const { return ContentSwitcher; }
 
 protected:
-
-protected:
 	void FindComponents();
 
 	void SetupSidebar();
@@ -35,7 +33,6 @@ protected:
 	UFUNCTION()
 	void OnSidebarButtonClicked(UCustomButtonWidget* Button, int32 Index);
 
-protected:
 	// --- UI Bindings ---
 
 	UPROPERTY(meta = (BindWidget))
@@ -43,6 +40,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	UPanelWidget* SidebarContainer;
+
+	UPROPERTY(meta = (BindWidget))
+	UPanelWidget* FooterContainer;
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UCustomButtonWidget> SidebarButtonClass;

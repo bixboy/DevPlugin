@@ -87,6 +87,9 @@ void UJupiterEditorPanel::SetupSidebar()
 		return;
 
 	SidebarContainer->ClearChildren();
+    if (FooterContainer)
+        FooterContainer->ClearChildren();
+        
 	PageButtons.Reset();
 
 	const int32 NumPages = ContentSwitcher->GetChildrenCount();
@@ -109,7 +112,15 @@ void UJupiterEditorPanel::SetupSidebar()
 
 			NewButton->OnButtonClicked.AddDynamic(this, &UJupiterEditorPanel::OnSidebarButtonClicked);
 			
-			SidebarContainer->AddChild(NewButton);
+            if (Page->bIsFooterPage && FooterContainer)
+            {
+                FooterContainer->AddChild(NewButton);
+            }
+            else
+            {
+			    SidebarContainer->AddChild(NewButton);
+            }
+            
 			PageButtons.Add(i, NewButton);
 		}
 	}

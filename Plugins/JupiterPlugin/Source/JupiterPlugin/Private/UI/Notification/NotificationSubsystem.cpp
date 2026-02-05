@@ -18,7 +18,7 @@ void UNotificationSubsystem::NativeNotify(const FText& Title, const FText& Messa
     Data.Title = Title;
     Data.SubTitle = Message;
     Data.AccentColor = Color;
-    Data.Duration = Duration;
+    Data.Duration = (Duration < 0.0f) ? DefaultDuration : Duration;
     
     AddNotification(Data);
 }

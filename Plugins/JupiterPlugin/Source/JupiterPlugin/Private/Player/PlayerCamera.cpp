@@ -14,6 +14,7 @@
 #include "Player/JupiterPlayerSystem/CameraPreviewSystem.h"
 #include "Player/JupiterPlayerSystem/CameraSelectionSystem.h"
 #include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
+#include "Subsystems/JupiterSettingsSubsystem.h"
 
 
 APlayerCamera::APlayerCamera()
@@ -64,6 +65,15 @@ void APlayerCamera::BeginPlay()
     }
 
     InitializeSystems();
+
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UJupiterSettingsSubsystem* Settings = GI->GetSubsystem<UJupiterSettingsSubsystem>())
+        {
+            Settings->OnSettingsChanged.AddDynamic(this, &APlayerCamera::ApplySettings);
+            ApplySettings();
+        }
+    }
 }
 
 void APlayerCamera::Tick(float DeltaTime)
@@ -247,6 +257,30 @@ void APlayerCamera::UnPossessed()
         {
             if (InputMapping)
             	Sub->RemoveMappingContext(InputMapping);
+        }
+    }
+}
+
+void APlayerCamera::ApplySettings()
+{
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UJupiterSettingsSubsystem* Settings = GI->GetSubsystem<UJupiterSettingsSubsystem>())
+        {
+            CameraSpeed = Settings->GetCameraSpeed();
+            RotateSpeed = Settings->GetRotateSpeed();
+            EdgeScrollSpeed = Settings->GetEdgeScrollSpeed();
+            CanEdgeScroll = Settings->GetCanEdgeScroll();
+            
+            float NewMin, NewMax;
+            Settings->GetZoomLimits(NewMin, NewMax);
+            MinZoom = NewMin;
+            MaxZoom = NewMax;
+
+            if (SelectionSystem)
+            {
+                SelectionSystem->SetTooltipDelay(Settings->GetTooltipDelay());
+            }
         }
     }
 }

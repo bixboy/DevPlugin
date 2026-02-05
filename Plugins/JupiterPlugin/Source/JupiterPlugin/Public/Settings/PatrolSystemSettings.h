@@ -13,12 +13,9 @@ class JUPITERPLUGIN_API UPatrolSystemSettings : public UDeveloperSettings
 public:
 	UPatrolSystemSettings();
 
-	//~ Begin UDeveloperSettings Interface
 	virtual FName GetCategoryName() const override;
 	virtual FText GetSectionText() const override;
-	//~ End UDeveloperSettings Interface
 
-	/** Get the global settings instance */
 	static const UPatrolSystemSettings* Get();
 
 	// ============================================================
@@ -47,19 +44,19 @@ public:
 
 	/** Default color for active patrol routes */
 	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Colors", meta = (DisplayName = "Active Route Color"))
-	FLinearColor ActiveRouteColor = FLinearColor(0.0f, 1.0f, 1.0f); // Cyan
+	FLinearColor ActiveRouteColor = FLinearColor(0.0f, 1.0f, 1.0f);
 
 	/** Color for routes in preview mode */
 	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Colors", meta = (DisplayName = "Preview Route Color"))
-	FLinearColor PreviewRouteColor = FLinearColor(1.0f, 1.0f, 0.0f, 0.6f); // Yellow, semi-transparent
+	FLinearColor PreviewRouteColor = FLinearColor(1.0f, 1.0f, 0.0f, 0.6f);
 
 	/** Color for selected/highlighted routes */
 	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Colors", meta = (DisplayName = "Selected Route Color"))
-	FLinearColor SelectedRouteColor = FLinearColor(1.0f, 0.5f, 0.0f); // Orange
+	FLinearColor SelectedRouteColor = FLinearColor(1.0f, 0.5f, 0.0f);
 
 	/** Color for waypoint markers */
 	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Colors", meta = (DisplayName = "Waypoint Color"))
-	FLinearColor WaypointColor = FLinearColor(0.0f, 1.0f, 1.0f); // Cyan
+	FLinearColor WaypointColor = FLinearColor(0.0f, 1.0f, 1.0f);
 
 	// ============================================================
 	// LINE RENDERING SETTINGS

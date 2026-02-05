@@ -36,13 +36,20 @@ public:
 	void HandleSetGroup(int32 Index);
 	void HandleClearGroup(int32 Index);
 
-protected:
+public:
     // Tooltip Logic
+    UFUNCTION(BlueprintCallable, Category = "Settings|Tooltip")
+    void SetTooltipDelay(float NewDelay) { TooltipDelay = NewDelay; }
+
+    UFUNCTION(BlueprintCallable, Category = "Settings|Tooltip")
+    float GetTooltipDelay() const { return TooltipDelay; }
+
+protected:
     void UpdateTooltipHover(float DeltaTime);
-    
+
     UPROPERTY(EditDefaultsOnly, Category = "Settings|Tooltip")
     float TooltipDelay = 1.f;
-
+    
     UPROPERTY(Transient)
     float CurrentHoverTime = 0.0f;
 

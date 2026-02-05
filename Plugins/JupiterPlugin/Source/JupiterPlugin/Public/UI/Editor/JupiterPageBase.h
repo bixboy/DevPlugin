@@ -22,8 +22,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Page Settings")
 	FText PageTitle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Page Settings")
-	UTexture2D* PageIcon;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Page Config")
+    UTexture2D* PageIcon;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Page Config")
+    bool bIsFooterPage = false;
 
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Dependencies")
@@ -34,6 +37,5 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dependencies")
 	TWeakObjectPtr<UUnitSelectionComponent> SelectionComponent;
-
 
 };
