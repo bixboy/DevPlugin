@@ -1,0 +1,53 @@
+// StellarShader - TestShader.ush
+// Shared declarations for the test plasma shader
+
+#pragma once
+
+// Fullscreen vertex shader output
+struct FTestShaderVSOutput
+{
+    float4 Position : SV_POSITION;
+    float2 UV : TEXCOORD0;
+};
+
+// ---- Noise helpers ----
+
+// Hash function for pseudo-random values
+float2 Hash22(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.xx + p3.yz) * p3.zy);
+}
+
+// Voronoi distance field
+float Voronoi(float2 uv, float Time)
+{
+    float2 g = floor(uv);
+    float2 f = frac(uv);
+
+    float minDist = 8.0;
+
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            float2 offset = float2(x, y);
+            float2 randomPoint = Hash22(g + offset);
+            randomPoint = 0.5 + 0.5 * sin(Time * 0.8 + 6.2831 * randomPoint);
+            float2 diff = offset + randomPoint - f;
+            float dist = length(diff);
+            minDist = min(minDist, dist);
+        }
+    }
+
+    return minDist;
+}
+
+// Smooth plasma layer
+float PlasmaLayer(float2 uv, float Time, float Scale, float Speed)
+{
+    return sin(uv.x * Scale + Time * Speed)
+         * cos(uv.y * Scale * 0.7 - Time * Speed * 0.6)
+         * 0.5 + 0.5;
+}

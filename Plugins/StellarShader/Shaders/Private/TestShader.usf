@@ -1,0 +1,66 @@
+// StellarShader - TestShader.usf
+// Global shader: Fullscreen animated plasma / voronoi effect
+
+#include "/Engine/Public/Platform.ush"
+#include "/StellarShader/Private/TestShader.ush"
+
+// ---- Parameters ----
+float TestShaderTime;
+float2 TestShaderResolution;
+
+// ---- Vertex Shader ----
+// Generates a fullscreen triangle from VertexID (0,1,2)
+void MainVS(
+    in uint VertexID : SV_VertexID,
+    out FTestShaderVSOutput Output)
+{
+    // Fullscreen triangle trick: 3 vertices cover the entire screen
+    Output.UV = float2((VertexID << 1) & 2, VertexID & 2);
+    Output.Position = float4(Output.UV * 2.0 - 1.0, 0.0, 1.0);
+    // Flip Y for UV space
+    Output.UV.y = 1.0 - Output.UV.y;
+}
+
+// ---- Pixel Shader ----
+void MainPS(
+    in FTestShaderVSOutput Input,
+    out float4 OutColor : SV_Target0)
+{
+    float2 uv = Input.UV;
+    float Time = TestShaderTime;
+
+    // Aspect ratio correction
+    float aspect = TestShaderResolution.x / max(TestShaderResolution.y, 1.0);
+    float2 uvCorrected = float2(uv.x * aspect, uv.y);
+
+    // --- Layer 1: Voronoi cells ---
+    float voronoi = Voronoi(uvCorrected * 5.0, Time);
+    
+    // --- Layer 2: Plasma waves ---
+    float plasma1 = PlasmaLayer(uvCorrected, Time, 4.0, 1.2);
+    float plasma2 = PlasmaLayer(uvCorrected.yx, Time, 3.5, 0.9);
+    float plasma = (plasma1 + plasma2) * 0.5;
+
+    // --- Combine into color ---
+    // Deep space palette: cyan, magenta, gold on dark background
+    float3 col1 = float3(0.05, 0.8, 0.9);   // Cyan
+    float3 col2 = float3(0.9, 0.1, 0.6);     // Magenta  
+    float3 col3 = float3(1.0, 0.75, 0.2);    // Gold
+
+    float3 color = lerp(col1, col2, plasma);
+    color = lerp(color, col3, voronoi * voronoi);
+
+    // Edge glow from voronoi
+    float glow = smoothstep(0.0, 0.15, voronoi) * (1.0 - smoothstep(0.15, 0.5, voronoi));
+    color += glow * float3(1.0, 1.0, 1.0) * 0.4;
+
+    // Vignette
+    float2 vigUV = uv * 2.0 - 1.0;
+    float vignette = 1.0 - dot(vigUV, vigUV) * 0.4;
+    color *= vignette;
+
+    // Subtle pulsing brightness
+    color *= 0.85 + 0.15 * sin(Time * 0.5);
+
+    OutColor = float4(saturate(color), 1.0);
+}

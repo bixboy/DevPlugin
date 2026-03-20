@@ -1,4 +1,5 @@
-﻿#include "CoreMinimal.h"
+#pragma once
+#include "CoreMinimal.h"
 #include "CameraSystemBase.h"
 #include "Data/Placement/PresetData.h"
 #include "CameraPreviewSystem.generated.h"
