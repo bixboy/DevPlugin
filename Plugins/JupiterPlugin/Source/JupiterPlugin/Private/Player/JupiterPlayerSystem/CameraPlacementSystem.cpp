@@ -1,19 +1,24 @@
 #include "Player/JupiterPlayerSystem/CameraPlacementSystem.h"
 #include "Player/JupiterPlayerSystem/CameraPreviewSystem.h"
-#include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
 #include "Player/PlayerCamera.h"
+
 #include "Components/Placement/PlacementHandlerComponent.h"
+#include "Components/Placement/PresetManagerComponent.h"
 #include "Components/Unit/UnitSelectionComponent.h"
-#include "Data/Placement/PlacementUnitData.h"
-#include "GameFramework/PlayerController.h"
-#include "Camera/CameraComponent.h"
-#include "Engine/World.h"
+#include "Interfaces/PlacementItemInterface.h"
+
+#include "Data/Placement/PlacementPropData.h"
+#include "Data/Placement/PresetData.h"
+
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Units/SoldierRts.h" 
-#include "Utilities/PreviewPoseMesh.h"
+
+#include "GameFramework/PlayerController.h"
 #include "Utilities/PreviewPoseMesh.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Camera/CameraComponent.h"
+
+#include "Engine/World.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
 
@@ -69,17 +74,36 @@ void UCameraPlacementSystem::SetCurrentSpacing(float NewSpacing)
     CurrentSpacing = FMath::Max(50.0f, NewSpacing);
 }
 
-void UCameraPlacementSystem::StartPlacement(const UPlacementItemData* ItemToPlace)
+void UCameraPlacementSystem::StartPlacement(UPlacementItemData* ItemToPlace)
 {
     if (!ItemToPlace)
     {
+        UE_LOG(LogTemp, Warning, TEXT("StartPlacement: ItemToPlace is NULL — cancelling."));
         CancelPlacement();
         return;
     }
 
+    UE_LOG(LogTemp, Log, TEXT("StartPlacement: '%s' | ActorToSpawn=%s | PreviewMesh=%s"),
+        *ItemToPlace->DisplayName.ToString(),
+        ItemToPlace->ActorToSpawn ? *ItemToPlace->ActorToSpawn->GetName() : TEXT("NULL"),
+        ItemToPlace->PreviewMesh.IsNull() ? TEXT("NULL") : *ItemToPlace->PreviewMesh.GetAssetName());
+
     CurrentItemData = ItemToPlace;
     bIsPlacementActive = true;
 	
+    if (ItemToPlace->Implements<UPlacementItemInterface>())
+    {
+        CurrentSpawnCount = IPlacementItemInterface::Execute_GetDefaultUnitCount(ItemToPlace);
+        CurrentSpacing = IPlacementItemInterface::Execute_GetFormationSpacing(ItemToPlace);
+        CurrentFormation = static_cast<ESpawnFormation>(IPlacementItemInterface::Execute_GetDefaultFormation(ItemToPlace));
+    }
+    else
+    {
+        CurrentSpawnCount = 1;
+        CurrentSpacing = 100.f;
+        CurrentFormation = ESpawnFormation::Square;
+    }
+
     OnSpawnCountChanged.Broadcast(CurrentSpawnCount);
     OnSpawnFormationChanged.Broadcast(CurrentFormation);
     OnCustomFormationDimensionsChanged.Broadcast(CustomFormationDimensions);
@@ -105,32 +129,92 @@ void UCameraPlacementSystem::CancelPlacement()
     }
 }
 
-void UCameraPlacementSystem::HandlePlacementInput()
+void UCameraPlacementSystem::HandlePlacementStarted()
+{
+	if (!bIsPlacementActive || !CurrentItemData)
+		return;
+
+	if (UUnitSelectionComponent* SelComp = GetSelectionComponent())
+	{
+		FHitResult Hit = SelComp->GetMousePositionOnTerrain();
+		const FVector MousePos = Hit.Location;
+
+		if (!MousePos.IsNearlyZero())
+		{
+			const float CurrentTime = (GetWorldSafe() ? GetWorldSafe()->GetTimeSeconds() : 0.f);
+			
+            float Yaw = 0.f;
+            if (GetOwner() && GetOwner()->GetCameraComponent())
+            {
+                 Yaw = GetOwner()->GetCameraComponent()->GetComponentRotation().Yaw;
+            }
+			
+            const FRotator CameraAlignRot(0, Yaw, 0);
+			RotationState.BeginHold(CurrentTime, MousePos, CameraAlignRot);
+		}
+	}
+}
+
+void UCameraPlacementSystem::HandlePlacementReleased()
 {
     if (!bIsPlacementActive || !CurrentItemData)
         return;
 
+	UE_LOG(LogTemp, Log, TEXT("HandlePlacementReleased: INPUT RECEIVED."));
+
     if (PreviewSystem && !PreviewSystem->IsPlacementValid())
     {
+        UE_LOG(LogTemp, Warning, TEXT("HandlePlacementReleased: Placement INVALID (collision or slope)."));
+    	
         // TODO: Sound Error
+    	
+        RotationState.StopHold();
         return;
     }
 
-    if (APlayerCamera* PC = GetOwner())
+    UE_LOG(LogTemp, Log, TEXT("HandlePlacementReleased: Placement VALID. Requesting Server Spawn..."));
+    
+    // Calculate Final Transform
+    FRotator FinalRot = RotationState.bPreviewActive ? RotationState.CurrentRotation : RotationState.BaseRotation;
+    FVector FinalLoc = RotationState.Center;
+    
+    APlayerCamera* PC = GetOwner();
+    if (!PC)
+    {
+        RotationState.StopHold();
+        CancelPlacement();
+        return;
+    }
+
+    // --- CASE A: PRESET ---
+    if (const UPlacementPresetData* PresetData = Cast<UPlacementPresetData>(CurrentItemData))
+    {
+         if (UPresetManagerComponent* PMC = PC->FindComponentByClass<UPresetManagerComponent>())
+         {
+             PMC->Server_SpawnPreset(PresetData->Preset.PresetID, FinalLoc, FinalRot);
+         }
+         else
+         {
+             UE_LOG(LogTemp, Error, TEXT("CameraPlacementSystem: Missing PresetManagerComponent!"));
+         }
+    }
+    // --- CASE B: STANDARD ITEM (Unit / Prop) ---
+    else
     {
         if (UPlacementHandlerComponent* Handler = PC->FindComponentByClass<UPlacementHandlerComponent>())
         {
-             const FVector SpawnLoc = RotationState.Center;
-             const FRotator SpawnRot = RotationState.bPreviewActive ? RotationState.CurrentRotation : FRotator::ZeroRotator;
-             
-             Handler->Server_RequestPlacement(CurrentItemData, SpawnLoc, SpawnRot, CurrentSpawnCount, CurrentFormation, CustomFormationDimensions);
+             FVector SpawnLoc = FinalLoc + FinalRot.RotateVector(CurrentItemData->PreviewOffset + AutoGroundOffset);
+        	
+            Handler->Server_RequestPlacement(CurrentItemData, SpawnLoc, FinalRot, 
+            	CurrentSpawnCount, CurrentFormation, CustomFormationDimensions);
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("CameraPlacementSystem: Missing PlacementHandlerComponent on PlayerCamera!"));
+            UE_LOG(LogTemp, Error, TEXT("CameraPlacementSystem: Missing PlacementHandlerComponent!"));
         }
     }
 	
+    RotationState.StopHold();
     CancelPlacement();
 }
 
@@ -140,6 +224,19 @@ void UCameraPlacementSystem::UpdatePreviewVisuals()
     	return;
 
     UStreamableRenderAsset* Asset = nullptr;
+    AutoGroundOffset = FVector::ZeroVector;
+
+
+
+    // --- PRESET HANDLING ---
+    if (const UPlacementPresetData* PresetData = Cast<UPlacementPresetData>(CurrentItemData))
+    {
+        if (PresetData->Preset.IsValid())
+        {
+             PreviewSystem->ShowPresetPreview(PresetData->Preset);
+             return;
+        }
+    }
 
     if (CurrentItemData->PreviewMesh.IsValid())
     {
@@ -157,12 +254,73 @@ void UCameraPlacementSystem::UpdatePreviewVisuals()
              {
                  Asset = StaticComp->GetStaticMesh();
              }
+
+             if (!Asset)
+             {
+                 TArray<UActorComponent*> AllComps;
+                 CDO->GetComponents(AllComps);
+                 for (UActorComponent* Comp : AllComps)
+                 {
+                     if (auto* SK = Cast<USkeletalMeshComponent>(Comp))
+                     {
+                         Asset = SK->GetSkeletalMeshAsset();
+                         if (Asset)
+							break;
+                     }
+                     else if (auto* SM = Cast<UStaticMeshComponent>(Comp))
+                     {
+                         Asset = SM->GetStaticMesh();
+                         if (Asset)
+                         	break;
+                     }
+                 }
+             }
         }
     }
 
-    if (Asset)
+    if (!Asset)
     {
-        int32 Count = CurrentSpawnCount;
+    	if (CurrentItemData->PreviewMesh.IsPending())
+    	{
+    		FStreamableManager& Streamable = UAssetManager::GetStreamableManager();
+    		Streamable.RequestAsyncLoad(CurrentItemData->PreviewMesh.ToSoftObjectPath(), FStreamableDelegate::CreateUObject(this, &UCameraPlacementSystem::OnPreviewAssetLoaded));
+    		return;
+    	}
+    
+        UE_LOG(LogTemp, Warning, TEXT("UpdatePreviewVisuals: No preview mesh found for '%s'. Set PreviewMesh on the DataAsset or ensure the actor has a visible mesh component."),
+            *CurrentItemData->DisplayName.ToString());
+    	
+        return;
+    }
+
+	if (const UPlacementPropData* PropData = Cast<UPlacementPropData>(CurrentItemData))
+	{
+		if (PropData->bAutoGround)
+		{
+			FBoxSphereBounds Bounds(FVector::ZeroVector, FVector::ZeroVector, 0.f);
+			if (USkeletalMesh* Skel = Cast<USkeletalMesh>(Asset))
+			{
+				Bounds = Skel->GetBounds();
+			}
+			else if (UStaticMesh* Static = Cast<UStaticMesh>(Asset))
+			{
+				Bounds = Static->GetBounds();
+			}
+			
+			float MinZ = Bounds.Origin.Z - Bounds.BoxExtent.Z;
+			float ZLift = -MinZ * CurrentItemData->InternalScale.Z;
+
+			AutoGroundOffset = FVector(0, 0, ZLift);
+
+			FString AssetName = Asset->GetName();
+			UE_LOG(LogTemp, Log, TEXT("AutoGround [%s]: BoundsOriginZ=%f, ExtentZ=%f -> MinZ=%f -> ZLift=%f"), 
+				*AssetName, Bounds.Origin.Z, Bounds.BoxExtent.Z, MinZ, ZLift);
+		}
+	}
+
+	if (Asset)
+	{
+		int32 Count = CurrentSpawnCount;
         bool bSuccess;
     	
         if (USkeletalMesh* Skel = Cast<USkeletalMesh>(Asset))
@@ -204,51 +362,31 @@ void UCameraPlacementSystem::UpdateMouseFollow(float CurrentTime)
 
          if (MousePos.IsNearlyZero()) 
          	return;
-         
-         if (APlayerController* PC = GetOwner()->GetPlayerController())
+    	
+         // --- Rotation Logic ---
+        
+         if (RotationState.bHoldActive)
          {
-             const bool bLDown = PC->IsInputKeyDown(EKeys::LeftMouseButton);
-             const bool bJustPressed = PC->WasInputKeyJustPressed(EKeys::LeftMouseButton);
-             
-             // --- Rotation Logic ---
-             const float Yaw = GetOwner()->GetCameraComponent()->GetComponentRotation().Yaw;
-             const FRotator CameraAlignRot(0, Yaw, 0);
-
-             if (bJustPressed)
-             {
-                RotationState.BeginHold(CurrentTime, MousePos, CameraAlignRot);
-             }
-             else if (!bLDown)
-             {
-                RotationState.StopHold();
-             }
-
              if (!RotationState.bPreviewActive)
              {
-                 RotationState.Center = MousePos;
-                 RotationState.BaseRotation = CameraAlignRot;
-                 RotationState.CurrentRotation = CameraAlignRot;
-             }
-
-             if (RotationState.bHoldActive && !RotationState.bPreviewActive)
-             {
-                 if (RotationState.TryActivate(CurrentTime, RotationHoldTime, MousePos, MousePos))
+                 if (RotationState.TryActivate(CurrentTime, RotationHoldTime, MousePos, MousePos)) 
                  {
-                      RotationState.InitialDirection = FRotationPreviewState::ResolvePlanarDirection(MousePos - RotationState.Center, RotationState.BaseRotation);
+                     // Activated!
                  }
              }
 
              if (RotationState.bPreviewActive)
-             {
-                 RotationState.UpdateRotation(MousePos);
-             }
-             else
-             {
-                 RotationState.Center = MousePos;
-             }
-
-             UpdateTransforms(RotationState.Center, RotationState.CurrentRotation);
+				RotationState.UpdateRotation(MousePos);
          }
+         else
+         {
+             const float Yaw = GetOwner()->GetCameraComponent()->GetComponentRotation().Yaw;
+             RotationState.BaseRotation = FRotator(0, Yaw, 0);
+             RotationState.Center = MousePos;
+             RotationState.CurrentRotation = RotationState.BaseRotation;
+         }
+
+         UpdateTransforms(RotationState.Center, RotationState.CurrentRotation);
     }
 }
 
@@ -260,9 +398,20 @@ void UCameraPlacementSystem::UpdateTransforms(const FVector& Center, const FRota
     PreviewSystem->SetPreviewTransform(Center, Facing);
     CachedTransforms.Reset();
 
-    if (const UPlacementUnitData* UnitData = Cast<UPlacementUnitData>(CurrentItemData))
+    CachedTransforms.Reset();
+
+    if (Cast<UPlacementPresetData>(CurrentItemData))
+		return;
+
+    bool bSupportsFormations = false;
+    if (CurrentItemData->Implements<UPlacementItemInterface>())
     {
-        BuildGroupTransforms(UnitData, Center, Facing, CachedTransforms);
+        bSupportsFormations = IPlacementItemInterface::Execute_SupportsFormations(CurrentItemData);
+    }
+
+    if (bSupportsFormations)
+    {
+        BuildGroupTransforms(CurrentItemData, Center, Facing, CachedTransforms);
     }
     else
     {
@@ -274,16 +423,18 @@ void UCameraPlacementSystem::UpdateTransforms(const FVector& Center, const FRota
 
 void UCameraPlacementSystem::BuildSingleTransform(const FVector& Center, const FRotator& Facing, TArray<FTransform>& OutTransforms)
 {
-    FVector FinalPos = Center + Facing.RotateVector(CurrentItemData->PreviewOffset);
-    OutTransforms.Emplace(FTransform(Facing, FinalPos));
+    const FVector LocalOffset = Facing.RotateVector(CurrentItemData->PreviewOffset + AutoGroundOffset);
+
+    OutTransforms.Emplace(FTransform(FRotator::ZeroRotator, LocalOffset));
 }
 
-void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* UnitData, const FVector& Center, const FRotator& Facing, TArray<FTransform>& OutTransforms)
+void UCameraPlacementSystem::BuildGroupTransforms(UPlacementItemData* ItemData, const FVector& Center, const FRotator& Facing, TArray<FTransform>& OutTransforms)
 {
     CachedOffsets.Reset();
     
     int32 Count = CurrentSpawnCount;
     float Spacing = CurrentSpacing;
+	
     if (Count <= 0) 
         return;
 
@@ -291,7 +442,8 @@ void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* Unit
     FVector ForwardDir = UKismetMathLibrary::GetForwardVector(Facing);
 
     // --- FORMATION CALCULATION START ---
-    if (CurrentFormation == ESpawnFormation::Line)
+	
+    if (CurrentFormation == ESpawnFormation::Line) // Line
     {
         float Width = (Count - 1) * Spacing;
         FVector StartPos = Center - (RightDir * Width * 0.5f);
@@ -301,7 +453,7 @@ void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* Unit
             CachedOffsets.Add(StartPos + (RightDir * i * Spacing));
         }
     }
-    else if (CurrentFormation == ESpawnFormation::Column)
+    else if (CurrentFormation == ESpawnFormation::Column) // Column
     {
         float Depth = (Count - 1) * Spacing;
         FVector StartPos = Center - (ForwardDir * Depth * 0.5f);
@@ -311,7 +463,7 @@ void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* Unit
             CachedOffsets.Add(StartPos + (ForwardDir * i * Spacing));
         }
     }
-    else if (CurrentFormation == ESpawnFormation::Wedge)
+    else if (CurrentFormation == ESpawnFormation::Wedge) // Wedge
     {
         int32 CurrentIdx = 0;
         int32 Row = 0;
@@ -329,7 +481,7 @@ void UCameraPlacementSystem::BuildGroupTransforms(const UPlacementUnitData* Unit
             Row++;
         }
     }
-    else if (CurrentFormation == ESpawnFormation::Custom)
+    else if (CurrentFormation == ESpawnFormation::Custom) // Custom
     {
         int32 Columns = CustomFormationDimensions.X > 0 ? CustomFormationDimensions.X : 1;
         float Width = (Columns - 1) * Spacing;

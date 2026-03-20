@@ -9,7 +9,6 @@
 #include "Interfaces/ContextMenuTarget.h"
 #include "SoldierRts.generated.h"
 
-// Forward Declarations
 class USoldierManagerComponent;
 class UWeaponMaster;
 class UCommandComponent;

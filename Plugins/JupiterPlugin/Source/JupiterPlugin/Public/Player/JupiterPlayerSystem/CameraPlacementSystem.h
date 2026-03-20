@@ -62,9 +62,10 @@ public:
     void SetCurrentSpacing(float NewSpacing);
 
 	UFUNCTION(BlueprintCallable, Category = "Placement")
-	void StartPlacement(const UPlacementItemData* ItemToPlace);
+	void StartPlacement(UPlacementItemData* ItemToPlace);
 
-	void HandlePlacementInput();
+	void HandlePlacementStarted();
+	void HandlePlacementReleased();
     
 	UFUNCTION(BlueprintCallable, Category = "Placement")
 	void CancelPlacement();
@@ -84,7 +85,7 @@ private:
 
 	void UpdateTransforms(const FVector& Center, const FRotator& Facing);
     
-	void BuildGroupTransforms(const class UPlacementUnitData* UnitData, const FVector& Center, const FRotator& Facing, TArray<FTransform>& OutTransforms);
+	void BuildGroupTransforms(UPlacementItemData* ItemData, const FVector& Center, const FRotator& Facing, TArray<FTransform>& OutTransforms);
 
 	void BuildSingleTransform(const FVector& Center, const FRotator& Facing, TArray<FTransform>& OutTransforms);
 
@@ -100,10 +101,12 @@ private:
     
     // --- State ---
 	UPROPERTY()
-	const UPlacementItemData* CurrentItemData;
+	UPlacementItemData* CurrentItemData;
 
 	FRotationPreviewState RotationState;
 	bool bIsPlacementActive = false;
+
+    FVector AutoGroundOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditDefaultsOnly, Category="Settings")
 	float RotationHoldTime = 0.25f;

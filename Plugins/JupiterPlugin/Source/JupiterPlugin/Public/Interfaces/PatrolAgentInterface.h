@@ -19,5 +19,7 @@ public:
 
 	virtual void StopPatrol() = 0;
 
+	virtual void PausePatrol(bool bPause) = 0;
+
 	virtual int32 GetCurrentPatrolWaypointIndex() const = 0;
 };

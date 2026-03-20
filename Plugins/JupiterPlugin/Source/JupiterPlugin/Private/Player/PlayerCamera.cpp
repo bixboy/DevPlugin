@@ -9,6 +9,7 @@
 #include "Components/Patrol/UnitPatrolComponent.h"
 #include "Components/Unit/UnitSelectionComponent.h"
 #include "Components/Placement/PlacementHandlerComponent.h"
+#include "Components/Placement/PresetManagerComponent.h"
 #include "Player/JupiterPlayerSystem/CameraCommandSystem.h"
 #include "Player/JupiterPlayerSystem/CameraMovementSystem.h"
 #include "Player/JupiterPlayerSystem/CameraPreviewSystem.h"
@@ -40,6 +41,7 @@ APlayerCamera::APlayerCamera()
     FormationComponent = CreateDefaultSubobject<UUnitFormationComponent>(TEXT("Formation"));
     PlacementComponent = CreateDefaultSubobject<UPlacementHandlerComponent>(TEXT("Placement"));
     PatrolComponent = CreateDefaultSubobject<UUnitPatrolComponent>(TEXT("Patrol"));
+    PresetManagerComponent = CreateDefaultSubobject<UPresetManagerComponent>(TEXT("PresetManager"));
 }
 
 void APlayerCamera::BeginPlay()
@@ -170,7 +172,8 @@ void APlayerCamera::SetupPlayerInputComponent(UInputComponent* Input)
     // ----------------------------------------------------
     if (PlacementSystem)
     {
-        Bind(SpawnUnitAction, ETriggerEvent::Completed, PlacementSystem, &UCameraPlacementSystem::HandlePlacementInput);
+        Bind(SpawnUnitAction, ETriggerEvent::Started, PlacementSystem, &UCameraPlacementSystem::HandlePlacementStarted);
+        Bind(SpawnUnitAction, ETriggerEvent::Completed, PlacementSystem, &UCameraPlacementSystem::HandlePlacementReleased);
     }
 }
 

@@ -143,19 +143,19 @@ public:
 	// ============================================================
 
 	/** Mesh to use for waypoints (default: Sphere) */
-	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "StaticMesh"))
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "/Script/Engine.StaticMesh"))
 	FSoftObjectPath WaypointMesh;
 
 	/** Mesh to use for direction arrows (default: Cone) */
-	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "StaticMesh"))
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "/Script/Engine.StaticMesh"))
 	FSoftObjectPath ArrowMesh;
 
 	/** Material to use for waypoints (optional override) */
-	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "MaterialInterface"))
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))
 	FSoftObjectPath WaypointMaterial;
 
 	/** Material to use for arrows (optional override) */
-	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "MaterialInterface"))
+	UPROPERTY(Config, EditAnywhere, Category = "Visuals|Assets", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))
 	FSoftObjectPath ArrowMaterial;
 
 	// ============================================================

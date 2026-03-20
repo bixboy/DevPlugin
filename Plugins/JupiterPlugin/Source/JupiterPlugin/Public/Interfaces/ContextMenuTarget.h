@@ -4,6 +4,7 @@
 #include "UI/ContextMenuData.h"
 #include "ContextMenuTarget.generated.h"
 
+
 UINTERFACE(MinimalAPI, Blueprintable)
 class UContextMenuTarget : public UInterface
 {

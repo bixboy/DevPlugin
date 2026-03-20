@@ -32,6 +32,25 @@ void UCameraPreviewSystem::Tick(float DeltaTime)
 }
 
 // ------------------------------------------
+// PRESET SUPPORT
+// ------------------------------------------
+
+bool UCameraPreviewSystem::ShowPresetPreview(const FPlacementPreset& Preset)
+{
+    if (!EnsurePreviewActor())
+        return false;
+
+    if (PreviewActor)
+    {
+        PreviewActor->ShowPreset(Preset);
+        bPreviewVisible = true;
+        return true;
+    }
+    
+    return false;
+}
+
+// ------------------------------------------
 // PREVIEW CORE
 // ------------------------------------------
 

@@ -11,6 +11,18 @@ class JUPITERPLUGIN_API UPlacementUnitData : public UPlacementItemData
 	GENERATED_BODY()
 
 public:
+    virtual bool SupportsFormations_Implementation() const override { return true; }
+	
+    virtual bool IsGroupPlacement_Implementation() const override { return true; }
+	
+
+    virtual int32 GetDefaultUnitCount_Implementation() const override;
+	
+    virtual float GetFormationSpacing_Implementation() const override;
+	
+    virtual uint8 GetDefaultFormation_Implementation() const override;
+	
+
 	// --- Formation Settings ---
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Placement|Unit")

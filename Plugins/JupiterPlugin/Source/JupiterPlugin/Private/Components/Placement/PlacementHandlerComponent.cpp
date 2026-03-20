@@ -7,7 +7,8 @@
 
 UPlacementHandlerComponent::UPlacementHandlerComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true;
     SetIsReplicatedByDefault(true);
 }
 
@@ -16,15 +17,39 @@ void UPlacementHandlerComponent::BeginPlay()
 	Super::BeginPlay();
 }
 
-bool UPlacementHandlerComponent::Server_RequestPlacement_Validate(const UPlacementItemData* Item, const FVector& Location, const FRotator& Rotation, int32 Count, ESpawnFormation Formation, FIntPoint CustomDimensions)
+void UPlacementHandlerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-    if (!Item)
-        return false;
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    if (Count > 200 || Count < -1)
-        return false;
+	if (SpawnQueue.IsEmpty())
+		return;
 
-    return true;
+	int32 SpawnsRemaining = MaxSpawnsPerFrame;
+
+	while (SpawnsRemaining > 0 && !SpawnQueue.IsEmpty())
+	{
+		FAsyncSpawnBatch& Batch = SpawnQueue[0];
+		
+		if (!Batch.ItemData.IsValid())
+		{
+			SpawnQueue.RemoveAt(0);
+			continue;
+		}
+
+		while (Batch.CurrentIndex < Batch.Transforms.Num() && SpawnsRemaining > 0)
+		{
+			const FTransform& Trans = Batch.Transforms[Batch.CurrentIndex];
+			SpawnSingleActor(Batch.ItemData.Get(), Trans.GetLocation(), Trans.Rotator());
+			
+			Batch.CurrentIndex++;
+			SpawnsRemaining--;
+		}
+
+		if (Batch.CurrentIndex >= Batch.Transforms.Num())
+		{
+			SpawnQueue.RemoveAt(0);
+		}
+	}
 }
 
 void UPlacementHandlerComponent::Server_RequestPlacement_Implementation(const UPlacementItemData* Item, const FVector& Location, const FRotator& Rotation, int32 Count, ESpawnFormation Formation, FIntPoint CustomDimensions)
@@ -34,6 +59,8 @@ void UPlacementHandlerComponent::Server_RequestPlacement_Implementation(const UP
         UE_LOG(LogTemp, Warning, TEXT("Server_RequestPlacement: Item is NULL"));
         return;
     }
+
+    UE_LOG(LogTemp, Log, TEXT("Server_RequestPlacement: Received request for '%s' at %s"), *Item->GetName(), *Location.ToString());
 
     if (const UPlacementUnitData* UnitData = Cast<UPlacementUnitData>(Item))
     {
@@ -48,32 +75,50 @@ void UPlacementHandlerComponent::Server_RequestPlacement_Implementation(const UP
 
 void UPlacementHandlerComponent::SpawnSingleActor(const UPlacementItemData* Item, const FVector& Location, const FRotator& Rotation)
 {
-    if (!Item->ActorToSpawn)
+    if (!Item || !Item->ActorToSpawn)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SpawnSingleActor: Item or ActorToSpawn is NULL"));
         return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("SpawnSingleActor: Spawning %s at %s"), *Item->ActorToSpawn->GetName(), *Location.ToString());
 
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
     Params.Owner = GetOwner();
 
-    GetWorld()->SpawnActor<AActor>(Item->ActorToSpawn, Location, Rotation, Params);
+    AActor* Spawned = GetWorld()->SpawnActor<AActor>(Item->ActorToSpawn, Location, Rotation, Params);
+    if (Spawned)
+    {
+        // UE_LOG(LogTemp, Log, TEXT("SpawnSingleActor: SUCCESS -> %s"), *Spawned->GetName());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("SpawnSingleActor: FAILED to spawn actor"));
+    }
 }
 
 void UPlacementHandlerComponent::SpawnUnitGroup(const UPlacementUnitData* UnitData, const FVector& Location, const FRotator& Rotation, int32 Count, ESpawnFormation Formation, FIntPoint CustomDimensions)
 {
-    if (!UnitData || !UnitData->ActorToSpawn)
-        return;
+	if (!UnitData || !UnitData->ActorToSpawn)
+		return;
 
-    TArray<FVector> Offsets;
-    GenerateFormationOffsets(Offsets, Count, UnitData->FormationSpacing, Rotation, Formation, CustomDimensions);
+	TArray<FVector> Offsets;
+	GenerateFormationOffsets(Offsets, Count, UnitData->FormationSpacing, Rotation, Formation, CustomDimensions);
 
-    FActorSpawnParameters Params;
-    Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
+    // Queue the spawn
+    FAsyncSpawnBatch Batch;
+    Batch.ItemData = UnitData;
+    
     for (const FVector& Offset : Offsets)
     {
         FVector SpawnLoc = Location + Offset;
-        GetWorld()->SpawnActor<AActor>(UnitData->ActorToSpawn, SpawnLoc, Rotation, Params);
+        Batch.Transforms.Add(FTransform(Rotation, SpawnLoc));
     }
+    
+    SpawnQueue.Add(Batch);
+    
+    UE_LOG(LogTemp, Log, TEXT("UIPlacementHandler: Queued batch of %d units"), Offsets.Num());
 }
 
 void UPlacementHandlerComponent::GenerateFormationOffsets(TArray<FVector>& OutOffsets, int32 Count, float Spacing, const FRotator& Facing, ESpawnFormation Formation, FIntPoint CustomDimensions) const
@@ -87,7 +132,7 @@ void UPlacementHandlerComponent::GenerateFormationOffsets(TArray<FVector>& OutOf
 
     if (Formation == ESpawnFormation::Square)
     {
-        int32 RowSize = FMath::CeilToInt(FMath::Sqrt((float)Count));
+        int32 RowSize = FMath::CeilToInt(FMath::Sqrt(static_cast<float>(Count)));
         float Width = (RowSize - 1) * Spacing;
         FVector StartPos = -(RightDir * Width * 0.5f) - (ForwardDir * Width * 0.5f);
 

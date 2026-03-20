@@ -1,4 +1,4 @@
-﻿#include "Player/JupiterPlayerSystem/CameraMovementSystem.h"
+#include "Player/JupiterPlayerSystem/CameraMovementSystem.h"
 #include "Player/PlayerCamera.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -156,29 +156,30 @@ FVector2D UCameraMovementSystem::GetEdgeScrollInput() const
 
 void UCameraMovementSystem::UpdateTerrainFollow(float DeltaTime)
 {
-    if (!GetWorldSafe() || !GetOwner())
-    	return;
+	if (!GetWorldSafe() || !GetOwner())
+		return;
 
-    APlayerCamera* Cam = GetOwner();
-    FVector CurrentPos = Cam->GetActorLocation();
+	APlayerCamera* Cam = GetOwner();
+	const UCameraComponent* CamComp = Cam->GetCameraComponent();
+	if (!CamComp)
+		return;
 
-    FVector TraceStart = FVector(CurrentPos.X, CurrentPos.Y, CurrentPos.Z + 10000.0f);
-    FVector TraceEnd   = FVector(CurrentPos.X, CurrentPos.Y, -10000.0f);
+	const FVector CurrentPos = Cam->GetActorLocation();
+	const FVector CameraWorldPos = CamComp->GetComponentLocation();
 
-    FHitResult Hit;
-    FCollisionQueryParams Params;
-    Params.AddIgnoredActor(Cam);
+	const FVector TraceStart = FVector(CameraWorldPos.X, CameraWorldPos.Y, CurrentPos.Z + 10000.0f);
+	const FVector TraceEnd   = FVector(CameraWorldPos.X, CameraWorldPos.Y, -10000.0f);
 
-    bool bHit = GetWorldSafe()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params);
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(Cam);
 
-    if (bHit)
-    {
-        float TargetZ = Hit.ImpactPoint.Z;
-
-        CurrentTerrainHeight = FMath::FInterpTo(CurrentTerrainHeight, TargetZ, DeltaTime, 5.0f);
-        
-        Cam->SetActorLocation(FVector(CurrentPos.X, CurrentPos.Y, CurrentTerrainHeight));
-    }
+	FHitResult Hit;
+	if (GetWorldSafe()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+	{
+		const float TargetZ = Hit.ImpactPoint.Z;
+		CurrentTerrainHeight = FMath::FInterpTo(CurrentTerrainHeight, TargetZ, DeltaTime, 5.0f);
+		Cam->SetActorLocation(FVector(CurrentPos.X, CurrentPos.Y, CurrentTerrainHeight));
+	}
 }
 
 void UCameraMovementSystem::MoveToLocation(const FVector& TargetLocation, float Duration)

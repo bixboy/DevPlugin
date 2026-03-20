@@ -1,5 +1,4 @@
 ﻿#pragma once
-
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "PlayerControllerRts.generated.h"
@@ -16,8 +15,8 @@ class JUPITERPLUGIN_API APlayerControllerRts : public APlayerController
 public:
 	APlayerControllerRts(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-        UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-        UUnitSelectionComponent* SelectionComponent;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UUnitSelectionComponent* SelectionComponent;
 
 protected:
 	virtual void BeginPlay() override;

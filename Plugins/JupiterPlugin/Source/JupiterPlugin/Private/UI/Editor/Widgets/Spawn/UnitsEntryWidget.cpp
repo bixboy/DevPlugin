@@ -1,5 +1,4 @@
 ﻿#include "UI/Editor/Widgets/Spawn/UnitsEntryWidget.h"
-#include "UI/Editor/Widgets/Spawn/UnitsEntryWidget.h"
 #include "UI/CustomButtonWidget.h"
 
 
@@ -19,7 +18,7 @@ void UUnitsEntryWidget::SetPlacementSystem(UCameraPlacementSystem* InPlacementSy
 	PlacementSystem = InPlacementSystem;
 }
 
-void UUnitsEntryWidget::InitEntry(const UPlacementUnitData* Data)
+void UUnitsEntryWidget::InitEntry(UPlacementUnitData* Data)
 {
 	if (!Data)
 		return;
@@ -37,7 +36,7 @@ void UUnitsEntryWidget::InitEntry(const UPlacementUnitData* Data)
 
 void UUnitsEntryWidget::OnUnitSelected(UCustomButtonWidget* Button, int Index)
 {
-	if (!PlacementData.IsValid() || !PlacementSystem.IsValid())
+	if (!PlacementData || !PlacementSystem.IsValid())
 		return;
 
 	PlacementSystem->StartPlacement(PlacementData.Get());

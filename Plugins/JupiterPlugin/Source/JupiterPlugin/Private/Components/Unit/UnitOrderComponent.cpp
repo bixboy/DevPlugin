@@ -142,6 +142,26 @@ void UUnitOrderComponent::DispatchOrder(const FCommandData& OriginalCommandData,
     {
         PreparePatrolCommand(FinalCommandData, Units);
     }
+    else
+    {
+        // Non-patrol order: remove units from their current patrol
+        if (UUnitPatrolComponent* PatrolComp = GetOwner()->FindComponentByClass<UUnitPatrolComponent>())
+        {
+            TArray<AActor*> UnitsOnPatrol;
+            for (AActor* Unit : Units)
+            {
+                FPatrolRoute Route;
+                if (PatrolComp->GetPatrolRouteForUnit(Unit, Route))
+                {
+                    UnitsOnPatrol.Add(Unit);
+                }
+            }
+            if (UnitsOnPatrol.Num() > 0)
+            {
+                PatrolComp->Server_RemoveUnitsFromPatrol(UnitsOnPatrol);
+            }
+        }
+    }
 
     TArray<FCommandData> Commands;
     ApplyFormationToCommands(FinalCommandData, Units, Commands);

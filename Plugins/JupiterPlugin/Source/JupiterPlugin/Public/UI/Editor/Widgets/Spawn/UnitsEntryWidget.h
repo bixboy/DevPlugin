@@ -15,16 +15,18 @@ class JUPITERPLUGIN_API UUnitsEntryWidget : public UUserWidget
 
 public:
 	virtual void NativeOnInitialized() override;
-
-	UFUNCTION()
-	void InitEntry(const UPlacementUnitData* Data);
-
+	
 	void SetPlacementSystem(UCameraPlacementSystem* InPlacementSystem);
+	
+	UFUNCTION(BlueprintCallable, Category = "Placement")
+	void InitEntry(UPlacementUnitData* Data);
 
 	FText GetUnitDisplayName() const { return CachedUnitName; }
+	
 	const TArray<FName>& GetUnitTags() const { return UnitTags; }
     
 	bool MatchesSearch(const FString& SearchLower) const;
+	
 	bool HasTag(FName Tag) const;
 	
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
@@ -35,8 +37,8 @@ protected:
 	UFUNCTION()
 	void OnUnitSelected(UCustomButtonWidget* Button, int Index);
 
-	UPROPERTY()
-	TWeakObjectPtr<const UPlacementUnitData> PlacementData;
+	UPROPERTY(BlueprintReadOnly, Category = "Placement")
+	TObjectPtr<UPlacementUnitData> PlacementData;
 
 	UPROPERTY()
 	TWeakObjectPtr<UCameraPlacementSystem> PlacementSystem;

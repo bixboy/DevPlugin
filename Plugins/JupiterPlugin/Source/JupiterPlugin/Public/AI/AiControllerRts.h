@@ -37,6 +37,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="AI")
     virtual void StopPatrol() override;
 
+    UFUNCTION(BlueprintCallable, Category="AI")
+    virtual void PausePatrol(bool bPause) override;
+
 	UFUNCTION(BlueprintCallable, Category="AI")
 	void ResetAttack();
 
@@ -95,6 +98,7 @@ private:
         UPROPERTY() bool bMoveComplete = true;
         UPROPERTY() bool bPatrolling = false;
         UPROPERTY() bool bWasPatrolling = false; // State to resume patrol after combat
+        UPROPERTY() bool bPatrolPaused = false;
 
         UPROPERTY() bool bAttackTarget = false;
         UPROPERTY() bool bCanAttack = true;

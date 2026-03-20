@@ -20,6 +20,7 @@ class UUnitOrderComponent;
 class UUnitFormationComponent;
 class UPlacementHandlerComponent;
 class UUnitPatrolComponent;
+class UPresetManagerComponent;
 class UCameraMovementSystem;
 class UCameraSelectionSystem;
 class UCameraCommandSystem;
@@ -60,6 +61,7 @@ public:
     FORCEINLINE UUnitOrderComponent* GetOrderComponent() const { return OrderComponent; }
     FORCEINLINE UUnitSelectionComponent* GetSelectionComponent() const { return SelectionComponent; }
     FORCEINLINE UUnitPatrolComponent* GetPatrolComponent() const { return PatrolComponent; }
+    FORCEINLINE UPresetManagerComponent* GetPresetManager() const { return PresetManagerComponent; }
     
     FORCEINLINE UCameraComponent* GetCameraComponent() const { return CameraComponent; }
     FORCEINLINE USpringArmComponent* GetSpringArm() const { return SpringArm; }
@@ -91,6 +93,9 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jupiter|Components")
     TObjectPtr<UUnitPatrolComponent> PatrolComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jupiter|Components")
+    TObjectPtr<UPresetManagerComponent> PresetManagerComponent;
 
 protected:
     void InitializeSystems();

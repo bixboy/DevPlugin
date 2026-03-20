@@ -51,6 +51,9 @@ public:
 	UJupiterToggleSwitch* Btn_ReverseToggle;
 
 	UPROPERTY(meta = (BindWidget))
+	UJupiterToggleSwitch* Btn_PauseToggle;
+
+	UPROPERTY(meta = (BindWidget))
 	UCustomButtonWidget* Btn_DeletePatrol;
     
     UPROPERTY(meta = (BindWidgetOptional))
@@ -76,6 +79,9 @@ protected:
 
     UFUNCTION()
 	void OnReverseToggled(bool bIsToggled);
+
+    UFUNCTION()
+	void OnPauseToggled(bool bIsToggled);
 
 	UFUNCTION()
 	void OnDeletePatrolClicked(UCustomButtonWidget* Button, int Index);

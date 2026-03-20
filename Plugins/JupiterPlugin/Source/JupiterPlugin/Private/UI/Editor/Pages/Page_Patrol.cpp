@@ -4,7 +4,6 @@
 #include "UI/Editor/Widgets/Patrol/PatrolDetailWidget.h"
 #include "Components/Patrol/UnitPatrolComponent.h"
 #include "Components/PanelWidget.h"
-#include "GameFramework/PlayerController.h"
 
 
 void UPage_Patrol::InitPage(UCameraPlacementSystem* PlacementSys, UUnitPatrolComponent* PatrolComp, UUnitSelectionComponent* SelComp)

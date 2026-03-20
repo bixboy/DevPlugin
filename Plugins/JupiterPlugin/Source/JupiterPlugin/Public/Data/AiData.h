@@ -52,9 +52,7 @@ struct FCommandData
 		Type(ECommandType::CommandMove),
 		Target(nullptr),
 		Radius(0.f),
-		PatrolPath(),
 		bPatrolLoop(false),
-		PatrolID(),
 		StartIndex(0) {}
 
 	// Assignation des parametres 
@@ -66,9 +64,7 @@ struct FCommandData
 		Type(InType),
 		Target(InTarget),
 		Radius(InRadius),
-		PatrolPath(),
 		bPatrolLoop(false),
-		PatrolID(),
 		StartIndex(0) {}
 
 

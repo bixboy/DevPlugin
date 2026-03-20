@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Components/SizeBox.h"
+#include "Data/Placement/PlacementUnitData.h"
 #include "UI/Editor/JupiterPageBase.h"
 #include "Page_UnitSpawn.generated.h"
 

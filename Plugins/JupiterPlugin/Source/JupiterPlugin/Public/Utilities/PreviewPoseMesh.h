@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Actor.h"
+#include "Data/Placement/PresetData.h"
 #include "PreviewPoseMesh.generated.h"
 
 class UInstancedStaticMeshComponent;
@@ -20,13 +22,15 @@ public:
 	void ShowPreview(UStaticMesh* NewStaticMesh, FVector NewScale, int32 InstanceCount);
 	void ShowPreview(USkeletalMesh* NewSkeletalMesh, FVector NewScale, int32 InstanceCount);
 
+	void ShowPreset(const FPlacementPreset& Preset);
+
 	UFUNCTION()
 	void HidePreview();
 
 	// --- Update Methods ---
 	UFUNCTION()
 	void UpdateInstances(const TArray<FTransform>& InstanceTransforms);
-
+	
 	// --- Visual Feedback ---
 	UFUNCTION()
 	void SetPlacementValid(bool bValid);
@@ -50,6 +54,17 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	UInstancedStaticMeshComponent* InstancedStaticMesh;
+
+	UPROPERTY()
+	TMap<TObjectPtr<UStaticMesh>, TObjectPtr<UInstancedStaticMeshComponent>> StaticMeshComponents;
+	
+	struct FPresetComponentEntry
+	{
+		TObjectPtr<USceneComponent> Component;
+		FTransform RelativeTransform;
+	};
+	
+	TArray<FPresetComponentEntry> PresetComponents;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UPoseableMeshComponent>> PoseableMeshes;

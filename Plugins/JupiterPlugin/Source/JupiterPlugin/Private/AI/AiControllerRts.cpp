@@ -339,6 +339,9 @@ void AAiControllerRts::CommandPatrol(const FCommandData Cmd)
 
 void AAiControllerRts::StartPatrol()
 {
+    if (bPatrolPaused)
+        return;
+
     const int32 NumPoints = CurrentPatrolPath.Num();
     if (NumPoints == 0)
     {
@@ -384,8 +387,23 @@ void AAiControllerRts::UpdatePatrolRoute(const TArray<FVector>& Points, bool bLo
 void AAiControllerRts::StopPatrol()
 {
     bPatrolling = false;
+    bPatrolPaused = false;
     bWasPatrolling = false; // Manual stop clears resume state
     StopMovement();
+}
+
+void AAiControllerRts::PausePatrol(bool bPause)
+{
+    bPatrolPaused = bPause;
+
+    if (bPause)
+    {
+        StopMovement();
+    }
+    else if (bPatrolling && CurrentPatrolPath.Num() > 0)
+    {
+        StartPatrol();
+    }
 }
 
 #pragma endregion

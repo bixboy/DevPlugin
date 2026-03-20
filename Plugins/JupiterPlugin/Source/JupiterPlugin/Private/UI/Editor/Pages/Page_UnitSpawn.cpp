@@ -179,9 +179,6 @@ void UPage_UnitSpawn::OnUnitSelected(UCustomButtonWidget* Button, int Index)
         if (Entry && Entry->UnitButton)
             Entry->UnitButton->ToggleButtonIsSelected(false);
     }
-
-    if (Button) 
-        Button->ToggleButtonIsSelected(true);
 }
 
 void UPage_UnitSpawn::OnCategoryButtonClicked(UCustomButtonWidget* Button, int Index)

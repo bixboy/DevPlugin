@@ -43,6 +43,11 @@ void UPatrolDetailWidget::NativeConstruct()
 	{
 		Btn_ReverseToggle->OnToggled.AddDynamic(this, &UPatrolDetailWidget::OnReverseToggled);
 	}
+
+	if (Btn_PauseToggle)
+	{
+		Btn_PauseToggle->OnToggled.AddDynamic(this, &UPatrolDetailWidget::OnPauseToggled);
+	}
 	
 	if (Btn_DeletePatrol)
 	{
@@ -162,6 +167,11 @@ void UPatrolDetailWidget::RefreshUI()
     if (Btn_LoopToggle)
     {
         Btn_LoopToggle->SetIsToggled(Route.PatrolType == EPatrolType::Loop);
+    }
+
+    if (Btn_PauseToggle)
+    {
+        Btn_PauseToggle->SetIsToggled(Route.bPaused);
     }
 
     if (RoutePreviewWidget)
@@ -308,6 +318,14 @@ void UPatrolDetailWidget::OnReverseToggled(bool bIsToggled)
     if (WeakPatrolComponent.IsValid())
     {
         WeakPatrolComponent->Server_ModifyPatrol(BoundPatrolID, EPatrolModAction::Reverse, FPatrolModPayload());
+    }
+}
+
+void UPatrolDetailWidget::OnPauseToggled(bool bIsToggled)
+{
+    if (WeakPatrolComponent.IsValid())
+    {
+        WeakPatrolComponent->Server_ModifyPatrol(BoundPatrolID, EPatrolModAction::TogglePause, FPatrolModPayload());
     }
 }
 

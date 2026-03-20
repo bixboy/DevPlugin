@@ -1,9 +1,9 @@
 ﻿#pragma once
-
 #include "CoreMinimal.h"
 #include "AiData.h"
 #include "Engine/DataAsset.h"
 #include "FormationDataAsset.generated.h"
+
 
 UCLASS()
 class JUPITERPLUGIN_API UFormationDataAsset : public UDataAsset
@@ -20,7 +20,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
 	FText DisplayName;
 
-	/** Normalized slot offsets that describe this formation. Each entry represents a unit position. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
 	TArray<FVector2D> SlotOffsets;
 

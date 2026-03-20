@@ -7,18 +7,18 @@
 UENUM(BlueprintType)
 enum class EPatrolType : uint8
 {
-	Once        UMETA(DisplayName = "Once"),
-	Loop        UMETA(DisplayName = "Loop"),
-	PingPong    UMETA(DisplayName = "Ping Pong")
+	Once     UMETA(DisplayName = "Once"),
+	Loop     UMETA(DisplayName = "Loop"),
+	PingPong UMETA(DisplayName = "Ping Pong")
 };
 
 UENUM(BlueprintType)
 enum class EPatrolVisualQuality : uint8
 {
-	Low      UMETA(DisplayName = "Low - Simple Lines"),
-	Medium   UMETA(DisplayName = "Medium - Lines + Waypoints"),
-	High     UMETA(DisplayName = "High - Full Effects"),
-	Ultra    UMETA(DisplayName = "Ultra - Maximum Quality")
+	Low    UMETA(DisplayName = "Low - Simple Lines"),
+	Medium UMETA(DisplayName = "Medium - Lines + Waypoints"),
+	High   UMETA(DisplayName = "High - Full Effects"),
+	Ultra  UMETA(DisplayName = "Ultra - Maximum Quality")
 };
 
 
@@ -59,11 +59,8 @@ UENUM(BlueprintType)
 enum class EPatrolVisualizationState : uint8
 {
 	Hidden,
-	
 	Preview,
-	
 	Active,
-	
 	Selected
 };
 
@@ -98,6 +95,9 @@ struct FPatrolRoute
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<TObjectPtr<AActor>> AssignedUnits;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bPaused = false;
 };
 
 
@@ -162,7 +162,7 @@ struct FPatrolRouteArray : public FFastArraySerializer
 };
 
 template<>
-struct TStructOpsTypeTraits<FPatrolRouteArray> : public TStructOpsTypeTraitsBase2<FPatrolRouteArray>
+struct TStructOpsTypeTraits<FPatrolRouteArray> : TStructOpsTypeTraitsBase2<FPatrolRouteArray>
 {
 	enum
 	{

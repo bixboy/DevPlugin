@@ -18,7 +18,8 @@ enum class EPatrolModAction : uint8
     Rename,
     ChangeType,
     ChangeColor,
-    Reverse
+    Reverse,
+    TogglePause
 };
 
 UENUM(BlueprintType)
@@ -56,7 +57,18 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintCallable, Category = "Patrol")
-	const TArray<FPatrolRouteItem>& GetActiveRoutes() const { return PatrolRoutes.Items; }
+	const TArray<FPatrolRouteItem>& GetActiveRoutes() const;
+
+	bool IsGlobalRegistry() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Patrol")
+	bool IsPatrolNameTaken(FName PatrolName) const;
+
+	UFUNCTION()
+	void OnGlobalPatrolRoutesChanged();
+
+	void BindToGlobalData();
+	void BroadcastRoutesChanged();
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
 	void Server_CreatePatrol(const FPatrolCreationParams& Params);
@@ -94,6 +106,9 @@ public:
 
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
     void Server_AssignUnitsToPatrol(const TArray<AActor*>& Units, FGuid PatrolID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Patrol")
+	void Server_RemoveUnitsFromPatrol(const TArray<AActor*>& Units);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_RemovePatrolRoute(const TArray<AActor*>& Units, const FGuid& PatrolID);
@@ -192,4 +207,7 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Patrol")
 	bool bAutoCreateVisualizer = true;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Patrol")
+	bool bResetSavesOnBeginPlay = false;
 };

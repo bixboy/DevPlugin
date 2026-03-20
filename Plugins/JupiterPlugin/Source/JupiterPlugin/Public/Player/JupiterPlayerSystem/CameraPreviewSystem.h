@@ -1,6 +1,6 @@
-﻿#pragma once
-#include "CoreMinimal.h"
+﻿#include "CoreMinimal.h"
 #include "CameraSystemBase.h"
+#include "Data/Placement/PresetData.h"
 #include "CameraPreviewSystem.generated.h"
 
 class APreviewPoseMesh;
@@ -32,6 +32,8 @@ public:
 	// --- Visuals ---
 	bool ShowSkeletalPreview(USkeletalMesh* Mesh, const FVector& Scale, int32 Count);
 	bool ShowStaticPreview(UStaticMesh* Mesh, const FVector& Scale, int32 Count);
+
+	bool ShowPresetPreview(const FPlacementPreset& Preset);
 
 	void UpdateInstances(const TArray<FTransform>& Transforms);
 	void SetPreviewTransform(const FVector& Location, const FRotator& Rotation);
