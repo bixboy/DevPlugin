@@ -1,0 +1,26 @@
+---
+description: Unreal Engine Live Coding limitations and best practices
+globs: ["*.h", "*.cpp"]
+---
+
+# Live Coding Limitations
+
+Live Coding (Ctrl+Alt+F11) patches binaries at runtime. These operations are NOT supported during Live Coding:
+
+## Cannot Do
+- Add or remove UPROPERTY members
+- Add or remove UFUNCTION methods
+- Change the signature (return type, name, parameters) of a UFUNCTION
+- Add or remove UCLASS/USTRUCT/UENUM declarations
+- Change class inheritance hierarchy
+- Modify constructors of UObject-derived classes
+
+## Can Do
+- Modify function body logic
+- Change local variables
+- Modify non-reflected (non-UPROPERTY) member variables
+- Add/modify non-reflected helper functions
+- Change constants and literals
+
+## Best Practice
+If you need to add/remove reflected members, do a full Build instead of Live Coding.

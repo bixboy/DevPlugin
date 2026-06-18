@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "enginelink": {
+      "command": "node",
+      "args": [
+        "c:\\Users\\PIERRE\\.antigravity\\extensions\\enginelink.enginelink-0.1.1-universal\\dist\\mcp-server.js"
+      ]
+    }
+  }
+}

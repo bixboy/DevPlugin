@@ -1,0 +1,132 @@
+// StellarShader - TacticalUI.ush
+// High-fidelity tactical UI shader library: scanlines, precision corners, and holographic glows.
+// Optimized for User Interface materials.
+
+#pragma once
+
+// ============================================================================
+// MATH UTILITIES
+// ============================================================================
+
+float DrawTacticalBoxMask(float2 UV, float2 PixelSize, float2 MarginPixels, float GradientPixels)
+{
+    float2 pixelPos = UV * PixelSize;
+    float2 d = abs(pixelPos - PixelSize * 0.5) * 2.0;
+    float2 boxSize = PixelSize - MarginPixels * 2.0;
+    
+    // Smooth boundary for the outer box
+    float2 m = smoothstep(boxSize, boxSize - GradientPixels * 2.0, d);
+    return m.x * m.y;
+}
+
+float DrawTacticalCorners(float2 UV, float2 PixelSize, float CornerLengthPixels, float ThicknessPixels, float HoverScale)
+{
+    float2 pixelPos = UV * PixelSize;
+    float2 d = min(pixelPos, PixelSize - pixelPos); 
+    
+    float len = CornerLengthPixels * (1.0 + HoverScale * 0.4);
+    float thickness = ThicknessPixels * (1.0 + HoverScale * 0.2);
+    
+    float corner = (step(d.x, thickness) * step(d.y, len)) + 
+                   (step(d.y, thickness) * step(d.x, len));
+                   
+    return saturate(corner);
+}
+
+float GetGrit(float2 UV, float Time)
+{
+    float noise = frac(sin(dot(UV + frac(Time * 0.5), float2(12.9898, 78.233))) * 43758.5453);
+    return noise;
+}
+
+float GetTacticalGrid(float2 UV, float2 PixelSize, float HoverScale)
+{
+    float2 gCoord = UV * PixelSize;
+    float2 gPos = frac(gCoord / 32.0);
+    float d = 1.0 - smoothstep(1.0, 2.0, length(abs(gPos - 0.0) * 32.0));
+    float l = (1.0 - smoothstep(0.0, 1.0, abs(gPos.x - 0.0) * 32.0)) + 
+              (1.0 - smoothstep(0.0, 1.0, abs(gPos.y - 0.0) * 32.0));
+    return (d * 0.8 + l * 0.15) * (0.2 + HoverScale * 0.2);
+}
+
+void StellarTactical_Main(
+    float2 UV,
+    float Time,
+    float3 BgColor,
+    float3 AccentColor,
+    float ScanSpeed,
+    float GlowIntensity,
+    float HoverState,
+    float CornerSize,
+    float CornerThickness,
+    out float3 OutColor,
+    out float OutOpacity)
+{
+    // 1. Setup Advanced Distortion (RGB Split & Block Glitch)
+    float glitchMask = step(0.92, frac(Time * 0.45)); 
+    float blockChance = GetGrit(float2(0, floor(UV.y * 3.0)), Time * 0.1);
+    float blockGlitch = step(0.85, blockChance) * glitchMask; 
+    
+    float jitter = (GetGrit(float2(0, floor(UV.y * 200.0)), Time) - 0.5) * 0.0015;
+    float blockOffset = (GetGrit(float2(0, floor(UV.y * 5.0)), Time) - 0.5) * 0.02 * blockGlitch;
+    
+    // Distorted UVs for internal data (Grid, BG, Scanlines)
+    float chromAb = 0.003 * (glitchMask + HoverState * 0.2);
+    float2 uvR = UV + float2(jitter + blockOffset + chromAb, 0);
+    float2 uvG = UV + float2(jitter + blockOffset, 0);
+    float2 uvB = UV + float2(jitter + blockOffset - chromAb, 0);
+
+    // 2. Setup Pixel Dimensions (Use original UV for sampling derivatives)
+    float2 uvDeriv = float2(length(float2(ddx(UV.x), ddy(UV.x))), length(float2(ddx(UV.y), ddy(UV.y))));
+    float2 pixelSize = 1.0 / max(uvDeriv, 0.00001); 
+    
+    // 3. Multi-Channel Background (Distorted)
+    float bgMask = DrawTacticalBoxMask(uvG, pixelSize, float2(1.0, 1.0), 3.0);
+    float baseAlpha = 0.42 + HoverState * 0.1;
+    float3 baseBg = BgColor * bgMask * (0.45 + HoverState * 0.12);
+    
+    // 4. Dotted Grid (Distorted with RGB Split)
+    float gridR = GetTacticalGrid(uvR, pixelSize, HoverState);
+    float gridG = GetTacticalGrid(uvG, pixelSize, HoverState);
+    float gridB = GetTacticalGrid(uvB, pixelSize, HoverState);
+    float3 finalGrid = float3(gridR, gridG, gridB) * AccentColor;
+    
+    // 5. STABLE Corners (No distortion, using original UV for crispness)
+    float corners = DrawTacticalCorners(UV, pixelSize, CornerSize, CornerThickness, HoverState);
+    float3 finalCorners = corners * AccentColor * (1.2 + HoverState * 1.5) * GlowIntensity;
+
+    // 6. Final Color Assembly
+    float3 finalColor = baseBg;
+    finalColor += finalGrid;
+    finalColor += finalCorners;
+    
+    float finalOpacity = baseAlpha * bgMask;
+    finalOpacity = max(finalOpacity, gridG * 0.6);
+    finalOpacity = max(finalOpacity, corners);
+
+    // 7. Cinematic Effects (Scanlines & Pulse)
+    float grit = GetGrit(uvG, Time) * 0.05;
+    finalColor += AccentColor * grit;
+    
+    float scanPos = frac(uvG.y * 2.0 - Time * ScanSpeed * 0.1);
+    float scanWave = smoothstep(0.85, 1.0, 1.0 - abs(scanPos - 0.5) * 2.0) * 0.06;
+    finalColor += AccentColor * scanWave * (1.1 + HoverState);
+    finalOpacity = max(finalOpacity, scanWave);
+
+    // Global Pulse (Very subtle CRT flicker on whole color)
+    float crtFlicker = 1.0 - (glitchMask * 0.05) * GetGrit(float2(Time, 0), Time);
+    float pulse = 1.0 + (0.02 + HoverState * 0.04) * sin(Time * 1.8);
+    finalColor *= pulse * crtFlicker;
+
+    OutColor = finalColor;
+    OutOpacity = saturate(finalOpacity);
+}
+
+// LEGACY OVERLOAD: Prevents compilation errors if the .uasset hasn't been regenerated yet.
+void StellarTactical_Main(
+    float2 UV, float Time, float3 BgColor, float3 AccentColor, 
+    float ScanSpeed, float GlowIntensity, float HoverState, 
+    out float3 OutColor, out float OutOpacity)
+{
+    StellarTactical_Main(UV, Time, BgColor, AccentColor, ScanSpeed, GlowIntensity, HoverState, 14.0, 1.5, OutColor, OutOpacity);
+}

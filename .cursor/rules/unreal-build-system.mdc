@@ -1,0 +1,52 @@
+---
+description: Unreal Engine build system (.Build.cs, .Target.cs, modules, plugins)
+globs: ["*.Build.cs", "*.Target.cs", "*.uproject", "*.uplugin"]
+---
+
+# UE Build System
+
+## Module Structure
+Each module has: `ModuleName.Build.cs`, `Public/`, `Private/`, and optionally `Classes/`.
+
+### .Build.cs
+Defines module dependencies and build rules:
+```csharp
+public class MyModule : ModuleRules
+{
+    public MyModule(ReadOnlyTargetRules Target) : base(Target)
+    {
+        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+
+        PublicDependencyModuleNames.AddRange(new string[] {
+            "Core", "CoreUObject", "Engine", "InputCore"
+        });
+
+        PrivateDependencyModuleNames.AddRange(new string[] {
+            "Slate", "SlateCore"
+        });
+    }
+}
+```
+
+### .Target.cs
+Defines build target configuration:
+```csharp
+public class MyProjectTarget : TargetRules
+{
+    public MyProjectTarget(TargetInfo Target) : base(Target)
+    {
+        Type = TargetType.Game;
+        DefaultBuildSettings = BuildSettingsVersion.V4;
+        IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
+        ExtraModuleNames.Add("MyProject");
+    }
+}
+```
+
+## Adding Dependencies
+- `PublicDependencyModuleNames`: Other modules that depend on YOUR module also get these
+- `PrivateDependencyModuleNames`: Only YOUR module gets these dependencies
+- Use Private when possible to reduce compile times
+
+## Plugin Structure
+A plugin has a `.uplugin` descriptor and one or more modules in `Source/`.

@@ -1,0 +1,64 @@
+---
+description: Unreal Engine reflection macros (UCLASS, UPROPERTY, UFUNCTION) usage guide
+globs: ["*.h"]
+---
+
+# UE Reflection Macros
+
+## UCLASS()
+Declares a class to the UE reflection system. Must appear before the class declaration.
+```cpp
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API AMyActor : public AActor
+{
+    GENERATED_BODY()
+public:
+    AMyActor();
+};
+```
+Common specifiers: `BlueprintType`, `Blueprintable`, `Abstract`, `NotBlueprintable`, `ClassGroup`, `meta=(DisplayName="...")`
+
+## UPROPERTY()
+Exposes a property to the reflection system. Must appear before the member variable.
+```cpp
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+float Health = 100.0f;
+```
+Common specifiers: `EditAnywhere`, `VisibleAnywhere`, `BlueprintReadOnly`, `BlueprintReadWrite`, `Category`, `meta=(ClampMin, ClampMax)`, `Replicated`, `ReplicatedUsing`
+
+## UFUNCTION()
+Exposes a function to the reflection system.
+```cpp
+UFUNCTION(BlueprintCallable, Category = "Combat")
+void TakeDamage(float DamageAmount);
+
+UFUNCTION(BlueprintImplementableEvent)
+void OnDeath();
+```
+Common specifiers: `BlueprintCallable`, `BlueprintPure`, `BlueprintImplementableEvent`, `BlueprintNativeEvent`, `Server`, `Client`, `NetMulticast`, `Reliable`, `Unreliable`
+
+## USTRUCT()
+```cpp
+USTRUCT(BlueprintType)
+struct FMyStruct
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere)
+    float Value;
+};
+```
+
+## UENUM()
+```cpp
+UENUM(BlueprintType)
+enum class EMyEnum : uint8
+{
+    None,
+    Option1,
+    Option2
+};
+```
+
+## GENERATED_BODY()
+Must be the first line inside every UCLASS/USTRUCT. Do not add anything before it.

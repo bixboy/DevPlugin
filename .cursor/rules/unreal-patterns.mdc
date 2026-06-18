@@ -1,0 +1,60 @@
+---
+description: Common Unreal Engine patterns (delegates, timers, subsystems, etc.)
+globs: ["*.h", "*.cpp"]
+---
+
+# Common UE Patterns
+
+## Delegates
+```cpp
+// Declaration (in header)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthChanged, float, NewHealth);
+
+// Usage (as UPROPERTY)
+UPROPERTY(BlueprintAssignable)
+FOnHealthChanged OnHealthChanged;
+
+// Broadcasting
+OnHealthChanged.Broadcast(CurrentHealth);
+```
+
+## Timers
+```cpp
+GetWorldTimerManager().SetTimer(TimerHandle, this, &AMyActor::DoSomething, 2.0f, false);
+GetWorldTimerManager().ClearTimer(TimerHandle);
+```
+
+## Subsystems
+```cpp
+UMySubsystem* Sub = GetGameInstance()->GetSubsystem<UMySubsystem>();
+UMyLocalPlayerSubsystem* Sub = ULocalPlayer::GetSubsystem<UMyLocalPlayerSubsystem>(LocalPlayer);
+```
+
+## Gameplay Tags
+```cpp
+FGameplayTag Tag = FGameplayTag::RequestGameplayTag(FName("Ability.Attack.Melee"));
+```
+
+## Enhanced Input
+```cpp
+// In SetupPlayerInputComponent:
+UEnhancedInputComponent* EnhancedInput = CastChecked<UEnhancedInputComponent>(InputComponent);
+EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AMyCharacter::Move);
+```
+
+## Logging
+```cpp
+// Declare in header:
+DECLARE_LOG_CATEGORY_EXTERN(LogMyGame, Log, All);
+// Define in cpp:
+DEFINE_LOG_CATEGORY(LogMyGame);
+// Usage:
+UE_LOG(LogMyGame, Warning, TEXT("Player health: %f"), Health);
+```
+
+## Spawning Actors
+```cpp
+FActorSpawnParameters SpawnParams;
+SpawnParams.Owner = this;
+AMyActor* Actor = GetWorld()->SpawnActor<AMyActor>(ActorClass, SpawnLocation, SpawnRotation, SpawnParams);
+```

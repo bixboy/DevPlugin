@@ -1,0 +1,420 @@
+// StellarShader - StellarWater.ush
+// Realistic water shader library: Gerstner waves, foam, caustics, Fresnel
+// All functions are parameterizable for different water types (ocean, lake, river)
+
+#pragma once
+
+// ============================================================================
+// NOISE UTILITIES
+// ============================================================================
+
+float StellarHash(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float2 StellarHash22(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.xx + p3.yz) * p3.zy);
+}
+
+// Value noise for foam and detail
+float StellarValueNoise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float2 u = f * f * (3.0 - 2.0 * f); // smoothstep
+
+    float a = StellarHash(i + float2(0.0, 0.0));
+    float b = StellarHash(i + float2(1.0, 0.0));
+    float c = StellarHash(i + float2(0.0, 1.0));
+    float d = StellarHash(i + float2(1.0, 1.0));
+
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+// FBM (Fractal Brownian Motion) for complex noise patterns
+float StellarFBM(float2 p, int Octaves)
+{
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+
+    for (int i = 0; i < Octaves; i++)
+    {
+        value += amplitude * StellarValueNoise(p * frequency);
+        frequency *= 2.0;
+        amplitude *= 0.5;
+    }
+
+    return value;
+}
+
+// ============================================================================
+// VORONOI (for caustics)
+// ============================================================================
+
+float StellarVoronoi(float2 uv, float Time)
+{
+    float2 g = floor(uv);
+    float2 f = frac(uv);
+    float minDist = 8.0;
+
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            float2 offset = float2(x, y);
+            float2 rp = StellarHash22(g + offset);
+            rp = 0.5 + 0.5 * sin(Time + 6.2831 * rp);
+            float2 diff = offset + rp - f;
+            minDist = min(minDist, dot(diff, diff));
+        }
+    }
+
+    return sqrt(minDist);
+}
+
+// ============================================================================
+// GERSTNER WAVE
+// ============================================================================
+
+// Single Gerstner wave contribution
+// Returns float3: XY = horizontal displacement, Z = vertical displacement
+float3 GerstnerWave(
+    float2 WorldPos,
+    float2 Direction,
+    float Amplitude,
+    float Wavelength,
+    float Steepness,
+    float Time,
+    float Speed)
+{
+    float k = 6.28318 / max(Wavelength, 0.001); // wave number
+    float c = sqrt(980.0 / k) * Speed;           // phase speed (gravity-based)
+    float2 d = normalize(Direction);
+    float f = k * (dot(d, WorldPos) - c * Time);
+    float Q = Steepness;
+
+    float3 result;
+    result.x = Q * Amplitude * d.x * cos(f);
+    result.y = Q * Amplitude * d.y * cos(f);
+    result.z = Amplitude * sin(f);
+
+    return result;
+}
+
+// Analytical normal for a single Gerstner wave
+float3 GerstnerWaveNormal(
+    float2 WorldPos,
+    float2 Direction,
+    float Amplitude,
+    float Wavelength,
+    float Steepness,
+    float Time,
+    float Speed)
+{
+    float k = 6.28318 / max(Wavelength, 0.001);
+    float c = sqrt(980.0 / k) * Speed;
+    float2 d = normalize(Direction);
+    float f = k * (dot(d, WorldPos) - c * Time);
+
+    float3 normal;
+    normal.x = -d.x * k * Amplitude * cos(f);
+    normal.y = -d.y * k * Amplitude * cos(f);
+    normal.z = 1.0 - Steepness * k * Amplitude * sin(f);
+
+    return normal;
+}
+
+// ============================================================================
+// MULTI-WAVE SYSTEM
+// ============================================================================
+
+// Derive wave direction from index, base direction, and directionality
+float2 DeriveWaveDirection(float2 BaseDirection, int WaveIndex, float Directionality)
+{
+    float2 baseDir = normalize(BaseDirection);
+    float hash = StellarHash(float2(float(WaveIndex) * 1.731, float(WaveIndex) * 2.399));
+
+    // Random angle spread based on directionality (0=full spread, 1=aligned)
+    float maxAngle = 3.14159 * (1.0 - Directionality);
+    float angle = (hash * 2.0 - 1.0) * maxAngle;
+
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    return float2(
+        baseDir.x * cosA - baseDir.y * sinA,
+        baseDir.x * sinA + baseDir.y * cosA
+    );
+}
+
+// Sum of multiple Gerstner waves with derived parameters
+// Returns: float3 world position offset
+float3 MultiGerstnerWaves(
+    float2 WorldPos,
+    float Time,
+    float BaseAmplitude,
+    float BaseWavelength,
+    float Speed,
+    float Steepness,
+    float2 Direction,
+    float Directionality,
+    int NumWaves,
+    float DetailScale)
+{
+    float3 totalOffset = float3(0.0, 0.0, 0.0);
+
+    for (int i = 0; i < NumWaves; i++)
+    {
+        // Each successive wave: smaller amplitude, shorter wavelength, slightly different speed
+        float waveHash = StellarHash(float2(float(i) * 3.17, float(i) * 7.23));
+        float ampScale = pow(0.65, float(i)) * (0.7 + 0.6 * waveHash);
+        float wlScale = pow(0.72, float(i)) * (0.8 + 0.4 * waveHash);
+        float speedVariation = 0.8 + 0.4 * StellarHash(float2(float(i) * 5.31, 0.0));
+
+        float amp = BaseAmplitude * ampScale;
+        float wl = BaseWavelength * wlScale;
+        float2 dir = DeriveWaveDirection(Direction, i, Directionality);
+
+        totalOffset += GerstnerWave(WorldPos, dir, amp, wl, Steepness, Time, Speed * speedVariation);
+    }
+
+    // Add micro-detail waves (high frequency, low amplitude)
+    float detailAmp = BaseAmplitude * DetailScale * 0.1;
+    float detailWL = BaseWavelength * 0.08;
+    for (int j = 0; j < 3; j++)
+    {
+        float dHash = StellarHash(float2(float(j + NumWaves) * 11.7, 3.14));
+        float2 detailDir = DeriveWaveDirection(Direction, j + 100, 0.0);
+        float dSpeedVar = 0.6 + 0.8 * dHash;
+        totalOffset += GerstnerWave(WorldPos, detailDir, detailAmp * (0.5 + dHash), detailWL * (0.5 + dHash), 0.2, Time, Speed * dSpeedVar);
+    }
+
+    return totalOffset;
+}
+
+// Analytical normal from the multi-wave system
+float3 MultiGerstnerNormal(
+    float2 WorldPos,
+    float Time,
+    float BaseAmplitude,
+    float BaseWavelength,
+    float Speed,
+    float Steepness,
+    float2 Direction,
+    float Directionality,
+    int NumWaves,
+    float NormalStrength)
+{
+    float3 totalNormal = float3(0.0, 0.0, 0.0);
+
+    for (int i = 0; i < NumWaves; i++)
+    {
+        float waveHash = StellarHash(float2(float(i) * 3.17, float(i) * 7.23));
+        float ampScale = pow(0.65, float(i)) * (0.7 + 0.6 * waveHash);
+        float wlScale = pow(0.72, float(i)) * (0.8 + 0.4 * waveHash);
+        float speedVariation = 0.8 + 0.4 * StellarHash(float2(float(i) * 5.31, 0.0));
+
+        float amp = BaseAmplitude * ampScale;
+        float wl = BaseWavelength * wlScale;
+        float2 dir = DeriveWaveDirection(Direction, i, Directionality);
+
+        totalNormal += GerstnerWaveNormal(WorldPos, dir, amp, wl, Steepness, Time, Speed * speedVariation);
+    }
+
+    // Detail normals from noise
+    float2 noiseUV = WorldPos * 0.01;
+    float noiseX = StellarFBM(noiseUV + float2(Time * 0.02, 0.0), 3) * 2.0 - 1.0;
+    float noiseY = StellarFBM(noiseUV + float2(0.0, Time * 0.02), 3) * 2.0 - 1.0;
+    totalNormal.x += noiseX * 0.15 * NormalStrength;
+    totalNormal.y += noiseY * 0.15 * NormalStrength;
+
+    totalNormal.xy *= NormalStrength;
+
+    return normalize(totalNormal);
+}
+
+// ============================================================================
+// FOAM
+// ============================================================================
+
+float CalculateFoam(
+    float2 WorldPos,
+    float Time,
+    float WaveHeight,     // Z component from wave offset
+    float MaxAmplitude,   // For normalization
+    float FoamAmount,
+    float FoamScale,
+    float FoamSpeed)
+{
+    // Foam appears at wave crests
+    float normalizedHeight = WaveHeight / max(MaxAmplitude, 0.01);
+    float crestFoam = smoothstep(1.0 - FoamAmount, 1.0, normalizedHeight);
+
+    // Animated noise pattern for foam texture
+    float2 foamUV = WorldPos * FoamScale * 0.01;
+    float noise1 = StellarFBM(foamUV + float2(Time * FoamSpeed * 0.3, Time * FoamSpeed * 0.1), 4);
+    float noise2 = StellarFBM(foamUV * 1.7 - float2(Time * FoamSpeed * 0.2, Time * FoamSpeed * 0.15), 3);
+
+    float foamPattern = noise1 * noise2;
+    foamPattern = smoothstep(0.2, 0.6, foamPattern);
+
+    // Combine crest foam with pattern
+    float foam = crestFoam * foamPattern;
+
+    // Add some scattered foam even in troughs
+    float scatterFoam = smoothstep(0.7, 0.9, noise1) * 0.15 * FoamAmount;
+    foam = max(foam, scatterFoam);
+
+    return saturate(foam);
+}
+
+// ============================================================================
+// CAUSTICS
+// ============================================================================
+
+float CalculateCaustics(
+    float2 WorldPos,
+    float Time,
+    float Scale,
+    float Speed,
+    float Intensity)
+{
+    float2 causticsUV = WorldPos * Scale * 0.01;
+
+    // Two voronoi layers at different speeds for shimmering effect
+    float v1 = StellarVoronoi(causticsUV * 3.0, Time * Speed);
+    float v2 = StellarVoronoi(causticsUV * 4.5 + 3.17, Time * Speed * 1.3 + 1.5);
+
+    // Sharp caustic lines from voronoi edges
+    float caustics1 = pow(1.0 - v1, 6.0);
+    float caustics2 = pow(1.0 - v2, 6.0);
+
+    // Blend the two layers
+    float caustics = (caustics1 + caustics2) * 0.5;
+    caustics *= Intensity;
+
+    return saturate(caustics);
+}
+
+// ============================================================================
+// FRESNEL
+// ============================================================================
+
+float WaterFresnel(float3 WorldNormal, float3 ViewDir, float Power)
+{
+    float NdotV = saturate(dot(normalize(WorldNormal), normalize(ViewDir)));
+    // Schlick approximation with adjustable power
+    float fresnel = pow(1.0 - NdotV, Power);
+    // Water F0 ~= 0.02
+    return lerp(0.02, 1.0, fresnel);
+}
+
+// ============================================================================
+// MAIN ENTRY POINT
+// ============================================================================
+
+// Called from UMaterialExpressionCustom
+// All outputs are passed as out parameters
+void StellarWater_Main(
+    // Inputs from Material
+    float2 WorldPos,
+    float Time,
+    // Wave parameters
+    float WaveAmplitude,
+    float WaveLength,
+    float WaveSpeed,
+    float WaveSteepness,
+    float2 WaveDirection,
+    float WaveDirectionality,
+    float NumWavesFloat,
+    float DetailWaveScale,
+    // Color parameters
+    float3 ShallowColor,
+    float3 DeepColor,
+    float DepthFalloff,
+    float WaterOpacity,
+    float FresnelPower,
+    // Surface parameters
+    float InRoughness,
+    float NormalStrength,
+    // Foam parameters
+    float3 FoamColor,
+    float FoamAmount,
+    float FoamScale,
+    float FoamSpeed,
+    // Caustics parameters
+    float CausticsIntensity,
+    float CausticsScale,
+    float CausticsSpeed,
+    // Outputs
+    out float3 OutWPO,
+    out float3 OutNormal,
+    out float3 OutBaseColor,
+    out float OutOpacity,
+    out float OutRoughness,
+    out float3 OutEmissive)
+{
+    int NumWaves = clamp((int)NumWavesFloat, 1, 12);
+    float BaseWavelength = max(WaveLength, 10.0);
+
+    // ---- Wave displacement ----
+    float3 waveOffset = MultiGerstnerWaves(
+        WorldPos, Time,
+        WaveAmplitude, BaseWavelength, WaveSpeed, WaveSteepness,
+        WaveDirection, WaveDirectionality,
+        NumWaves, DetailWaveScale
+    );
+
+    OutWPO = waveOffset;
+
+    // ---- Normal calculation ----
+    float3 waveNormal = MultiGerstnerNormal(
+        WorldPos, Time,
+        WaveAmplitude, BaseWavelength, WaveSpeed, WaveSteepness,
+        WaveDirection, WaveDirectionality,
+        NumWaves, NormalStrength
+    );
+
+    OutNormal = waveNormal;
+
+    // ---- Foam ----
+    float foam = CalculateFoam(
+        WorldPos, Time,
+        waveOffset.z, WaveAmplitude,
+        FoamAmount, FoamScale, FoamSpeed
+    );
+
+    // ---- Caustics ----
+    float caustics = CalculateCaustics(
+        WorldPos, Time,
+        CausticsScale, CausticsSpeed, CausticsIntensity
+    );
+
+    // ---- Water color ----
+    // Depth-based color blending (using wave height as proxy for depth)
+    float depthFactor = saturate((waveOffset.z / max(WaveAmplitude, 0.01) + 1.0) * 0.5);
+    depthFactor = pow(depthFactor, DepthFalloff);
+    float3 waterColor = lerp(DeepColor, ShallowColor, depthFactor);
+
+    // Add foam to color
+    waterColor = lerp(waterColor, FoamColor, foam);
+
+    OutBaseColor = waterColor;
+
+    // ---- Emissive (caustics glow) ----
+    OutEmissive = waterColor * caustics * 0.5;
+
+    // ---- Opacity ----
+    // Base opacity + foam makes it more opaque
+    OutOpacity = lerp(WaterOpacity, 1.0, foam * 0.7);
+
+    // ---- Roughness ----
+    // Foam increases roughness
+    OutRoughness = lerp(InRoughness, 0.6, foam);
+}
