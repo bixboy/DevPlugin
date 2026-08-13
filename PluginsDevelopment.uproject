@@ -45,6 +45,10 @@
 		{
 			"Name": "SmoothNetworkSync",
 			"Enabled": true
+		},
+		{
+			"Name": "DataAssetDesigner",
+			"Enabled": false
 		}
 	]
 }
