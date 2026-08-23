@@ -24,6 +24,9 @@ public class FirstPersonBuilder : ModuleRules
 			new string[]
 			{
 				"Core",
+				"JupiterPlugin",
+				"EntitiesSystem",
+				"GameplayTags"
 				// ... add other public dependencies that you statically link with here ...
 			}
 		);
@@ -36,6 +39,10 @@ public class FirstPersonBuilder : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"UMG",
+				"PrismUI",
+				"StellarAudioPlugin",
+				"Niagara"
 				// ... add private dependencies that you statically link with here ...	
 			}
 		);

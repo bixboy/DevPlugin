@@ -1,4 +1,4 @@
-#include "FirstPersonBuilderModule.h"
+#include "Core/FirstPersonBuilderModule.h"
 
 #define LOCTEXT_NAMESPACE "FFirstPersonBuilderModule"
 

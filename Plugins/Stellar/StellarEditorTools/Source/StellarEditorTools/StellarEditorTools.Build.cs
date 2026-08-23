@@ -30,8 +30,8 @@ public class StellarEditorTools : ModuleRules
 				"ContentBrowser",
 				"EditorStyle",
 				"EditorSubsystem",
-				"PropertyEditor",
-				"StellarLocomotionVehiclesModule"
+				"PropertyEditor"
+				// "StellarLocomotionVehiclesModule"
 			}
 		);
 	}
