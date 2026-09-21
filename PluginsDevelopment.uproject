@@ -52,7 +52,11 @@
 		},
 		{
 			"Name": "StellarLocomotionPlugin",
-			"Enabled": false
+			"Enabled": true
+		},
+		{
+			"Name": "StellarAudioPlugin",
+			"Enabled": true
 		}
 	]
 }

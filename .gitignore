@@ -1,8 +1,4 @@
-# =========================
-# ❌ FICHIERS À IGNORER
-# =========================
-
-# 🛠️ Fichiers de compilation et binaires temporaires
+# Fichiers de compilation et binaires temporaires
 Binaries/
 Build/
 DerivedDataCache/
@@ -11,13 +7,13 @@ Saved/
 Plugins/**/Binaries/
 Plugins/**/Intermediate/
 
-# ⚠️ Cache et fichiers spécifiques à l'éditeur Unreal
+# Cache et fichiers spécifiques à l'éditeur Unreal
 Config/DefaultEditorPerProjectUserSettings.ini
 Config/DefaultEditorUserSettings.ini
 *.uproject.sln
 *.uprojectdirs
 
-# ⚡ Fichiers spécifiques à Visual Studio / Xcode
+# Fichiers spécifiques à Visual Studio / Xcode
 .vs/
 *.sln
 *.suo
@@ -27,7 +23,7 @@ Config/DefaultEditorUserSettings.ini
 *.xcworkspace
 .vscode/
 
-# 🏗️ Fichiers générés par la compilation
+# Fichiers générés par la compilation
 *.o
 *.obj
 *.so
@@ -47,7 +43,7 @@ Config/DefaultEditorUserSettings.ini
 *.gch
 *.pch
 
-# 📝 Logs, backups et fichiers temporaires
+# Logs, backups et fichiers temporaires
 *.log
 *.dump
 *.dmp
@@ -56,45 +52,45 @@ Config/DefaultEditorUserSettings.ini
 *.swp
 *.swo
 
-# 🛑 Données utilisateur / spécifiques au développeur
+# Données utilisateur / spécifiques au développeur
 *.userprefs
 *.user
 
-# 🚫 Données de packaging Unreal
+# Données de packaging Unreal
 Build/*/PakBlacklist*.txt
 
 # =========================
-# ✅ FICHIERS À CONSERVER
+# FICHIERS À CONSERVER
 # =========================
 
-# 📁 Garde le dossier `Source/` pour le code C++
+# Garde le dossier `Source/` pour le code C++
 !Source/
 !Source/**/*
 
-# 🎮 Garde le fichier de projet Unreal Engine
+# Garde le fichier de projet Unreal Engine
 !*.uproject
 
-# ⚙️ Garde les fichiers de configuration du projet
+# Garde les fichiers de configuration du projet
 !Config/
 !Config/**/*
 
-# 🎨 Garde les assets du projet
+# Garde les assets du projet
 !Content/
 !Content/**/*.uasset
 !Content/**/*.umap
 
-# 🔌 Garde les fichiers de plugins (hors binaires/intermédiaires)
+# Garde les fichiers de plugins (hors binaires/intermédiaires)
 !Plugins/
 !Plugins/**/*.uplugin
 
-# 🔄 Garde les fichiers essentiels pour exécuter le projet sans compiler
+# Garde les fichiers essentiels pour exécuter le projet sans compiler
 !Binaries/Win64/
 !Binaries/Win64/*
 !Binaries/Win64/UnrealEditor.modules
 !Binaries/Win64/UnrealEditor-GummyBrawlProject.dll
 !Binaries/Win64/UnrealEditor-LocalMultiplayer.dll
 
-# 🔹 Garde les fichiers `.Target.cs` pour éviter les erreurs de compilation
+# Garde les fichiers `.Target.cs` pour éviter les erreurs de compilation
 !Source/*.Target.cs
 
 Plugins/JupiterPlugin/Content/Xenon/
